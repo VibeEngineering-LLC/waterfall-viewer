@@ -2,13 +2,12 @@
 import sys, faulthandler
 from pathlib import Path
 from PySide6 import QtWidgets
-from awf.io.n42_loader import load_n42
-from awf.ui.main_window import MainWindow
+from awf.ui.main_window import MainWindow, load_spectrogram
 
 faulthandler.enable()
 path = sys.argv[1] if len(sys.argv) > 1 else str(Path(__file__).resolve().parent.parent / "sample_data" / "waterfall_sample.n42")
 app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
-sg = load_n42(path)
+sg = load_spectrogram(path)
 print(f"загружено: срезов={sg.n_slices} каналов={sg.n_channels}")
 win = MainWindow(); win.show(); win._on_loaded(sg)
 def pump(n=6):

@@ -1,7 +1,10 @@
 # AtomSpectra Waterfall Viewer
 
-Просмотрщик и анализатор **waterfall-спектрограмм** гамма-спектрометра (формат ANSI N42.42-2011).
+Просмотрщик и анализатор **waterfall-спектрограмм** гамма-спектрометра.
 3D-просмотр с вращением и зумом, 2D-карта Время×Энергия, срезы / сечения / прямоугольные выборки.
+
+**Поддерживаемые форматы:** ANSI N42.42-2011 (`.n42`/`.xml`) и RadiaCode (`.rcspg`, JSON — проверено
+на модели RadiaCode-110). Калибровка энергии берётся из самого файла (полином из `coefficients`/`CoefficientValues`).
 
 ![Python](https://img.shields.io/badge/Python-3.12%20%7C%203.14-blue) ![GUI](https://img.shields.io/badge/GUI-PySide6%20(Qt)-green) ![3D](https://img.shields.io/badge/3D-pyqtgraph%20%2B%20OpenGL-orange) ![Format](https://img.shields.io/badge/format-ANSI%20N42.42--2011-yellowgreen) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
@@ -70,6 +73,7 @@ awf/
                            (срезы, сечения, ROI-суммы, LOD-downsample). Без зависимости от Qt.
   io/n42_loader.py       — потоковый загрузчик N42 (CountedZeroes-декодер: векторный + скалярный
                            эталон; iterparse с освобождением памяти для суточных файлов).
+  io/rcspg_loader.py     — загрузчик RadiaCode (.rcspg, JSON): pulses->counts, calib из coefficients.
   ui/view3d.py           — Waterfall3DView (GLViewWidget + GLSurfacePlotItem).
   ui/panels.py           — HeatmapPanel (2D + ROI), SlicePanel (спектр + временной ряд).
   ui/main_window.py      — MainWindow + фоновая загрузка (QThread).
@@ -86,8 +90,10 @@ awf/
 .venv\Scripts\python.exe -m pytest -q
 ```
 
-(8 тестов: ISO-длительности, CountedZeroes hand-cases + fuzz vec≡scalar, полиномиальная калибровка,
-обратное преобразование энергия→канал, загрузка реального образца, лимит срезов, аналитические примитивы.)
+(16 тестов: ISO-длительности, CountedZeroes hand-cases + fuzz vec≡scalar, полиномиальная калибровка,
+обратное преобразование энергия→канал, загрузка реального образца, лимит срезов, аналитические примитивы;
++ загрузчик RadiaCode `.rcspg`: форма/dtype, дополнение каналов нулём, калибровка, временные оси,
+t0, лимит срезов, пустой файл, авто-вывод числа каналов.)
 
 Графические модули проверяются smoke-скриптами в `scripts/` (строят виджеты на реальном образце без GUI-взаимодействия).
 

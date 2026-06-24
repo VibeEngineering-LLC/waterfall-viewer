@@ -4,11 +4,18 @@ from pathlib import Path
 import numpy as np
 from PySide6 import QtCore, QtGui, QtWidgets
 from awf.io.n42_loader import load_n42
+from awf.io.rcspg_loader import load_rcspg
 from awf.ui.view3d import Waterfall3DView
 from awf.ui.panels import HeatmapPanel, SlicePanel
 
+def load_spectrogram(path: str, *, max_slices: int | None = None):
+    """Диспетчер загрузчиков по расширению: .rcspg -> RadiaCode, иначе -> N42/XML."""
+    if Path(path).suffix.lower() == ".rcspg":
+        return load_rcspg(path, max_slices=max_slices)
+    return load_n42(path, max_slices=max_slices)
+
 class LoaderThread(QtCore.QThread):
-    """Фоновая загрузка N42, чтобы не блокировать UI. Результат/ошибка — через сигналы."""
+    """Фоновая загрузка спектрограммы, чтобы не блокировать UI. Результат/ошибка — через сигналы."""
     loaded = QtCore.Signal(object)   # несёт Spectrogram
     failed = QtCore.Signal(str)      # текст ошибки
 
@@ -19,7 +26,7 @@ class LoaderThread(QtCore.QThread):
 
     def run(self) -> None:
         try:
-            sg = load_n42(self._path, max_slices=self._max_slices)
+            sg = load_spectrogram(self._path, max_slices=self._max_slices)
             self.loaded.emit(sg)
         except Exception as exc:  # любую ошибку отдать в UI-поток, не падать
             self.failed.emit(f"{type(exc).__name__}: {exc}")
@@ -68,7 +75,9 @@ class MainWindow(QtWidgets.QMainWindow):
     @QtCore.Slot()
     def _open_dialog(self) -> None:
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
-            self, "Открыть файл N42", "", "N42 / XML (*.n42 *.xml);;Все файлы (*)")
+            self, "Открыть спектрограмму", "",
+            "Спектрограммы (*.n42 *.xml *.rcspg);;N42 / XML (*.n42 *.xml);;"
+            "RadiaCode (*.rcspg);;Все файлы (*)")
         if path:
             self.open_file(path)
 
