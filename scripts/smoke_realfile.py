@@ -1,7 +1,7 @@
 """Smoke на РЕАЛЬНОМ файле оператора: загрузка + GL-рендер по ракурсам + ROI + срезы."""
 import sys, faulthandler
 from pathlib import Path
-from PySide6 import QtWidgets
+from PySide6 import QtCore, QtWidgets
 from awf.ui.main_window import MainWindow, load_spectrogram
 
 faulthandler.enable()
@@ -26,4 +26,17 @@ for idx in (0, 1, 2):  # linear, sqrt, log
     assert win._heatmap._z_mode == win._z_combo.currentData()
     assert win._view3d._z_mode == win._z_combo.currentData()
     win._tabs.setCurrentIndex(0); win._view3d.grabFramebuffer(); pump()
+# Нуклиды: отметить несколько, проверить что энергии подсветились на спектре
+npanel = win._nuclides
+names = {npanel._nuclides[i].name: i for i in range(len(npanel._nuclides))}
+for nm in ("Cs-137", "K-40", "Co-60"):
+    if nm in names:
+        npanel._list.item(names[nm]).setCheckState(QtCore.Qt.Checked)
+pump()
+sel = npanel.selected_lines()
+assert len(sel) >= 1, "после выбора нуклидов нет линий"
+assert len(win._slices._nuclide_lines) == len(sel), (len(win._slices._nuclide_lines), len(sel))
+print(f"нуклиды: в библиотеке={len(npanel._nuclides)}, выбрано линий={len(sel)}, маркеров на спектре={len(win._slices._nuclide_lines)}")
+npanel.clear_selection(); pump()
+assert len(win._slices._nuclide_lines) == 0, "маркеры не очистились"
 print(f"OK realfile: без краша (Z-шкала проверена: {[m for m,_ in __import__('awf.ui.zscale', fromlist=['Z_MODES']).Z_MODES]})")

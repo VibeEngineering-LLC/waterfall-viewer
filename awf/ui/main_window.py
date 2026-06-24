@@ -5,9 +5,11 @@ import numpy as np
 from PySide6 import QtCore, QtGui, QtWidgets
 from awf.io.n42_loader import load_n42
 from awf.io.rcspg_loader import load_rcspg
+from awf.io.nuclide_lib import default_library
 from awf.ui.view3d import Waterfall3DView
 from awf.ui.panels import HeatmapPanel, SlicePanel
 from awf.ui.zscale import Z_MODES
+from awf.ui.nuclide_panel import NuclidePanel
 
 def load_spectrogram(path: str, *, max_slices: int | None = None):
     """Диспетчер загрузчиков по расширению: .rcspg -> RadiaCode, иначе -> N42/XML."""
@@ -57,6 +59,14 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # связь выборки на карте -> панель срезов
         self._heatmap.roiChanged.connect(self._slices.show_roi)
+
+        # левый док: библиотека нуклидов; выбор -> вертикальные маркеры энергий на спектре
+        self._nuclides = NuclidePanel(default_library())
+        ndock = QtWidgets.QDockWidget("Нуклиды", self)
+        ndock.setWidget(self._nuclides)
+        ndock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
+        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, ndock)
+        self._nuclides.linesChanged.connect(self._slices.set_nuclide_lines)
 
         self._build_menu()
         self._build_toolbar()

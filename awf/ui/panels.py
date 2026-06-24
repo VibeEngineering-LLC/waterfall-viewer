@@ -133,6 +133,7 @@ class SlicePanel(QtWidgets.QWidget):
         layout.addWidget(self._series_plot)
         self._spectrum_curve = self._spectrum_plot.plot([], [], pen=pg.mkPen("c", width=1))
         self._series_curve = self._series_plot.plot([], [], pen=pg.mkPen("m", width=1))
+        self._nuclide_lines = []  # текущие вертикальные маркеры энергий нуклидов на спектре
 
     def set_spectrogram(self, sg) -> None:
         self._sg = sg
@@ -146,6 +147,22 @@ class SlicePanel(QtWidgets.QWidget):
         self._header.setText(
             f"Загружено: срезов {sg.n_slices}, каналов {sg.n_channels}. "
             f"Интегральный спектр и полная полоса.")
+
+    def set_nuclide_lines(self, lines) -> None:
+        """Отметить энергии гамма-линий нуклидов вертикальными линиями на графике спектра.
+        lines: итерируемое кортежей (energy_keV: float, color: str, label: str).
+        Предыдущие маркеры удаляются; спектральная кривая не трогается."""
+        for item in self._nuclide_lines:
+            self._spectrum_plot.removeItem(item)
+        self._nuclide_lines = []
+        for energy, color, label in lines:
+            ln = pg.InfiniteLine(
+                pos=float(energy), angle=90, movable=False,
+                pen=pg.mkPen(color, width=1, style=QtCore.Qt.DashLine),
+                label=label, labelOpts={"position": 0.92, "color": color,
+                                        "fill": (0, 0, 0, 130), "movable": False})
+            self._spectrum_plot.addItem(ln)
+            self._nuclide_lines.append(ln)
 
     @QtCore.Slot(int)
     def show_time_slice(self, i: int) -> None:
