@@ -20,4 +20,10 @@ win.resize(900, 600); pump(); win._view3d.grabFramebuffer(); pump()
 win._tabs.setCurrentIndex(1); pump()
 for p, s in [([5, 5], [40, 40]), ([1, 1], [9999, 9999])]:
     win._heatmap._roi.setPos(p); win._heatmap._roi.setSize(s); win._heatmap._on_roi_finished(); pump()
-print("OK realfile: без краша")
+# Z-шкала: прогнать все режимы через комбобокс (он прокидывает в 2D-карту и 3D)
+for idx in (0, 1, 2):  # linear, sqrt, log
+    win._z_combo.setCurrentIndex(idx); pump()
+    assert win._heatmap._z_mode == win._z_combo.currentData()
+    assert win._view3d._z_mode == win._z_combo.currentData()
+    win._tabs.setCurrentIndex(0); win._view3d.grabFramebuffer(); pump()
+print(f"OK realfile: без краша (Z-шкала проверена: {[m for m,_ in __import__('awf.ui.zscale', fromlist=['Z_MODES']).Z_MODES]})")

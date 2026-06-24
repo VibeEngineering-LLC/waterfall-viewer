@@ -7,6 +7,7 @@ from awf.io.n42_loader import load_n42
 from awf.io.rcspg_loader import load_rcspg
 from awf.ui.view3d import Waterfall3DView
 from awf.ui.panels import HeatmapPanel, SlicePanel
+from awf.ui.zscale import Z_MODES
 
 def load_spectrogram(path: str, *, max_slices: int | None = None):
     """Диспетчер загрузчиков по расширению: .rcspg -> RadiaCode, иначе -> N42/XML."""
@@ -58,6 +59,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._heatmap.roiChanged.connect(self._slices.show_roi)
 
         self._build_menu()
+        self._build_toolbar()
         self.statusBar().showMessage("Готов. Файл → Открыть… (Ctrl+O)")
 
     def _build_menu(self) -> None:
@@ -71,6 +73,22 @@ class MainWindow(QtWidgets.QMainWindow):
         act_quit.setShortcut(QtGui.QKeySequence.Quit)
         act_quit.triggered.connect(self.close)
         menu.addAction(act_quit)
+
+    def _build_toolbar(self) -> None:
+        tb = self.addToolBar("Вид")
+        tb.addWidget(QtWidgets.QLabel(" Z-шкала: "))
+        self._z_combo = QtWidgets.QComboBox()
+        for key, label in Z_MODES:
+            self._z_combo.addItem(label, key)
+        self._z_combo.setCurrentIndex(2)  # по умолчанию log (как было до переключателя)
+        self._z_combo.currentIndexChanged.connect(self._on_z_scale_changed)
+        tb.addWidget(self._z_combo)
+
+    @QtCore.Slot()
+    def _on_z_scale_changed(self) -> None:
+        mode = self._z_combo.currentData()
+        self._view3d.set_z_scale(mode)
+        self._heatmap.set_z_scale(mode)
 
     @QtCore.Slot()
     def _open_dialog(self) -> None:

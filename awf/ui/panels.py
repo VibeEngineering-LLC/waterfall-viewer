@@ -2,6 +2,7 @@ from __future__ import annotations
 import numpy as np
 import pyqtgraph as pg
 from PySide6 import QtCore, QtWidgets
+from awf.ui.zscale import apply_z_scale
 
 class HeatmapPanel(QtWidgets.QWidget):
     """2D-карта Время(ось Y)×Энергия/канал(ось X). Цвет = log(1+counts). Прямоугольная выборка
@@ -17,6 +18,8 @@ class HeatmapPanel(QtWidgets.QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._sg = None
+        self._disp_counts = None  # последняя дисплейная (возможно прорежённая) матрица counts
+        self._z_mode = "log"      # текущая Z-шкала контраста (linear/sqrt/log)
         self._t_scale = 1.0      # n_slices / disp_rows  (полный индекс = дисплейный * scale)
         self._ch_scale = 1.0     # n_channels / disp_cols
         self._disp_rows = 0
@@ -53,11 +56,12 @@ class HeatmapPanel(QtWidgets.QWidget):
             disp_counts = np.asarray(disp_counts, dtype=np.float32)
         else:
             disp_counts = np.asarray(sg.counts, dtype=np.float32)
+        self._disp_counts = disp_counts
         self._disp_rows, self._disp_cols = disp_counts.shape
         self._t_scale = ns / float(self._disp_rows)
         self._ch_scale = nc / float(self._disp_cols)
-        # лог-контраст; row-major => ось0=строки=Время(Y), ось1=столбцы=Канал(X)
-        img = np.log1p(disp_counts)
+        # Z-контраст по выбранной шкале; row-major => ось0=строки=Время(Y), ось1=столбцы=Канал(X)
+        img = apply_z_scale(disp_counts, self._z_mode)
         self._img.setImage(img, axisOrder="row-major", autoLevels=True)
         # ROI по умолчанию — центральная четверть карты (в дисплейных координатах)
         x0 = self._disp_cols * 0.25; y0 = self._disp_rows * 0.25
@@ -94,6 +98,13 @@ class HeatmapPanel(QtWidgets.QWidget):
     def current_roi(self):
         """Публичный доступ к текущей выборке в полных индексах."""
         return self._roi_full_indices()
+
+    def set_z_scale(self, mode: str) -> None:
+        """Сменить Z-шкалу контраста и перерисовать карту (без перезагрузки данных)."""
+        self._z_mode = mode
+        if self._disp_counts is not None:
+            img = apply_z_scale(self._disp_counts, self._z_mode)
+            self._img.setImage(img, axisOrder="row-major", autoLevels=True)
 
 
 class SlicePanel(QtWidgets.QWidget):
