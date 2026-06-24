@@ -1,0 +1,18 @@
+# venv / Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Реальные данные спектрометра — НЕ в git (N42 может содержать GPS/метаданные устройства)
+sample_data/*.n42
+
+# Сборка PyInstaller
+build/
+dist/
+*.spec
+
+# IDE / прочее
+.vscode/
+.idea/

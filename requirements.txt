@@ -1,0 +1,10 @@
+# atomspectra-waterfall-viewer — зависимости
+# Численное ядро / загрузчик N42
+numpy>=2.0
+lxml>=5.0
+# GUI + GPU-3D (PySide6 Qt, pyqtgraph для 2D/3D-OpenGL)
+PySide6>=6.6
+pyqtgraph>=0.13.3
+PyOpenGL>=3.1.7
+# Тесты (dev)
+pytest>=8.0
