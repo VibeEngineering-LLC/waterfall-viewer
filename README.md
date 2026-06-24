@@ -3,6 +3,8 @@
 Просмотрщик и анализатор **waterfall-спектрограмм** гамма-спектрометра (формат ANSI N42.42-2011).
 3D-просмотр с вращением и зумом, 2D-карта Время×Энергия, срезы / сечения / прямоугольные выборки.
 
+![Python](https://img.shields.io/badge/Python-3.12%20%7C%203.14-blue) ![GUI](https://img.shields.io/badge/GUI-PySide6%20(Qt)-green) ![3D](https://img.shields.io/badge/3D-pyqtgraph%20%2B%20OpenGL-orange) ![Format](https://img.shields.io/badge/format-ANSI%20N42.42--2011-yellowgreen) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
+
 Источник данных-прибора: [atomspectra-waterfall-esp32](https://github.com/VibeEngineering-LLC/atomspectra-waterfall-esp32).
 Архитектурные идеи — по мотивам [InterSpec (Sandia)](https://github.com/sandialabs/interspec).
 
@@ -17,6 +19,9 @@
   (`lxml.iterparse`, ограниченная память), 3D и 2D рендерятся через LOD-прорежку (`Spectrogram.downsample`).
 
 ## Установка
+
+> Подробная установка с нуля (без опыта Python) — в [`INSTALL.md`](INSTALL.md).
+> Известные проблемы и совместимость — в [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md).
 
 **Вариант A — venv (изолированно, рекомендуется):**
 
@@ -88,9 +93,13 @@ awf/
 
 ## Стек
 
-Python 3.12 · numpy · lxml · PySide6 (Qt) · pyqtgraph + PyOpenGL.
+Python 3.12 / 3.14 · numpy · lxml · PySide6 (Qt) · pyqtgraph + PyOpenGL.
 
 ## Дорожная карта (v2)
 
 Спектроскопия: поиск пиков, идентификация изотопов, калибровка по реперам, ROI-нетто/фон, экспорт.
 Возможна упаковка в `.exe` (PyInstaller).
+
+## Лицензия
+
+[MIT](LICENSE) © 2026 Verter73.
