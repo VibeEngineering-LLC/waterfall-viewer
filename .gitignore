@@ -16,3 +16,6 @@ dist/
 # IDE / прочее
 .vscode/
 .idea/
+
+# graphify — регенерируемая графовая карта проекта (graphify update .)
+graphify-out/
