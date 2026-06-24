@@ -18,11 +18,21 @@
 
 ## Установка
 
+**Вариант A — venv (изолированно, рекомендуется):**
+
 ```bat
 cd "путь\к\atomspectra-waterfall-viewer"
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
+
+**Вариант B — глобально (без venv):**
+
+```bat
+py -3.14 -m pip install -r requirements.txt
+```
+
+`run.bat` сам выберет: при наличии `.venv` запустит из него, иначе — глобальным Python.
 
 ## Запуск
 
