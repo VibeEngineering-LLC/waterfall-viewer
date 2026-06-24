@@ -1,0 +1,1193 @@
+{
+  "_provenance": {
+    "source": "LSRM SpectraLine gamma nuclide library (УДС-ГЦ 2024)",
+    "library_version": "2.0",
+    "database_version": "26",
+    "note": "Энергии и интенсивности гамма-линий — физические константы. Извлечено парсером awf/io/nuclide_lib.py.",
+    "nuclide_count": 21,
+    "line_count": 124
+  },
+  "nuclides": [
+    {
+      "name": "Am-241",
+      "half_life_value": 432.6,
+      "half_life_unit": "year",
+      "gamma_constant": 0.118348,
+      "atomic_mass": 241,
+      "lines": [
+        {
+          "energy": 59.5409,
+          "intensity": 35.9,
+          "d_energy": 0.0001,
+          "d_intensity": 0.4,
+          "line_type": null,
+          "used": true
+        }
+      ]
+    },
+    {
+      "name": "Ba-133",
+      "half_life_value": 10.551,
+      "half_life_unit": "year",
+      "gamma_constant": 1.984837,
+      "atomic_mass": 133,
+      "lines": [
+        {
+          "energy": 53.1622,
+          "intensity": 2.14,
+          "d_energy": 0.0006,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 80.9979,
+          "intensity": 32.9,
+          "d_energy": 0.0011,
+          "d_intensity": 0.3,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 276.3989,
+          "intensity": 7.16,
+          "d_energy": 0.0012,
+          "d_intensity": 0.05,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 302.8508,
+          "intensity": 18.34,
+          "d_energy": 0.0005,
+          "d_intensity": 0.13,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 356.0129,
+          "intensity": 62.0,
+          "d_energy": 0.0007,
+          "d_intensity": 0.6,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 383.8485,
+          "intensity": 8.94,
+          "d_energy": 0.0012,
+          "d_intensity": 0.06,
+          "line_type": null,
+          "used": true
+        }
+      ]
+    },
+    {
+      "name": "Bi-207",
+      "half_life_value": 31.55,
+      "half_life_unit": "year",
+      "gamma_constant": 15.122747,
+      "atomic_mass": 207,
+      "lines": [
+        {
+          "energy": 74.969,
+          "intensity": 36.8,
+          "d_energy": 0.0009,
+          "d_intensity": 1.1,
+          "line_type": "X",
+          "used": false
+        },
+        {
+          "energy": 84.938,
+          "intensity": 8.52,
+          "d_energy": 0.0,
+          "d_intensity": 0.26,
+          "line_type": "X",
+          "used": false
+        },
+        {
+          "energy": 569.698,
+          "intensity": 97.75,
+          "d_energy": 0.002,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1063.656,
+          "intensity": 74.5,
+          "d_energy": 0.003,
+          "d_intensity": 0.3,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1460.0,
+          "intensity": 1.61,
+          "d_energy": 1.5,
+          "d_intensity": 0.06,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 1770.228,
+          "intensity": 6.87,
+          "d_energy": 0.009,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        }
+      ]
+    },
+    {
+      "name": "Cd-109",
+      "half_life_value": 461.4,
+      "half_life_unit": "day",
+      "gamma_constant": 0.014393,
+      "atomic_mass": 109,
+      "lines": [
+        {
+          "energy": 88.0336,
+          "intensity": 3.7,
+          "d_energy": 0.0001,
+          "d_intensity": 0.1,
+          "line_type": null,
+          "used": true
+        }
+      ]
+    },
+    {
+      "name": "Ce-139",
+      "half_life_value": 137.641,
+      "half_life_unit": "day",
+      "gamma_constant": 0.64652,
+      "atomic_mass": 139,
+      "lines": [
+        {
+          "energy": 165.8575,
+          "intensity": 79.9,
+          "d_energy": 0.0011,
+          "d_intensity": 0.01,
+          "line_type": null,
+          "used": true
+        }
+      ]
+    },
+    {
+      "name": "Co-57",
+      "half_life_value": 271.74,
+      "half_life_unit": "day",
+      "gamma_constant": 0.550901,
+      "atomic_mass": 57,
+      "lines": [
+        {
+          "energy": 122.06065,
+          "intensity": 85.6,
+          "d_energy": 0.00012,
+          "d_intensity": 0.17,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 136.47356,
+          "intensity": 10.68,
+          "d_energy": 0.00029,
+          "d_intensity": 0.08,
+          "line_type": null,
+          "used": true
+        }
+      ]
+    },
+    {
+      "name": "Co-60",
+      "half_life_value": 1925.28,
+      "half_life_unit": "day",
+      "gamma_constant": 12.472121,
+      "atomic_mass": 60,
+      "lines": [
+        {
+          "energy": 1173.228,
+          "intensity": 99.85,
+          "d_energy": 0.003,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1332.492,
+          "intensity": 99.9826,
+          "d_energy": 0.004,
+          "d_intensity": 0.0006,
+          "line_type": null,
+          "used": true
+        }
+      ]
+    },
+    {
+      "name": "Cs-134",
+      "half_life_value": 2.0652,
+      "half_life_unit": "year",
+      "gamma_constant": 8.673998,
+      "atomic_mass": 134,
+      "lines": [
+        {
+          "energy": 563.246,
+          "intensity": 8.338,
+          "d_energy": 0.005,
+          "d_intensity": 0.014,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 569.331,
+          "intensity": 15.373,
+          "d_energy": 0.003,
+          "d_intensity": 0.017,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 604.721,
+          "intensity": 97.62,
+          "d_energy": 0.002,
+          "d_intensity": 0.11,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 795.864,
+          "intensity": 85.46,
+          "d_energy": 0.004,
+          "d_intensity": 0.06,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 801.953,
+          "intensity": 8.688,
+          "d_energy": 0.004,
+          "d_intensity": 0.016,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1365.185,
+          "intensity": 3.017,
+          "d_energy": 0.007,
+          "d_intensity": 0.008,
+          "line_type": null,
+          "used": true
+        }
+      ]
+    },
+    {
+      "name": "Cs-137",
+      "half_life_value": 30.08,
+      "half_life_unit": "year",
+      "gamma_constant": 3.180164,
+      "atomic_mass": 137,
+      "lines": [
+        {
+          "energy": 661.657,
+          "intensity": 85.13,
+          "d_energy": 0.003,
+          "d_intensity": 0.19,
+          "line_type": null,
+          "used": true
+        }
+      ]
+    },
+    {
+      "name": "Eu-152",
+      "half_life_value": 13.517,
+      "half_life_unit": "year",
+      "gamma_constant": 5.919453,
+      "atomic_mass": 152,
+      "lines": [
+        {
+          "energy": 121.7817,
+          "intensity": 28.53,
+          "d_energy": 0.0003,
+          "d_intensity": 0.16,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 244.6974,
+          "intensity": 7.55,
+          "d_energy": 0.0008,
+          "d_intensity": 0.04,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 344.2785,
+          "intensity": 26.59,
+          "d_energy": 0.0012,
+          "d_intensity": 0.2,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 411.1165,
+          "intensity": 2.237,
+          "d_energy": 0.0012,
+          "d_intensity": 0.013,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 443.9606,
+          "intensity": 2.827,
+          "d_energy": 0.0016,
+          "d_intensity": 0.014,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 778.9045,
+          "intensity": 12.93,
+          "d_energy": 0.0024,
+          "d_intensity": 0.08,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 867.38,
+          "intensity": 4.23,
+          "d_energy": 0.003,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 964.057,
+          "intensity": 14.51,
+          "d_energy": 0.005,
+          "d_intensity": 0.07,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 1085.837,
+          "intensity": 10.11,
+          "d_energy": 0.01,
+          "d_intensity": 0.05,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 1089.737,
+          "intensity": 1.734,
+          "d_energy": 0.005,
+          "d_intensity": 0.011,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 1112.076,
+          "intensity": 13.67,
+          "d_energy": 0.003,
+          "d_intensity": 0.08,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1212.948,
+          "intensity": 1.415,
+          "d_energy": 0.011,
+          "d_intensity": 0.008,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1299.142,
+          "intensity": 1.633,
+          "d_energy": 0.008,
+          "d_intensity": 0.011,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1408.013,
+          "intensity": 20.87,
+          "d_energy": 0.003,
+          "d_intensity": 0.09,
+          "line_type": null,
+          "used": true
+        }
+      ]
+    },
+    {
+      "name": "Eu-154",
+      "half_life_value": 8.601,
+      "half_life_unit": "year",
+      "gamma_constant": 6.404538,
+      "atomic_mass": 154,
+      "lines": [
+        {
+          "energy": 123.0706,
+          "intensity": 40.4,
+          "d_energy": 0.0009,
+          "d_intensity": 0.4,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 247.929,
+          "intensity": 6.89,
+          "d_energy": 0.0007,
+          "d_intensity": 0.07,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 591.755,
+          "intensity": 4.95,
+          "d_energy": 0.003,
+          "d_intensity": 0.05,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 723.3014,
+          "intensity": 20.06,
+          "d_energy": 0.0022,
+          "d_intensity": 0.19,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 756.802,
+          "intensity": 4.52,
+          "d_energy": 0.0023,
+          "d_intensity": 0.04,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 873.1834,
+          "intensity": 12.08,
+          "d_energy": 0.0023,
+          "d_intensity": 0.12,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 996.29,
+          "intensity": 10.48,
+          "d_energy": 0.07,
+          "d_intensity": 0.1,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1004.76,
+          "intensity": 18.01,
+          "d_energy": 0.07,
+          "d_intensity": 0.18,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1274.429,
+          "intensity": 34.8,
+          "d_energy": 0.004,
+          "d_intensity": 0.3,
+          "line_type": null,
+          "used": true
+        }
+      ]
+    },
+    {
+      "name": "K-40",
+      "half_life_value": 1248000000.0,
+      "half_life_unit": "year",
+      "gamma_constant": 0.763374,
+      "atomic_mass": 40,
+      "lines": [
+        {
+          "energy": 1460.822,
+          "intensity": 10.66,
+          "d_energy": 0.006,
+          "d_intensity": 0.18,
+          "line_type": null,
+          "used": true
+        }
+      ]
+    },
+    {
+      "name": "Mn-54",
+      "half_life_value": 312.05,
+      "half_life_unit": "day",
+      "gamma_constant": 4.588521,
+      "atomic_mass": 54,
+      "lines": [
+        {
+          "energy": 834.848,
+          "intensity": 99.976,
+          "d_energy": 0.003,
+          "d_intensity": 0.001,
+          "line_type": null,
+          "used": true
+        }
+      ]
+    },
+    {
+      "name": "Na-22",
+      "half_life_value": 2.6018,
+      "half_life_unit": "year",
+      "gamma_constant": 11.552679,
+      "atomic_mass": 22,
+      "lines": [
+        {
+          "energy": 511.003,
+          "intensity": 179.91,
+          "d_energy": 0.0,
+          "d_intensity": 0.09,
+          "line_type": "An",
+          "used": false
+        },
+        {
+          "energy": 1274.537,
+          "intensity": 99.94,
+          "d_energy": 0.007,
+          "d_intensity": 0.014,
+          "line_type": null,
+          "used": true
+        }
+      ]
+    },
+    {
+      "name": "Nb-94",
+      "half_life_value": 20300.0,
+      "half_life_unit": "year",
+      "gamma_constant": 8.7014,
+      "atomic_mass": 94,
+      "lines": [
+        {
+          "energy": 702.65,
+          "intensity": 100.0,
+          "d_energy": 0.06,
+          "d_intensity": 50.0,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 871.091,
+          "intensity": 100.0,
+          "d_energy": 0.018,
+          "d_intensity": 50.0,
+          "line_type": null,
+          "used": true
+        }
+      ]
+    },
+    {
+      "name": "Ra-226",
+      "half_life_value": 1600.0,
+      "half_life_unit": "year",
+      "gamma_constant": 8.780581,
+      "atomic_mass": 226,
+      "lines": [
+        {
+          "energy": 186.211,
+          "intensity": 3.64,
+          "d_energy": 0.013,
+          "d_intensity": 0.04,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 241.995,
+          "intensity": 7.25,
+          "d_energy": 0.0023,
+          "d_intensity": 0.07,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 295.2228,
+          "intensity": 18.42,
+          "d_energy": 0.0018,
+          "d_intensity": 0.19,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 351.9321,
+          "intensity": 35.6,
+          "d_energy": 0.0018,
+          "d_intensity": 0.4,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 609.32,
+          "intensity": 45.49,
+          "d_energy": 0.005,
+          "d_intensity": 0.16,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 665.447,
+          "intensity": 1.531,
+          "d_energy": 0.009,
+          "d_intensity": 0.006,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 768.36,
+          "intensity": 4.894,
+          "d_energy": 0.005,
+          "d_intensity": 0.011,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 806.18,
+          "intensity": 1.264,
+          "d_energy": 0.009,
+          "d_intensity": 0.005,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 934.056,
+          "intensity": 3.107,
+          "d_energy": 0.006,
+          "d_intensity": 0.01,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1120.294,
+          "intensity": 14.92,
+          "d_energy": 0.006,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1238.122,
+          "intensity": 5.834,
+          "d_energy": 0.007,
+          "d_intensity": 0.015,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1377.669,
+          "intensity": 3.988,
+          "d_energy": 0.008,
+          "d_intensity": 0.011,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1407.988,
+          "intensity": 2.394,
+          "d_energy": 0.011,
+          "d_intensity": 0.007,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1509.21,
+          "intensity": 2.13,
+          "d_energy": 0.01,
+          "d_intensity": 0.01,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1661.274,
+          "intensity": 1.047,
+          "d_energy": 0.016,
+          "d_intensity": 0.006,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1729.595,
+          "intensity": 2.878,
+          "d_energy": 0.011,
+          "d_intensity": 0.008,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1764.491,
+          "intensity": 15.3,
+          "d_energy": 0.01,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1847.429,
+          "intensity": 2.025,
+          "d_energy": 0.013,
+          "d_intensity": 0.009,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 2118.514,
+          "intensity": 1.16,
+          "d_energy": 0.019,
+          "d_intensity": 0.006,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 2204.059,
+          "intensity": 4.924,
+          "d_energy": 0.022,
+          "d_intensity": 0.018,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 2447.7,
+          "intensity": 1.548,
+          "d_energy": 0.03,
+          "d_intensity": 0.007,
+          "line_type": null,
+          "used": true
+        }
+      ]
+    },
+    {
+      "name": "Th-228",
+      "half_life_value": 1.9125,
+      "half_life_unit": "year",
+      "gamma_constant": 6.811694,
+      "atomic_mass": 228,
+      "lines": [
+        {
+          "energy": 84.373,
+          "intensity": 1.19,
+          "d_energy": 0.003,
+          "d_intensity": 0.04,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 115.183,
+          "intensity": 0.596,
+          "d_energy": 0.005,
+          "d_intensity": 0.009,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 238.632,
+          "intensity": 43.6,
+          "d_energy": 0.002,
+          "d_intensity": 0.5,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 240.986,
+          "intensity": 4.1,
+          "d_energy": 0.006,
+          "d_intensity": 0.05,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 277.371,
+          "intensity": 2.39,
+          "d_energy": 0.005,
+          "d_intensity": 0.11,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 300.087,
+          "intensity": 3.3,
+          "d_energy": 0.01,
+          "d_intensity": 0.04,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 510.77,
+          "intensity": 8.17,
+          "d_energy": 0.1,
+          "d_intensity": 0.07,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 583.187,
+          "intensity": 30.73,
+          "d_energy": 0.002,
+          "d_intensity": 0.11,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 727.33,
+          "intensity": 6.67,
+          "d_energy": 0.009,
+          "d_intensity": 0.09,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 763.13,
+          "intensity": 0.647,
+          "d_energy": 0.08,
+          "d_intensity": 0.011,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 785.37,
+          "intensity": 1.102,
+          "d_energy": 0.08,
+          "d_intensity": 0.013,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 860.557,
+          "intensity": 4.52,
+          "d_energy": 0.004,
+          "d_intensity": 0.04,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1078.62,
+          "intensity": 0.564,
+          "d_energy": 0.1,
+          "d_intensity": 0.019,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 1620.5,
+          "intensity": 1.47,
+          "d_energy": 0.1,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 2614.511,
+          "intensity": 36.0656,
+          "d_energy": 0.01,
+          "d_intensity": 0.0016,
+          "line_type": null,
+          "used": true
+        }
+      ]
+    },
+    {
+      "name": "Th-232",
+      "half_life_value": 14050000000.0,
+      "half_life_unit": "year",
+      "gamma_constant": 11.352686,
+      "atomic_mass": 232,
+      "lines": [
+        {
+          "energy": 84.373,
+          "intensity": 1.22,
+          "d_energy": 0.003,
+          "d_intensity": 0.022,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 129.065,
+          "intensity": 2.42,
+          "d_energy": 0.001,
+          "d_intensity": 0.09,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 209.253,
+          "intensity": 3.89,
+          "d_energy": 0.006,
+          "d_intensity": 0.07,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 238.632,
+          "intensity": 43.6,
+          "d_energy": 0.002,
+          "d_intensity": 0.5,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 277.371,
+          "intensity": 2.37,
+          "d_energy": 0.005,
+          "d_intensity": 0.11,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 328.0,
+          "intensity": 2.95,
+          "d_energy": 0.006,
+          "d_intensity": 0.12,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 338.32,
+          "intensity": 11.27,
+          "d_energy": 0.003,
+          "d_intensity": 0.19,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 409.462,
+          "intensity": 1.92,
+          "d_energy": 0.006,
+          "d_intensity": 0.04,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 463.004,
+          "intensity": 4.4,
+          "d_energy": 0.006,
+          "d_intensity": 0.07,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 510.77,
+          "intensity": 8.12,
+          "d_energy": 0.1,
+          "d_intensity": 0.11,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 583.187,
+          "intensity": 30.5,
+          "d_energy": 0.002,
+          "d_intensity": 0.3,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 727.33,
+          "intensity": 6.67,
+          "d_energy": 0.009,
+          "d_intensity": 0.09,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 755.315,
+          "intensity": 1.0,
+          "d_energy": 0.004,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 772.291,
+          "intensity": 1.49,
+          "d_energy": 0.005,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 785.37,
+          "intensity": 1.102,
+          "d_energy": 0.08,
+          "d_intensity": 0.013,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 794.947,
+          "intensity": 4.25,
+          "d_energy": 0.005,
+          "d_intensity": 0.07,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 835.71,
+          "intensity": 1.61,
+          "d_energy": 0.006,
+          "d_intensity": 0.06,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 860.557,
+          "intensity": 4.49,
+          "d_energy": 0.004,
+          "d_intensity": 0.06,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 911.204,
+          "intensity": 25.8,
+          "d_energy": 0.004,
+          "d_intensity": 0.4,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 964.766,
+          "intensity": 4.99,
+          "d_energy": 0.01,
+          "d_intensity": 0.09,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 968.971,
+          "intensity": 15.8,
+          "d_energy": 0.017,
+          "d_intensity": 0.3,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 1588.2,
+          "intensity": 3.22,
+          "d_energy": 0.03,
+          "d_intensity": 0.08,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 1620.5,
+          "intensity": 1.47,
+          "d_energy": 0.1,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 1630.627,
+          "intensity": 1.51,
+          "d_energy": 0.01,
+          "d_intensity": 0.04,
+          "line_type": null,
+          "used": false
+        },
+        {
+          "energy": 2614.511,
+          "intensity": 35.9,
+          "d_energy": 0.01,
+          "d_intensity": 0.4,
+          "line_type": null,
+          "used": true
+        }
+      ]
+    },
+    {
+      "name": "Ti-44",
+      "half_life_value": 59.1,
+      "half_life_unit": "year",
+      "gamma_constant": 12.131358,
+      "atomic_mass": 44,
+      "lines": [
+        {
+          "energy": 67.8679,
+          "intensity": 93.0,
+          "d_energy": 0.0014,
+          "d_intensity": 2.0,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 78.3234,
+          "intensity": 96.4,
+          "d_energy": 0.0014,
+          "d_intensity": 1.7,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 511.003,
+          "intensity": 188.54,
+          "d_energy": 0.0,
+          "d_intensity": 0.05,
+          "line_type": "An",
+          "used": false
+        },
+        {
+          "energy": 1157.02,
+          "intensity": 99.9,
+          "d_energy": 0.015,
+          "d_intensity": 0.4,
+          "line_type": null,
+          "used": true
+        }
+      ]
+    },
+    {
+      "name": "Y-88",
+      "half_life_value": 106.627,
+      "half_life_unit": "day",
+      "gamma_constant": 13.094791,
+      "atomic_mass": 88,
+      "lines": [
+        {
+          "energy": 898.042,
+          "intensity": 93.7,
+          "d_energy": 0.003,
+          "d_intensity": 0.3,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1836.063,
+          "intensity": 99.2,
+          "d_energy": 0.012,
+          "d_intensity": 0.3,
+          "line_type": null,
+          "used": true
+        }
+      ]
+    },
+    {
+      "name": "Zn-65",
+      "half_life_value": 243.93,
+      "half_life_unit": "day",
+      "gamma_constant": 2.9558,
+      "atomic_mass": 65,
+      "lines": [
+        {
+          "energy": 511.003,
+          "intensity": 2.842,
+          "d_energy": 0.0,
+          "d_intensity": 0.007,
+          "line_type": "An",
+          "used": false
+        },
+        {
+          "energy": 1115.539,
+          "intensity": 50.04,
+          "d_energy": 0.002,
+          "d_intensity": 0.1,
+          "line_type": null,
+          "used": true
+        }
+      ]
+    }
+  ]
+}
