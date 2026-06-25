@@ -10,6 +10,9 @@ sample_data/*.n42
 # Спектрограммы RadiaCode (.rcspg, JSON: deviceId/координаты/время) — тоже не в git
 sample_data/*.rcspg
 *.rcspg
+# Нативные waterfall AtomSpectra (.aswf, заголовок: serial/IP-источник) — тоже не в git
+sample_data/*.aswf
+*.aswf
 
 # Логи прогона (run.bat пишет stderr сюда)
 *.log
