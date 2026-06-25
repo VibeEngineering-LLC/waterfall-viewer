@@ -81,3 +81,26 @@ def desaturate_rgba(colors, amount: float):
     lum = (0.299 * rgb[..., 0] + 0.587 * rgb[..., 1] + 0.114 * rgb[..., 2])[..., None]
     c[..., :3] = rgb * (1.0 - a) + lum * a
     return c
+# Регулируемое усреднение спектра выкл. по умолчанию (Замечание IV-R4).
+DEFAULT_SMOOTH = 0
+
+
+def smooth_counts(arr, radius, axis: int = -1):
+    """Скользящее среднее (box-фильтр) шириной 2*radius+1 вдоль оси axis с краевым
+    дополнением 'edge'. Регулируемое усреднение спектра (Замечание IV-R4). radius<=0 —
+    массив возвращается без изменений (short-circuit). Возвращает float32 той же формы."""
+    r = int(radius)
+    a = np.asarray(arr, dtype=np.float32)
+    if r <= 0 or a.ndim == 0 or a.shape[axis] < 2:
+        return a
+    work = np.moveaxis(a, axis, -1).astype(np.float64, copy=False)
+    L = work.shape[-1]
+    r = min(r, L)
+    k = 2 * r + 1
+    pad = np.pad(work, [(0, 0)] * (work.ndim - 1) + [(r, r)], mode="edge")
+    csum = np.cumsum(pad, axis=-1)
+    zero = np.zeros(work.shape[:-1] + (1,), dtype=np.float64)
+    csum = np.concatenate([zero, csum], axis=-1)
+    win = (csum[..., k:] - csum[..., :-k]) / float(k)
+    out = np.moveaxis(win, -1, axis)
+    return np.ascontiguousarray(out, dtype=np.float32)

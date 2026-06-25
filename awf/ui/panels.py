@@ -2,8 +2,10 @@ from __future__ import annotations
 import numpy as np
 import pyqtgraph as pg
 from PySide6 import QtCore, QtWidgets
-from awf.ui.zscale import apply_z_scale, DEFAULT_GAIN, DEFAULT_GAMMA, DEFAULT_CLIP
+from awf.ui.zscale import (apply_z_scale, DEFAULT_GAIN, DEFAULT_GAMMA, DEFAULT_CLIP,
+                           smooth_counts)
 from awf.ui.colormaps import get_colormap
+from awf.analysis.peakmap import DEFAULT_WINDOWS
 
 class HeatmapPanel(QtWidgets.QWidget):
     """2D-карта Время(ось Y)×Энергия/канал(ось X). Цвет = log(1+counts). Прямоугольная выборка
@@ -25,6 +27,7 @@ class HeatmapPanel(QtWidgets.QWidget):
         self._gamma = DEFAULT_GAMMA
         self._clip = DEFAULT_CLIP
         self._cmap_name = "insight"  # палитра карты (Задача 17)
+        self._smooth = 0             # радиус усреднения спектра по энергии (Замечание IV-R4)
         self._t_scale = 1.0      # n_slices / disp_rows  (полный индекс = дисплейный * scale)
         self._ch_scale = 1.0     # n_channels / disp_cols
         self._disp_rows = 0
@@ -34,6 +37,10 @@ class HeatmapPanel(QtWidgets.QWidget):
         self._energy_lines = []      # list[(energy_keV, color, label)] от NuclidePanel.linesChanged
         self._hl_items = []          # текущие вертикальные маркеры-столбцы
         self._BASE_DIM_OPACITY = 0.45
+        # изолинии (Задача 20): контуры по квантильным уровням Z-преобразованной карты
+        self._contours_on = False
+        self._contour_levels = 5
+        self._iso_items = []
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self._glw = pg.GraphicsLayoutWidget()
@@ -71,10 +78,9 @@ class HeatmapPanel(QtWidgets.QWidget):
         self._disp_rows, self._disp_cols = disp_counts.shape
         self._t_scale = ns / float(self._disp_rows)
         self._ch_scale = nc / float(self._disp_cols)
-        # Z-контраст по выбранной шкале; row-major => ось0=строки=Время(Y), ось1=столбцы=Канал(X)
-        img = apply_z_scale(disp_counts, self._z_mode, gain=self._gain,
-                            gamma=self._gamma, clip=self._clip)
-        self._img.setImage(img, axisOrder="row-major", autoLevels=True)
+        # Z-контраст по выбранной шкале (с усреднением спектра по энергии, IV-R4); row-major =>
+        # ось0=строки=Время(Y), ось1=столбцы=Канал(X)
+        self._img.setImage(self._scaled_image(), axisOrder="row-major", autoLevels=True)
         # ROI по умолчанию — центральная четверть карты (в дисплейных координатах)
         x0 = self._disp_cols * 0.25; y0 = self._disp_rows * 0.25
         w = max(1.0, self._disp_cols * 0.5); h = max(1.0, self._disp_rows * 0.5)
@@ -84,6 +90,7 @@ class HeatmapPanel(QtWidgets.QWidget):
         self._plot.setRange(xRange=(0, self._disp_cols), yRange=(0, self._disp_rows), padding=0)
         self._emit_roi()
         self._apply_highlight()  # перерисовать маркеры подсветки под новую геометрию (Задача 18)
+        self._apply_contours()   # пересчитать изолинии под новые данные (Задача 20)
 
     def _roi_full_indices(self):
         """Текущий ROI -> (t_lo, t_hi, ch_lo, ch_hi) в ПОЛНЫХ индексах матрицы, с клиппингом."""
@@ -134,12 +141,22 @@ class HeatmapPanel(QtWidgets.QWidget):
         self._cmap_name = name
         self._img.setColorMap(get_colormap(name))
 
+    def _scaled_image(self):
+        """Дисплейная матрица -> усреднение по энергии (IV-R4) -> Z-шкала контраста."""
+        base = smooth_counts(self._disp_counts, self._smooth, axis=1)
+        return apply_z_scale(base, self._z_mode, gain=self._gain,
+                             gamma=self._gamma, clip=self._clip)
+
+    def set_smoothing(self, radius: int) -> None:
+        """Радиус скользящего среднего спектра по энергии (Замечание IV-R4); перерисовать карту."""
+        self._smooth = max(0, int(radius))
+        self._redraw()
+
     def _redraw(self) -> None:
-        """Перерисовать карту из последней дисплейной матрицы с текущими Z-шкалой и контрастом."""
+        """Перерисовать карту из последней дисплейной матрицы (Z-шкала/контраст/усреднение)."""
         if self._disp_counts is not None:
-            img = apply_z_scale(self._disp_counts, self._z_mode, gain=self._gain,
-                                gamma=self._gamma, clip=self._clip)
-            self._img.setImage(img, axisOrder="row-major", autoLevels=True)
+            self._img.setImage(self._scaled_image(), axisOrder="row-major", autoLevels=True)
+            self._apply_contours()   # уровни изолиний зависят от Z-карты -> пересчитать
 
     def set_energy_lines(self, lines) -> None:
         """Задать энергии-маркеры (energy_keV, color, label) для подсветки столбцов (Задача 18).
@@ -183,21 +200,98 @@ class HeatmapPanel(QtWidgets.QWidget):
             self._plot.addItem(ln)
             self._hl_items.append(ln)
 
+    def set_contours_enabled(self, on: bool) -> None:
+        """Вкл/выкл изолинии (контурный план, Задача 20). Уровни — по квантилям интенсивности
+        Z-преобразованной карты; пересчитываются при каждой перерисовке."""
+        self._contours_on = bool(on)
+        self._apply_contours()
+
+    def set_contour_levels(self, n: int) -> None:
+        """Число уровней изолиний (Задача 20). Перерисовать, если контуры включены."""
+        self._contour_levels = max(1, int(n))
+        if self._contours_on:
+            self._apply_contours()
+
+    def _clear_iso_items(self) -> None:
+        for it in self._iso_items:
+            self._plot.removeItem(it)
+        self._iso_items = []
+
+    def _contour_level_values(self, data) -> np.ndarray:
+        """Уровни изолиний по квантилям распределения интенсивности (равномерно «по массе»),
+        из Z-преобразованной карты. Дубли и граничный максимум (контур не строится) отброшены.
+        Возвращает строго возрастающий вектор длиной <= _contour_levels."""
+        a = np.asarray(data, dtype=np.float64).ravel()
+        a = a[np.isfinite(a)]
+        if a.size == 0:
+            return np.empty(0, dtype=np.float64)
+        n = max(1, int(self._contour_levels))
+        qs = np.linspace(0.5, 0.97, n)
+        lv = np.unique(np.round(np.quantile(a, qs), 6))
+        # строго внутри диапазона (округлённого так же) — уровни на границе контур не строят,
+        # а на константной карте граница совпадает с уровнем -> изолиний нет
+        amin = float(np.round(a.min(), 6)); amax = float(np.round(a.max(), 6))
+        return lv[(lv > amin) & (lv < amax)]
+
+    def _apply_contours(self) -> None:
+        """Построить изолинии поверх карты. Данные транспонируем: ImageItem row-major кладёт
+        data[row,col] в (x=col,y=row), а IsocurveItem ставит вершину index(i,j)->(x=i,y=j),
+        поэтому контуру отдаём data.T — оси изолиний совпадают с осями карты."""
+        self._clear_iso_items()
+        if not self._contours_on or self._disp_counts is None:
+            return
+        data = np.asarray(self._scaled_image(), dtype=np.float64)
+        levels = self._contour_level_values(data)
+        if levels.size == 0:
+            return
+        dT = np.ascontiguousarray(data.T)
+        lo = float(levels.min()); hi = float(levels.max())
+        span = (hi - lo) if hi > lo else 1.0
+        for lvl in levels:
+            # ярче для верхних уровней (alpha 90->230) — глубина «контурного плана»
+            a = int(90 + 140 * (float(lvl) - lo) / span)
+            iso = pg.IsocurveItem(data=dT, level=float(lvl),
+                                  pen=pg.mkPen((255, 255, 255, a), width=1))
+            iso.setZValue(10)
+            self._plot.addItem(iso)
+            self._iso_items.append(iso)
+
 
 class SlicePanel(QtWidgets.QWidget):
     """Два графика: верх — спектр (Энергия кэВ → Отсчёты), низ — временной ряд (Время с → Отсчёты).
     Метод show_roi() рисует спектр окна времени и временной ряд энергетической полосы, плюс
-    показывает сумму отсчётов в выборке. show_time_slice() рисует спектр одного среза."""
+    показывает сумму отсчётов в выборке. show_time_slice() рисует спектр одного среза.
+    show_energy_window() (Задача 19) рисует временной профиль интенсивности в энергоокне."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._sg = None
         self._energies = None
         self._times = None
+        self._smooth = 0          # радиус усреднения спектра по энергии (Замечание IV-R4)
+        self._raw_spec = None     # (energies, spec_raw) последнего показанного спектра
+        self._ewin_active = None  # (e_lo,e_hi) активного энергоокна временного профиля (Задача 19)
         layout = QtWidgets.QVBoxLayout(self)
         self._header = QtWidgets.QLabel("Файл не загружен")
         self._header.setWordWrap(True)
         layout.addWidget(self._header)
+        # --- энергоокно временного профиля (Задача 19.3): пресет нуклида + ручной ввод границ ---
+        ewin_row = QtWidgets.QHBoxLayout()
+        ewin_row.addWidget(QtWidgets.QLabel("Энергоокно:"))
+        self._ewin_preset = QtWidgets.QComboBox()
+        self._ewin_preset.addItem("— вручную —")
+        for w in DEFAULT_WINDOWS:
+            self._ewin_preset.addItem(f"{w.name} ({w.center:.0f} кэВ)")
+        ewin_row.addWidget(self._ewin_preset)
+        self._ewin_lo = QtWidgets.QDoubleSpinBox()
+        self._ewin_hi = QtWidgets.QDoubleSpinBox()
+        for sb in (self._ewin_lo, self._ewin_hi):
+            sb.setDecimals(0); sb.setRange(0.0, 1.0); sb.setSuffix(" кэВ"); sb.setSingleStep(5.0)
+        ewin_row.addWidget(self._ewin_lo)
+        ewin_row.addWidget(QtWidgets.QLabel("–"))
+        ewin_row.addWidget(self._ewin_hi)
+        ewin_row.addStretch(1)
+        layout.addLayout(ewin_row)
         self._spectrum_plot = pg.PlotWidget()
         self._spectrum_plot.setLabel("bottom", "Энергия, кэВ")
         self._spectrum_plot.setLabel("left", "Отсчёты")
@@ -209,8 +303,16 @@ class SlicePanel(QtWidgets.QWidget):
         self._series_plot.showGrid(x=True, y=True, alpha=0.3)
         layout.addWidget(self._series_plot)
         self._spectrum_curve = self._spectrum_plot.plot([], [], pen=pg.mkPen("c", width=1))
-        self._series_curve = self._series_plot.plot([], [], pen=pg.mkPen("m", width=1))
+        self._series_plot.addLegend(offset=(-10, 10))
+        self._series_curve = self._series_plot.plot([], [], pen=pg.mkPen("m", width=1),
+                                                    name="полоса ROI")
+        # жёлтая кривая — временной профиль энергоокна (Задача 19.2), независим от ROI
+        self._ewin_curve = self._series_plot.plot([], [], pen=pg.mkPen("y", width=1),
+                                                  name="энергоокно")
         self._nuclide_lines = []  # текущие вертикальные маркеры энергий нуклидов на спектре
+        self._ewin_preset.currentIndexChanged.connect(self._on_ewin_preset)
+        self._ewin_lo.editingFinished.connect(self._on_ewin_spin)
+        self._ewin_hi.editingFinished.connect(self._on_ewin_spin)
 
     def set_spectrogram(self, sg) -> None:
         self._sg = sg
@@ -218,12 +320,39 @@ class SlicePanel(QtWidgets.QWidget):
         self._times = np.asarray(sg.time_offsets_s, dtype=np.float64)
         # начальный вид: полный интегральный спектр и полная полоса по времени
         spec = np.asarray(sg.total_spectrum(), dtype=np.float64)
-        self._spectrum_curve.setData(self._energies, spec)
+        self._plot_spectrum(self._energies, spec)
         band = np.asarray(sg.band_time_series(0, sg.n_channels), dtype=np.float64)
         self._series_curve.setData(self._times, band)
         self._header.setText(
             f"Загружено: срезов {sg.n_slices}, каналов {sg.n_channels}. "
             f"Интегральный спектр и полная полоса.")
+        # энергоокно (Задача 19): диапазон спинбоксов = диапазон энергий, дефолт — первое окно
+        emin = float(self._energies.min()); emax = float(self._energies.max())
+        for sb in (self._ewin_lo, self._ewin_hi):
+            sb.blockSignals(True); sb.setRange(emin, emax); sb.blockSignals(False)
+        w0 = DEFAULT_WINDOWS[0]
+        lo = max(emin, min(emax, float(w0.e_lo)))
+        hi = max(emin, min(emax, float(w0.e_hi)))
+        if hi <= lo:    # окно вне диапазона спектра -> взять центральную треть
+            lo = emin + (emax - emin) / 3.0
+            hi = emin + 2.0 * (emax - emin) / 3.0
+        self._ewin_lo.blockSignals(True); self._ewin_lo.setValue(lo); self._ewin_lo.blockSignals(False)
+        self._ewin_hi.blockSignals(True); self._ewin_hi.setValue(hi); self._ewin_hi.blockSignals(False)
+        self.show_energy_window(lo, hi)
+
+    def _plot_spectrum(self, energies, spec_raw) -> None:
+        """Показать спектр с усреднением по энергии (IV-R4); сырой кэшируем для смены радиуса."""
+        e = np.asarray(energies, dtype=np.float64)
+        s = np.asarray(spec_raw, dtype=np.float64)
+        self._raw_spec = (e, s)
+        self._spectrum_curve.setData(e, smooth_counts(s, self._smooth, axis=-1))
+
+    def set_smoothing(self, radius: int) -> None:
+        """Радиус скользящего среднего спектра по энергии (Замечание IV-R4); перерисовать кривую."""
+        self._smooth = max(0, int(radius))
+        if self._raw_spec is not None:
+            e, s = self._raw_spec
+            self._spectrum_curve.setData(e, smooth_counts(s, self._smooth, axis=-1))
 
     def set_nuclide_lines(self, lines) -> None:
         """Отметить энергии гамма-линий нуклидов вертикальными линиями на графике спектра.
@@ -247,7 +376,7 @@ class SlicePanel(QtWidgets.QWidget):
             return
         i = max(0, min(self._sg.n_slices - 1, int(i)))
         spec = np.asarray(self._sg.energy_spectrum(i), dtype=np.float64)
-        self._spectrum_curve.setData(self._energies, spec)
+        self._plot_spectrum(self._energies, spec)
         t = float(self._times[i]) if self._times is not None and self._times.size > i else 0.0
         self._header.setText(f"Срез времени #{i} (t = {t:.1f} с)")
 
@@ -258,7 +387,7 @@ class SlicePanel(QtWidgets.QWidget):
         if self._sg is None:
             return
         spec = np.asarray(self._sg.sum_spectrum(t_lo, t_hi), dtype=np.float64)
-        self._spectrum_curve.setData(self._energies, spec)
+        self._plot_spectrum(self._energies, spec)
         band = np.asarray(self._sg.band_time_series(ch_lo, ch_hi), dtype=np.float64)
         self._series_curve.setData(self._times, band)
         total = int(self._sg.roi_sum(t_lo, t_hi, ch_lo, ch_hi))
@@ -267,3 +396,40 @@ class SlicePanel(QtWidgets.QWidget):
         self._header.setText(
             f"Выборка: срезы [{t_lo}:{t_hi}], каналы [{ch_lo}:{ch_hi}] "
             f"({e_lo:.0f}–{e_hi:.0f} кэВ). Сумма отсчётов = {total}.")
+
+    def show_energy_window(self, e_lo, e_hi) -> None:
+        """Временной профиль интенсивности в энергоокне [e_lo,e_hi] — жёлтая кривая нижнего
+        графика (Задача 19.2; пример: 662 кэВ → Cs-137, 1461 кэВ → K-40). На каждом срезе времени
+        — сумма отсчётов по каналам окна (gross), длина = число срезов. Кривая ROI не трогается."""
+        if self._sg is None:
+            return
+        lo, hi = sorted((float(e_lo), float(e_hi)))
+        if hi <= lo:
+            hi = lo + 1.0
+        series = np.asarray(self._sg.energy_band_time_series(lo, hi), dtype=np.float64)
+        self._ewin_curve.setData(self._times, series)
+        self._ewin_active = (lo, hi)
+
+    @QtCore.Slot(int)
+    def _on_ewin_preset(self, idx: int) -> None:
+        """Выбран пресет нуклида: выставить границы спинбоксов (с клиппингом к диапазону спектра)
+        и перерисовать временной профиль."""
+        if self._sg is None or idx <= 0 or idx > len(DEFAULT_WINDOWS):
+            return
+        w = DEFAULT_WINDOWS[idx - 1]
+        emin = float(self._energies.min()); emax = float(self._energies.max())
+        lo = max(emin, min(emax, float(w.e_lo)))
+        hi = max(emin, min(emax, float(w.e_hi)))
+        self._ewin_lo.blockSignals(True); self._ewin_lo.setValue(lo); self._ewin_lo.blockSignals(False)
+        self._ewin_hi.blockSignals(True); self._ewin_hi.setValue(hi); self._ewin_hi.blockSignals(False)
+        self.show_energy_window(lo, hi)
+
+    @QtCore.Slot()
+    def _on_ewin_spin(self) -> None:
+        """Ручная правка границ энергоокна -> сбросить пресет в «вручную» и перерисовать профиль."""
+        if self._sg is None:
+            return
+        lo = float(self._ewin_lo.value()); hi = float(self._ewin_hi.value())
+        self._ewin_preset.blockSignals(True); self._ewin_preset.setCurrentIndex(0)
+        self._ewin_preset.blockSignals(False)
+        self.show_energy_window(lo, hi)

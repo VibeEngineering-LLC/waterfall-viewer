@@ -358,6 +358,64 @@ def apply_z_scale(arr, mode, *, gain=1.0, gamma=1.0, clip=(0.0, 100.0)) -> np.nd
 
 ---
 
+## Замечания оператора по ревью Группы IV (против референса iZotope Insight + скрины) ✅ ВЫПОЛНЕНО
+
+> Ревью 2026-06-25: оператор сверил готовую Группу IV с референсом iZotope Insight и скриншотами,
+> выдал 5 замечаний. Присвоены номера IV-R1…IV-R5, учтены в плане, исправлены, покрыты тестами
+> (`tests/test_group4_remarks.py`, 21 тест). Полный прогон — 159 passed.
+
+### IV-R1 — Серая градиентная схема оформления окна ✅
+**Замечание:** оформление окна не соответствует ТЗ — должна быть серая градиентная (металлик-хром,
+как в iZotope Insight), а не дефолтная тема Qt.
+**Решено:** новый модуль `awf/ui/style.py` (`APP_QSS`) — QSS с `qlineargradient`, тёмно-серая гамма
+(#2b2d31 / #34373c / #45484d) + зелёный акцент (#4a7d4a). Scope: QMainWindow/QToolBar/QMenuBar/
+QMenu/QDockWidget/QStatusBar/QLabel/QCheckBox/QComboBox/QSlider/QPushButton/QSpinBox/QTabBar/
+QTreeView/QHeaderView/QScrollBar. Применён в `main_window.py` через `setStyleSheet(APP_QSS)`.
+Намеренно НЕ трогает plot-виджеты pyqtgraph и per-item цвета дерева нуклидов.
+**Тесты:** `APP_QSS` непустой; MainWindow применяет стиль.
+
+### IV-R2 — Шкала энергий в конец по времени + вертикальные отрезки-зубцы ✅
+**Замечание:** перенести отображение шкалы энергий в дальний по времени край; добавить вертикальные
+отрезки шкалы энергий (зубцы), как на скрине Insight.
+**Решено:** в `view3d._rebuild_axis_labels` подписи энергий вынесены на дальнюю по времени грань
+(`xmax+pad`), к каждому делению добавлен вертикальный отрезок-зубец `GLLinePlotItem` высотой
+`0.10*zmax` (цвет `_ENERGY_TICK_RGBA`). Зубцы хранятся в `_axis_items` и снимаются вместе с
+подписями при toggle.
+**Тесты:** зубцы присутствуют после загрузки; снимаются при скрытии подписей.
+
+### IV-R3 — При включении сечений показывать только то, что между плоскостями ✅
+**Замечание:** при включении секущих плоскостей отображать ТОЛЬКО объём между ними; всё, что снаружи
+— не показывать.
+**Решено:** клиппинг по паре плоскостей на оси (ось клиппирует, только когда обе её плоскости видимы).
+Время/энергия → оконный срез индексов (i0..i1, j0..j1) с пересборкой поверхности; счёт → полоса высот
+(z_lo/z_hi) с alpha-маской вне диапазона + `translucent`. `_clip_windows()` / `_rebuild_surface()` /
+`_maybe_reclip()` (пересборка только при смене сигнатуры клиппинга).
+**Тесты:** одна плоскость не клиппирует; две — сужают; пересборка поверхности; клип по высоте счёта;
+выключение восстанавливает полный объём.
+
+### IV-R4 — Регулируемая функция усреднения спектра ✅
+**Замечание:** добавить регулируемую функцию усреднения (сглаживания) данных спектра.
+**Решено:** `awf/ui/zscale.py::smooth_counts(arr, radius, axis)` — скользящее среднее (box-фильтр
+ширины 2r+1, cumsum, edge-padding; radius<=0 — без изменений). Применяется в `view3d` (axis=1 по
+каналам), `HeatmapPanel` (axis=1), `SlicePanel` (axis=-1 по кэшированному сырому спектру). Слайдер
+0–15 в тулбаре; общий обработчик `_on_smooth_changed` рассылает радиус во все три вида.
+**Тесты:** `smooth_counts` (тождество при r=0, сглаживание при r>0, сохранение формы); сеттеры
+во всех трёх видах.
+
+### IV-R5 — Не отображать последний канал (мусор) ✅
+**Замечание:** последний канал АЦП содержит мусор (переполнение) — не отображать.
+**Решено:** `Spectrogram.trimmed_channels(drop_last=1)` — новая спектрограмма без последних N каналов
+(калибровка/время не меняются). Применяется единой точкой в `main_window._on_loaded` (`sg =
+sg.trimmed_channels(1)`) — все виды согласованы.
+**Тесты:** обрезка даёт n-1 каналов; калибровка сохранена; drop_last<=0 — возврат self; защита от
+обрезки до нуля каналов.
+
+**Артефакты:** `awf/ui/style.py` (новый), правки `awf/ui/view3d.py`, `awf/ui/panels.py`,
+`awf/ui/zscale.py`, `awf/ui/main_window.py`, `awf/model/spectrogram.py`; тесты
+`tests/test_group4_remarks.py` (новый) + правка `tests/test_view3d_axes.py` (учёт зубцов IV-R2).
+
+---
+
 # Группа V. Продвинутая аналитика по матрице время×энергия (ТЗ-B.3,4,6,8,9)
 
 > Оси координат нет — её роль играет **ось времени** (запись = маршрут во времени). Пространственные
@@ -467,6 +525,66 @@ def deconvolve_multiplet(counts_1d, centers, sigmas, *,
 **Где:** `main_window.py` (+ новый виджет).
 **Тесты:** smoke — скаттер отображает проекции/кластеры, клик открывает срез.
 **Зависимости:** PySide6/pyqtgraph. **Предпосылки:** 24, 25.
+
+---
+
+## Группа V — РЕЗУЛЬТАТЫ ✅ ВЫПОЛНЕНО (Задачи 19–26)
+
+> Слой аналитики `awf/analysis/` — Qt-free, только numpy (+ опц. scipy/sklearn), тестируется
+> headless. Тяжёлые опциональные пакеты (sklearn/umap/hdbscan) **намеренно не ставились** — пути
+> t-SNE/UMAP/DBSCAN/HDBSCAN сделаны graceful-optional (ImportError с понятным RU-сообщением),
+> а первичные пути (PCA через SVD, KMeans через Lloyd+k-means++) работают всегда и протестированы.
+> scipy 1.17.1 **есть** → Задача 23 использует `scipy.optimize.lsq_linear` (+ numpy-fallback).
+
+**Задача 22 — Градиентный анализ** (`awf/analysis/gradient.py`): `moving_average` (box-сглаживание
+cumsum), `GradientResult`, `total_counts_series(sg)`, `time_gradient(...)` (np.gradient по времени,
+фронт = argmax|grad|), `band_gradient(sg, e_lo, e_hi, ...)`. Тесты: `tests/test_gradient.py` (8) —
+ступенчатая запись, фронт локализован.
+
+**Задача 21 — Карта пиков по времени** (`awf/analysis/peakmap.py`): `EnergyWindow` (центр±полуширина),
+`DEFAULT_WINDOWS` (Cs-137 662, K-40 1461, U 609/1764, Th 2614), `WindowSeries` (gross/baseline/net),
+`window_series(...)` (континуум — трапеция Ковелла по боковым полосам), `peak_map(...)`. Тесты:
+`tests/test_peakmap.py` (8).
+
+**Задача 24 — PCA/t-SNE/UMAP** (`awf/analysis/decomposition.py`): `feature_matrix(sg, *, normalize,
+log)` (строка = спектр среза, log1p + L1-норма), `pca` (SVD центрированной матрицы + объяснённая
+дисперсия), `project(X, method=...)` диспетчер, `is_available(method)`; t-SNE/UMAP — graceful-optional.
+Тесты: `tests/test_decomposition.py` (8).
+
+**Задача 23 — Деконволюция мультиплетов** (`awf/analysis/deconvolve.py`): `deconvolve_multiplet(
+counts_1d, centers, sigmas, *, continuum='linear', use_scipy=True)` → `DeconvolutionResult` (площади,
+погрешности, χ²/dof). Решатель `scipy.optimize.lsq_linear` (trf, площади≥0) + fallback
+`numpy.linalg.lstsq`+клиппинг. Тесты: `tests/test_deconvolve.py` (7) — две близкие гауссианы
+разделяются; без scipy не падает.
+
+**Задача 25 — Кластерный анализ** (`awf/analysis/cluster.py`): `kmeans(X, k, ...)` (Lloyd + k-means++,
+фикс. seed, best-inertia), `cluster(X, method=...)` диспетчер, `is_available`, `segments(labels)` →
+непрерывные участки по времени; DBSCAN/HDBSCAN — graceful-optional. Тесты: `tests/test_cluster.py` (9).
+
+**Задача 19 — Slice Analysis (UI)** (`awf/ui/panels.py`, `SlicePanel`): «спектр в точке» формализован
+(`show_time_slice` рисует `energy_spectrum(i)`); добавлен временной профиль в энергоокне —
+`show_energy_window(e_lo, e_hi)` (жёлтая кривая, `energy_band_time_series`, независима от ROI) +
+UI-контролы (пресет нуклида `DEFAULT_WINDOWS` + два спинбокса границ, `panels.py:290+`). Тесты:
+`tests/test_slice_analysis.py` (8) — точка→спектр совпадает; энергоокно 662±Δ→профиль == ручной сумме.
+
+**Задача 20 — Изолинии (UI)** (`awf/ui/panels.py`, `HeatmapPanel`): `set_contours_enabled`,
+`set_contour_levels`, `_contour_level_values` (уровни по квантилям Z-карты, строго внутри диапазона),
+`_apply_contours` (`pg.IsocurveItem`, данные транспонируются под row-major карту). Тулбар: чекбокс
+«Изолинии» + спинбокс числа уровней (`main_window.py`). Тесты: `tests/test_contour.py` (8) — уровни
+монотонны/в диапазоне, выкл. очищает, смена Z-шкалы пересоздаёт без утечки, константа → 0 изолиний.
+
+**Задача 26 — Вкладка «Аналитика»** (`awf/ui/analytics_panel.py` + `main_window.py`): `AnalyticsPanel`
+(2D-скаттер проекций, по одному `ScatterPlotItem` на кластер для легенды; каждая точка несёт индекс
+среза). Сигнал `sliceClicked(i)` → `MainWindow._on_analytics_slice` → `SlicePanel.show_time_slice` +
+поднятие дока срезов. Контролы: выбор проекции/кластеризации, k, нормировка, «Пересчитать»;
+авто-пересчёт только для записей ≤ `AUTORUN_SLICE_CAP=2000` срезов. Тесты: `tests/test_analytics.py`
+(7) — скаттер строится, точки покрывают все срезы, клик эмитит индекс, недоступный метод не падает.
+
+**Итог Группы V:** новые модули `gradient/peakmap/decomposition/deconvolve/cluster` + UI (`SlicePanel`
+энергоокно, `HeatmapPanel` изолинии, `AnalyticsPanel`). Тестов добавлено: 40 (analysis) + 23 (UI) = 63.
+**Полный прогон pytest — 222 passed.** Smoke-launch `MainWindow` (offscreen): изолинии, аналитика
+(PCA+KMeans, 3 кластера), клик→срез, энергоокно — все разведены без ошибок. **Не пушено**
+(публикация — по явному решению оператора).
 
 ---
 

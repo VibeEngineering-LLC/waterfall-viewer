@@ -45,7 +45,12 @@ def test_axis_labels_created_after_load(app):
     # подписи по трём осям + три заголовка осей -> заведомо несколько GLTextItem
     assert len(v._axis_items) >= 6
     import pyqtgraph.opengl as gl
-    assert all(isinstance(it, gl.GLTextItem) for it in v._axis_items)
+    texts = [it for it in v._axis_items if isinstance(it, gl.GLTextItem)]
+    teeth = [it for it in v._axis_items if isinstance(it, gl.GLLinePlotItem)]
+    assert len(texts) >= 6                     # подписи делений + заголовки осей
+    assert len(teeth) >= 2                     # вертикальные отрезки-зубцы шкалы энергий (IV-R2)
+    # в _axis_items только подписи и зубцы — ничего постороннего
+    assert len(texts) + len(teeth) == len(v._axis_items)
 
 
 def test_axis_labels_toggle_off_on(app):

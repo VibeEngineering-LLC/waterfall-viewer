@@ -142,6 +142,25 @@ class Spectrogram:
     def total_spectrum(self) -> np.ndarray:
         return self.sum_spectrum(None, None)
 
+    def trimmed_channels(self, drop_last: int = 1) -> "Spectrogram":
+        """Вернуть новую спектрограмму без последних drop_last каналов (Замечание IV-R5:
+        последний канал АЦП содержит мусор — переполнение). Калибровка и временные оси не
+        меняются (энергии каналов 0..n-1-drop_last те же). drop_last<=0 — вернуть self."""
+        d = int(drop_last)
+        if d <= 0:
+            return self
+        if self.n_channels - d < 1:
+            raise ValueError("trimmed_channels: после обрезки не остаётся каналов")
+        return Spectrogram(
+            counts=self.counts[:, :-d].copy(),
+            calibration=self.calibration,
+            time_offsets_s=self.time_offsets_s,
+            real_time_s=self.real_time_s,
+            live_time_s=self.live_time_s,
+            t0_iso=self.t0_iso,
+            source_path=self.source_path,
+        )
+
     def roi_sum(self, t_lo: int, t_hi: int, ch_lo: int, ch_hi: int) -> int:
         lo, hi = sorted((t_lo, t_hi))
         ch_lo, ch_hi = sorted((ch_lo, ch_hi))

@@ -9,9 +9,11 @@ from awf.io.aswf_loader import load_aswf
 from awf.io.nuclide_lib import default_library
 from awf.ui.view3d import Waterfall3DView, SectionControls
 from awf.ui.panels import HeatmapPanel, SlicePanel
+from awf.ui.analytics_panel import AnalyticsPanel
 from awf.ui.zscale import Z_MODES
 from awf.ui.colormaps import COLORMAPS
 from awf.ui.nuclide_panel import NuclidePanel
+from awf.ui.style import APP_QSS
 
 def load_spectrogram(path: str, *, max_slices: int | None = None):
     """Диспетчер загрузчиков по расширению: .aswf -> AtomSpectra, .rcspg -> RadiaCode, иначе -> N42/XML."""
@@ -44,6 +46,7 @@ class MainWindow(QtWidgets.QMainWindow):
         super().__init__(parent)
         self.setWindowTitle("AtomSpectra Waterfall Viewer")
         self.resize(1280, 800)
+        self.setStyleSheet(APP_QSS)    # серая градиентная схема оформления (Замечание IV-R1)
         self._sg = None
         self._loader = None            # ссылка на текущий поток (чтобы не был собран GC)
 
@@ -51,8 +54,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._tabs = QtWidgets.QTabWidget()
         self._view3d = Waterfall3DView()
         self._heatmap = HeatmapPanel()
+        self._analytics = AnalyticsPanel()      # вкладка «Аналитика» (Задача 26)
         self._tabs.addTab(self._view3d, "3D Waterfall")
         self._tabs.addTab(self._heatmap, "2D Карта (Время×Энергия)")
+        self._tabs.addTab(self._analytics, "Аналитика")
         self.setCentralWidget(self._tabs)
 
         # правый док: срезы/сечения/выборки
@@ -61,9 +66,12 @@ class MainWindow(QtWidgets.QMainWindow):
         dock.setWidget(self._slices)
         dock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, dock)
+        self._slices_dock = dock
 
         # связь выборки на карте -> панель срезов
         self._heatmap.roiChanged.connect(self._slices.show_roi)
+        # клик по точке проекции в «Аналитике» -> показать соответствующий срез (Задача 26)
+        self._analytics.sliceClicked.connect(self._on_analytics_slice)
 
         # правый док: секущие плоскости 3D (Задача 13) — во вкладке поверх дока срезов
         self._sections = SectionControls()
@@ -127,12 +135,46 @@ class MainWindow(QtWidgets.QMainWindow):
         self._hl_check.setChecked(False)
         self._hl_check.toggled.connect(self._on_highlight_toggled)
         tb.addWidget(self._hl_check)
+        self._iso_check = QtWidgets.QCheckBox("Изолинии")  # контурный план 2D-карты (Задача 20)
+        self._iso_check.setChecked(False)
+        self._iso_check.toggled.connect(self._on_contours_toggled)
+        tb.addWidget(self._iso_check)
+        self._iso_spin = QtWidgets.QSpinBox()              # число уровней изолиний (Задача 20)
+        self._iso_spin.setRange(1, 15)
+        self._iso_spin.setValue(5)
+        self._iso_spin.setMaximumWidth(50)
+        self._iso_spin.valueChanged.connect(self._on_contour_levels_changed)
+        tb.addWidget(self._iso_spin)
         self._build_contrast_controls(tb)
+        tb.addWidget(QtWidgets.QLabel("  Сглаживание: "))  # усреднение спектра по энергии (IV-R4)
+        self._smooth_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self._smooth_slider.setRange(0, 15)        # радиус скользящего среднего (0 = выкл.)
+        self._smooth_slider.setValue(0)
+        self._smooth_slider.setMaximumWidth(90)
+        self._smooth_slider.valueChanged.connect(self._on_smooth_changed)
+        tb.addWidget(self._smooth_slider)
 
     @QtCore.Slot(bool)
     def _on_axes_toggled(self, on: bool) -> None:
         """Переключатель подписей делений осей 3D (Задача 14)."""
         self._view3d.set_axis_labels_visible(on)
+
+    @QtCore.Slot(int)
+    def _on_analytics_slice(self, i: int) -> None:
+        """Клик по точке проекции (Задача 26) -> показать срез в панели срезов и поднять её док."""
+        self._slices.show_time_slice(int(i))
+        self._slices_dock.raise_()
+        self._slices_dock.show()
+
+    @QtCore.Slot(bool)
+    def _on_contours_toggled(self, on: bool) -> None:
+        """Переключатель изолиний на 2D-карте (Задача 20)."""
+        self._heatmap.set_contours_enabled(on)
+
+    @QtCore.Slot(int)
+    def _on_contour_levels_changed(self, n: int) -> None:
+        """Число уровней изолиний на 2D-карте (Задача 20)."""
+        self._heatmap.set_contour_levels(int(n))
 
     @QtCore.Slot(bool)
     def _on_highlight_toggled(self, on: bool) -> None:
@@ -178,6 +220,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self._sections.emit_all()
 
     @QtCore.Slot()
+    def _on_smooth_changed(self) -> None:
+        """Слайдер «Сглаживание» (Замечание IV-R4) -> единый радиус усреднения спектра по
+        энергии для 3D-поверхности, 2D-карты и графика спектра."""
+        r = int(self._smooth_slider.value())
+        self._view3d.set_smoothing(r)
+        self._heatmap.set_smoothing(r)
+        self._slices.set_smoothing(r)
+        # 3D-поверхность пересоздана при смене радиуса — переразместить секущие плоскости
+        self._sections.emit_all()
+
+    @QtCore.Slot()
     def _on_z_scale_changed(self) -> None:
         mode = self._z_combo.currentData()
         self._view3d.set_z_scale(mode)
@@ -211,12 +264,16 @@ class MainWindow(QtWidgets.QMainWindow):
 
     @QtCore.Slot(object)
     def _on_loaded(self, sg) -> None:
+        # Замечание IV-R5: последний канал АЦП — мусор (переполнение); отбрасываем его единым
+        # местом, чтобы все виды (2D/3D/срезы/ROI/идентификация) были консистентны.
+        sg = sg.trimmed_channels(1)
         self._sg = sg
         # порядок важен: сперва панель срезов получает данные, затем карта — её set_spectrogram
         # испускает roiChanged, который сразу нарисует срез по умолчанию.
         self._view3d.set_spectrogram(sg)
         self._slices.set_spectrogram(sg)
         self._heatmap.set_spectrogram(sg)
+        self._analytics.set_spectrogram(sg)   # вкладка «Аналитика» (Задача 26)
         # обновить секущие плоскости под новую геометрию (позиции + реальные подписи)
         self._sections.emit_all()
         total = int(np.asarray(sg.counts).sum(dtype=np.int64))

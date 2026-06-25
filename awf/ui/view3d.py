@@ -4,7 +4,7 @@ import pyqtgraph as pg
 import pyqtgraph.opengl as gl
 from PySide6 import QtCore, QtGui, QtWidgets
 from awf.ui.zscale import (apply_z_scale, DEFAULT_GAIN, DEFAULT_GAMMA,
-                           DEFAULT_CLIP, desaturate_rgba)
+                           DEFAULT_CLIP, desaturate_rgba, smooth_counts)
 from awf.ui.colormaps import get_colormap
 
 # Оси секущих плоскостей и их цвета (RGB 0..1). По 2 плоскости (slot 0/1) на ось.
@@ -17,6 +17,7 @@ _AXIS_RGB = {
 _AXIS_LABEL = {"time": "Время (с)", "energy": "Энергия (кэВ)", "counts": "Отсчёты (выс.)"}
 _PLANE_ALPHA = 0.20
 _TICK_COLOR = (205, 205, 215)       # цвет подписей делений осей (Задача 14)
+_ENERGY_TICK_RGBA = (0.62, 0.69, 0.45, 0.95)  # оливковые отрезки-зубцы шкалы энергий (IV-R2)
 
 
 class Waterfall3DView(gl.GLViewWidget):
@@ -37,7 +38,17 @@ class Waterfall3DView(gl.GLViewWidget):
     ch_centers (LOD-aware), цвет — цвет нуклида из NuclidePanel.
 
     Задача 18: режим подсветки — база десатурируется (luma-mix), столбцы выбранных энергий
-    остаются насыщенными; список подсветки = те же выбранные линии нуклидов."""
+    остаются насыщенными; список подсветки = те же выбранные линии нуклидов.
+
+    Замечание IV-R2: подписи шкалы энергий вынесены на дальнее по времени ребро (X=xmax) и
+    снабжены вертикальными отрезками-зубцами (как шкала частот в iZotope Insight).
+
+    Замечание IV-R3: при включённых ОБЕИХ секущих плоскостях оси показывается только объём
+    между ними — поверхность обрезается до окна (по индексам для время/энергия, по высоте
+    через alpha для счёта); снаружи ничего не рисуется.
+
+    Замечание IV-R4: регулируемое усреднение (скользящее среднее) спектра по энергетической
+    оси перед Z-шкалой; радиус задаётся set_smoothing()."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -50,6 +61,7 @@ class Waterfall3DView(gl.GLViewWidget):
         self._gamma = DEFAULT_GAMMA
         self._clip = DEFAULT_CLIP
         self._cmap_name = "insight"   # палитра рельефа/цвета (Задача 17)
+        self._smooth = 0              # радиус усреднения спектра по энергии (Замечание IV-R4)
         self._max_time = 400          # параметры LOD-прорежки последнего рендера
         self._max_chan = 512
         self._grid = gl.GLGridItem()  # опорная сетка под поверхностью
@@ -62,11 +74,13 @@ class Waterfall3DView(gl.GLViewWidget):
         self._height_scale = 1.0
         self._z_surface = None        # (nt, nc) высоты рельефа (дисплейные)
         self._z_counts = None         # (nt, nc) исходные counts бинов (для оси счёта, Задача 14)
+        self._colors_full = None      # (nt, nc, 4) полный RGBA рельефа (до обрезки, IV-R3)
+        self._clip_sig = None         # сигнатура текущих окон обрезки (IV-R3)
         self._t_centers = None        # (nt,) реальное время бинов, с
         self._ch_centers = None       # (nc,) реальная энергия бинов, кэВ
 
         # --- подписи делений осей (Задача 14) ---
-        self._axis_items = []          # текущие GLTextItem (удаляются при перестроении)
+        self._axis_items = []          # текущие GLTextItem/GLLinePlotItem (удаляются при перестроении)
         self._axis_labels_visible = True
 
         # --- лучи энергий нуклидов (Задача 15) ---
@@ -101,16 +115,16 @@ class Waterfall3DView(gl.GLViewWidget):
         # 1) LOD-прорежка; t_centers/ch_centers — реальные с/кэВ для центров бинов
         z_counts, t_centers, ch_centers = sg.downsample(max_time, max_chan, method="max")
         z_counts = np.asarray(z_counts, dtype=np.float32)
+        # 1b) регулируемое усреднение спектра по энергетической оси (axis=1) — Замечание IV-R4
+        z_counts = smooth_counts(z_counts, self._smooth, axis=1)
         nt, nc = z_counts.shape
         # 2) Z-шкала контраста, затем нормировка для высоты и цвета (защита от нулевого максимума)
         z_disp = apply_z_scale(z_counts, self._z_mode, gain=self._gain,
                                gamma=self._gamma, clip=self._clip)
         zmax = float(z_disp.max()) if z_disp.size else 0.0
         zn = z_disp / zmax if zmax > 0 else z_disp
-        # 3) геометрия: X,Y — индексы (растянуты в сопоставимый по осям размер),
-        #    высота Z — рельеф (нормированные counts, масштаб ~ четверть большей стороны).
-        x = np.arange(nt, dtype=np.float32)
-        y = np.arange(nc, dtype=np.float32)
+        # 3) геометрия: X,Y — индексы; высота Z — рельеф (нормированные counts, масштаб ~ четверть
+        #    большей стороны).
         height_scale = 0.25 * float(max(nt, nc, 1))
         z_surface = (zn * height_scale).astype(np.float32)
         # 4) цвет по нормированной интенсивности (палитра Задачи 17); форма (nt, nc, 4)
@@ -124,34 +138,94 @@ class Waterfall3DView(gl.GLViewWidget):
             if mask.any():
                 desat = desaturate_rgba(colors, self._base_desat)   # (nt, nc, 4)
                 colors = np.where(mask[None, :, None], colors, desat).astype(np.float32)
-        # MeshData индексирует цвета ПЛОСКИМ индексом вершины (k = i*nc+j, C-order), поэтому
-        # колор-массив обязан быть (nt*nc, 4), а не (nt, nc, 4) — иначе IndexError при отрисовке.
-        colors = colors.reshape(nt * nc, 4)
-        # 5) пересоздать поверхность
-        if self._surface is not None:
-            self.removeItem(self._surface)
-            self._surface = None
-        surf = gl.GLSurfacePlotItem(x=x, y=y, z=z_surface, colors=colors,
-                                    shader=None, computeNormals=False, smooth=False)
-        # центрируем поверхность в начало координат сдвигом
-        surf.translate(-nt / 2.0, -nc / 2.0, 0.0)
-        self.addItem(surf)
-        self._surface = surf
+        # 5) запомнить полную геометрию и цвет; поверхность строит _rebuild_surface, при
+        #    включённых обеих плоскостях оси показывая ТОЛЬКО объём между ними (IV-R3).
+        self._nt, self._nc = nt, nc
+        self._height_scale = height_scale
+        self._z_surface = z_surface
+        self._z_counts = z_counts
+        self._colors_full = colors
+        self._t_centers = np.asarray(t_centers, dtype=np.float64)
+        self._ch_centers = np.asarray(ch_centers, dtype=np.float64)
+        self._rebuild_surface()
         # 6) сетку — под поверхностью, размер по большей стороне; камера — отдалить под размер
         span = float(max(nt, nc, 10))
         self._grid.setSize(x=span * 1.2, y=span * 1.2)
         self._grid.setSpacing(x=max(1.0, span / 10.0), y=max(1.0, span / 10.0))
         self.setCameraPosition(distance=span * 1.6)
-        # 7) запомнить геометрию и переразместить активные секущие плоскости/подписи/лучи
-        self._nt, self._nc = nt, nc
-        self._height_scale = height_scale
-        self._z_surface = z_surface
-        self._z_counts = z_counts
-        self._t_centers = np.asarray(t_centers, dtype=np.float64)
-        self._ch_centers = np.asarray(ch_centers, dtype=np.float64)
+        # 7) переразместить активные секущие плоскости/подписи/лучи
         self._refresh_all_planes()
         self._rebuild_axis_labels()
         self._rebuild_energy_rays()
+
+    def _clip_windows(self):
+        """Окна обрезки поверхности по осям; активны ТОЛЬКО когда видимы ОБЕ плоскости оси
+        (Замечание IV-R3). Возвращает (i0,i1,j0,j1,z_lo,z_hi,counts_active) в дисплейных
+        индексах/высотах. Неактивная пара -> окно = весь диапазон оси."""
+        nt, nc = self._nt, self._nc
+        i0, i1 = 0, max(0, nt - 1)
+        j0, j1 = 0, max(0, nc - 1)
+        z_lo, z_hi = -np.inf, np.inf
+        counts_active = False
+        tv = self._planes[("time", 0)], self._planes[("time", 1)]
+        if tv[0]["visible"] and tv[1]["visible"]:
+            a = self._frac_to_index(self._t_centers, tv[0]["frac"])
+            b = self._frac_to_index(self._t_centers, tv[1]["frac"])
+            i0, i1 = min(a, b), max(a, b)
+        ev = self._planes[("energy", 0)], self._planes[("energy", 1)]
+        if ev[0]["visible"] and ev[1]["visible"]:
+            a = self._frac_to_index(self._ch_centers, ev[0]["frac"])
+            b = self._frac_to_index(self._ch_centers, ev[1]["frac"])
+            j0, j1 = min(a, b), max(a, b)
+        cv = self._planes[("counts", 0)], self._planes[("counts", 1)]
+        if cv[0]["visible"] and cv[1]["visible"]:
+            H = self._height_scale
+            a = max(0.0, min(1.0, cv[0]["frac"])) * H
+            b = max(0.0, min(1.0, cv[1]["frac"])) * H
+            z_lo, z_hi = min(a, b), max(a, b)
+            counts_active = True
+        return i0, i1, j0, j1, z_lo, z_hi, counts_active
+
+    def _rebuild_surface(self) -> None:
+        """(Пере)построить поверхность из полных z/colors. При включённых ОБЕИХ плоскостях оси
+        показывается только объём между ними (Замечание IV-R3): время/энергия — обрезка окна
+        индексов; счёт — обнуление alpha вне высотного слоя + translucent."""
+        if self._z_surface is None or self._colors_full is None:
+            return
+        nt, nc = self._nt, self._nc
+        i0, i1, j0, j1, z_lo, z_hi, counts_active = self._clip_windows()
+        self._clip_sig = (i0, i1, j0, j1, z_lo, z_hi, counts_active)
+        xs = np.arange(i0, i1 + 1, dtype=np.float32)
+        ys = np.arange(j0, j1 + 1, dtype=np.float32)
+        zsub = np.ascontiguousarray(self._z_surface[i0:i1 + 1, j0:j1 + 1], dtype=np.float32)
+        csub = np.array(self._colors_full[i0:i1 + 1, j0:j1 + 1, :], dtype=np.float32, copy=True)
+        if counts_active:
+            outside = (zsub < z_lo) | (zsub > z_hi)
+            csub[..., 3] = np.where(outside, 0.0, csub[..., 3])
+        colors_flat = csub.reshape(-1, 4)
+        if self._surface is not None:
+            self.removeItem(self._surface)
+            self._surface = None
+        surf = gl.GLSurfacePlotItem(x=xs, y=ys, z=zsub, colors=colors_flat,
+                                    shader=None, computeNormals=False, smooth=False)
+        surf.setGLOptions("translucent" if counts_active else "opaque")
+        surf.translate(-nt / 2.0, -nc / 2.0, 0.0)
+        self.addItem(surf)
+        self._surface = surf
+
+    def _maybe_reclip(self) -> None:
+        """Пересобрать поверхность, только если сигнатура окон обрезки изменилась (IV-R3)."""
+        if self._z_surface is None:
+            return
+        i0, i1, j0, j1, z_lo, z_hi, ca = self._clip_windows()
+        if (i0, i1, j0, j1, z_lo, z_hi, ca) != self._clip_sig:
+            self._rebuild_surface()
+
+    def set_smoothing(self, radius: int) -> None:
+        """Радиус скользящего среднего по энергии (Замечание IV-R4); ре-рендер из той же sg."""
+        self._smooth = max(0, int(radius))
+        if self._sg is not None:
+            self.set_spectrogram(self._sg, self._max_time, self._max_chan)
 
     def set_z_scale(self, mode: str) -> None:
         """Сменить Z-шкалу рельефа/цвета и перестроить поверхность из той же спектрограммы."""
@@ -210,6 +284,14 @@ class Waterfall3DView(gl.GLViewWidget):
         self.addItem(item)
         self._axis_items.append(item)
 
+    def _add_line(self, p0, p1, color) -> None:
+        """Короткий GL-отрезок (зубец шкалы); хранится в _axis_items для совместной очистки."""
+        pts = np.array([p0, p1], dtype=np.float32)
+        item = gl.GLLinePlotItem(pos=pts, color=color, width=1.6,
+                                 mode="line_strip", antialias=True)
+        self.addItem(item)
+        self._axis_items.append(item)
+
     def set_axis_labels_visible(self, visible: bool) -> None:
         """Показать/скрыть подписи делений осей (Задача 14)."""
         self._axis_labels_visible = bool(visible)
@@ -236,14 +318,17 @@ class Waterfall3DView(gl.GLViewWidget):
                 wx = float(np.interp(tv, tc, idx)) - nt / 2.0
                 self._add_text((wx, ymin - pad, 0.0), f"{tv:.0f}", font)
             self._add_text((xmax + pad, ymin - pad, 0.0), "t, с", title_font)
-        # ось энергии (Y) — деления в кэВ вдоль левого ребра X=xmin, Z=0
+        # ось энергии (Y) — деления в кэВ на ДАЛЬНЕМ по времени ребре X=xmax, с вертикальными
+        # отрезками-зубцами вверх по Z (как шкала частот в iZotope Insight) — Замечание IV-R2
         cc = self._ch_centers
         if cc is not None and len(cc) >= 2 and cc[-1] > cc[0]:
             idx = np.arange(nc, dtype=float)
+            tooth = 0.10 * zmax if zmax > 0 else 1.0
             for ev in self._nice_ticks(float(cc[0]), float(cc[-1])):
                 wy = float(np.interp(ev, cc, idx)) - nc / 2.0
-                self._add_text((xmin - pad, wy, 0.0), f"{ev:.0f}", font)
-            self._add_text((xmin - pad, ymax + pad, 0.0), "E, кэВ", title_font)
+                self._add_text((xmax + pad, wy, 0.0), f"{ev:.0f}", font)
+                self._add_line((xmax, wy, 0.0), (xmax, wy, tooth), _ENERGY_TICK_RGBA)
+            self._add_text((xmax + pad, ymax + pad, 0.0), "E, кэВ", title_font)
         # ось счёта (Z) — деления реальных отсчётов вдоль вертикали угла (xmin,ymin);
         # высоту берём эмпирически из монотонной пары (counts->height), учитывает Z-шкалу/контраст
         if self._z_counts is not None and self._z_counts.size and zmax > 0:
@@ -369,7 +454,8 @@ class Waterfall3DView(gl.GLViewWidget):
         return (frac * peak, "отсч. (≈)")
 
     def set_plane(self, axis: str, slot: int, frac: float, visible: bool) -> None:
-        """Поставить плоскость (axis, slot) на долю frac оси и показать/скрыть её вместе с профилем."""
+        """Поставить плоскость (axis, slot) на долю frac оси и показать/скрыть её вместе с профилем.
+        При включении/перемещении пары плоскостей оси пересобираем обрезку поверхности (IV-R3)."""
         key = (axis, slot)
         if key not in self._planes:
             return
@@ -377,6 +463,7 @@ class Waterfall3DView(gl.GLViewWidget):
         entry["frac"] = max(0.0, min(1.0, float(frac)))
         entry["visible"] = bool(visible)
         self._apply_plane(axis, slot)
+        self._maybe_reclip()
 
     def _refresh_all_planes(self) -> None:
         for axis in PLANE_AXES:
