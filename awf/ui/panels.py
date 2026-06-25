@@ -2,7 +2,8 @@ from __future__ import annotations
 import numpy as np
 import pyqtgraph as pg
 from PySide6 import QtCore, QtWidgets
-from awf.ui.zscale import apply_z_scale
+from awf.ui.zscale import apply_z_scale, DEFAULT_GAIN, DEFAULT_GAMMA, DEFAULT_CLIP
+from awf.ui.colormaps import get_colormap
 
 class HeatmapPanel(QtWidgets.QWidget):
     """2D-карта Время(ось Y)×Энергия/канал(ось X). Цвет = log(1+counts). Прямоугольная выборка
@@ -20,10 +21,19 @@ class HeatmapPanel(QtWidgets.QWidget):
         self._sg = None
         self._disp_counts = None  # последняя дисплейная (возможно прорежённая) матрица counts
         self._z_mode = "log"      # текущая Z-шкала контраста (linear/sqrt/log)
+        self._gain = DEFAULT_GAIN    # регулировка контраста (Задача 16)
+        self._gamma = DEFAULT_GAMMA
+        self._clip = DEFAULT_CLIP
+        self._cmap_name = "insight"  # палитра карты (Задача 17)
         self._t_scale = 1.0      # n_slices / disp_rows  (полный индекс = дисплейный * scale)
         self._ch_scale = 1.0     # n_channels / disp_cols
         self._disp_rows = 0
         self._disp_cols = 0
+        # подсветка выбранных пиков (Задача 18): карта приглушается, столбцы энергий — ярко
+        self._highlight_on = False
+        self._energy_lines = []      # list[(energy_keV, color, label)] от NuclidePanel.linesChanged
+        self._hl_items = []          # текущие вертикальные маркеры-столбцы
+        self._BASE_DIM_OPACITY = 0.45
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self._glw = pg.GraphicsLayoutWidget()
@@ -33,6 +43,7 @@ class HeatmapPanel(QtWidgets.QWidget):
         self._plot.setLabel("left", "Время (срез)")
         self._plot.invertY(True)                 # время сверху вниз
         self._img = pg.ImageItem()
+        self._img.setColorMap(get_colormap(self._cmap_name))  # палитра Insight по умолчанию
         self._plot.addItem(self._img)
         self._roi = pg.RectROI([0, 0], [1, 1], pen=pg.mkPen("y", width=2))
         self._roi.addScaleHandle([1, 1], [0, 0])
@@ -61,7 +72,8 @@ class HeatmapPanel(QtWidgets.QWidget):
         self._t_scale = ns / float(self._disp_rows)
         self._ch_scale = nc / float(self._disp_cols)
         # Z-контраст по выбранной шкале; row-major => ось0=строки=Время(Y), ось1=столбцы=Канал(X)
-        img = apply_z_scale(disp_counts, self._z_mode)
+        img = apply_z_scale(disp_counts, self._z_mode, gain=self._gain,
+                            gamma=self._gamma, clip=self._clip)
         self._img.setImage(img, axisOrder="row-major", autoLevels=True)
         # ROI по умолчанию — центральная четверть карты (в дисплейных координатах)
         x0 = self._disp_cols * 0.25; y0 = self._disp_rows * 0.25
@@ -71,6 +83,7 @@ class HeatmapPanel(QtWidgets.QWidget):
         self._roi.setVisible(True)
         self._plot.setRange(xRange=(0, self._disp_cols), yRange=(0, self._disp_rows), padding=0)
         self._emit_roi()
+        self._apply_highlight()  # перерисовать маркеры подсветки под новую геометрию (Задача 18)
 
     def _roi_full_indices(self):
         """Текущий ROI -> (t_lo, t_hi, ch_lo, ch_hi) в ПОЛНЫХ индексах матрицы, с клиппингом."""
@@ -102,9 +115,73 @@ class HeatmapPanel(QtWidgets.QWidget):
     def set_z_scale(self, mode: str) -> None:
         """Сменить Z-шкалу контраста и перерисовать карту (без перезагрузки данных)."""
         self._z_mode = mode
+        self._redraw()
+
+    def set_contrast(self, *, gain: float = None, gamma: float = None,
+                     clip=None) -> None:
+        """Обновить регулировку контраста (Задача 16) и перерисовать карту.
+        Не переданные параметры сохраняют текущее значение."""
+        if gain is not None:
+            self._gain = float(gain)
+        if gamma is not None:
+            self._gamma = float(gamma)
+        if clip is not None:
+            self._clip = (float(clip[0]), float(clip[1]))
+        self._redraw()
+
+    def set_colormap(self, name: str) -> None:
+        """Сменить палитру карты (Задача 17). LUT применяется к ImageItem, данные не трогаем."""
+        self._cmap_name = name
+        self._img.setColorMap(get_colormap(name))
+
+    def _redraw(self) -> None:
+        """Перерисовать карту из последней дисплейной матрицы с текущими Z-шкалой и контрастом."""
         if self._disp_counts is not None:
-            img = apply_z_scale(self._disp_counts, self._z_mode)
+            img = apply_z_scale(self._disp_counts, self._z_mode, gain=self._gain,
+                                gamma=self._gamma, clip=self._clip)
             self._img.setImage(img, axisOrder="row-major", autoLevels=True)
+
+    def set_energy_lines(self, lines) -> None:
+        """Задать энергии-маркеры (energy_keV, color, label) для подсветки столбцов (Задача 18).
+        Источник — выбранные линии нуклидов NuclidePanel.linesChanged."""
+        self._energy_lines = list(lines) if lines else []
+        self._apply_highlight()
+
+    def set_highlight_enabled(self, on: bool) -> None:
+        """Режим подсветки (Задача 18): карта приглушается, столбцы выбранных энергий — ярко."""
+        self._highlight_on = bool(on)
+        self._apply_highlight()
+
+    def _clear_hl_items(self) -> None:
+        for it in self._hl_items:
+            self._plot.removeItem(it)
+        self._hl_items = []
+
+    def _apply_highlight(self) -> None:
+        """Приглушить карту и поставить яркие вертикальные маркеры на выбранных энергиях.
+        Энергия кэВ -> полный канал (argmin|E-e|) -> дисплейный X через _ch_scale (LOD-aware).
+        Активна только когда режим включён И есть выбранные линии в диапазоне спектра."""
+        self._clear_hl_items()
+        if self._sg is None:
+            return
+        active = self._highlight_on and bool(self._energy_lines)
+        self._img.setOpacity(self._BASE_DIM_OPACITY if active else 1.0)
+        energies = np.asarray(self._sg.energies(), dtype=np.float64)
+        if not active or energies.size == 0:
+            return
+        emin = float(energies.min()); emax = float(energies.max())
+        for energy, color, label in self._energy_lines:
+            e = float(energy)
+            if e < emin or e > emax:
+                continue   # энергия вне диапазона спектра — столбец не подсвечиваем
+            full_ch = int(np.argmin(np.abs(energies - e)))
+            x = (full_ch + 0.5) / self._ch_scale     # полный канал -> дисплейный X
+            ln = pg.InfiniteLine(
+                pos=x, angle=90, movable=False, pen=pg.mkPen(color, width=2),
+                label=label, labelOpts={"position": 0.05, "color": color,
+                                        "fill": (0, 0, 0, 130), "movable": False})
+            self._plot.addItem(ln)
+            self._hl_items.append(ln)
 
 
 class SlicePanel(QtWidgets.QWidget):

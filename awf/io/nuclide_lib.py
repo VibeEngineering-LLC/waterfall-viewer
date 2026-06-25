@@ -41,6 +41,8 @@ class Nuclide:
     gamma_constant: float | None = None
     atomic_mass: int | None = None
     lines: Tuple[GammaLine, ...] = ()
+    category: str | None = None     # natural/technogenic/medical/fission (Задача 10)
+    lifetime: str | None = None     # short/long по T½-порогу (Задача 10)
 
     def half_life_seconds(self) -> float | None:
         """Перевести период полураспада в секунды."""
@@ -124,6 +126,8 @@ def to_json_obj(nuclides: List[Nuclide], provenance: dict | None = None) -> dict
             "half_life_unit": nuclide.half_life_unit,
             "gamma_constant": nuclide.gamma_constant,
             "atomic_mass": nuclide.atomic_mass,
+            "category": nuclide.category,
+            "lifetime": nuclide.lifetime,
             "lines": [line_to_dict(line) for line in nuclide.lines]
         }
 
@@ -158,6 +162,8 @@ def load_nuclides_json(path) -> List[Nuclide]:
             half_life_unit=nuclide_data.get("half_life_unit"),
             gamma_constant=nuclide_data.get("gamma_constant"),
             atomic_mass=nuclide_data.get("atomic_mass"),
+            category=nuclide_data.get("category"),
+            lifetime=nuclide_data.get("lifetime"),
             lines=tuple(lines)
         )
 

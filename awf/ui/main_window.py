@@ -7,9 +7,10 @@ from awf.io.n42_loader import load_n42
 from awf.io.rcspg_loader import load_rcspg
 from awf.io.aswf_loader import load_aswf
 from awf.io.nuclide_lib import default_library
-from awf.ui.view3d import Waterfall3DView
+from awf.ui.view3d import Waterfall3DView, SectionControls
 from awf.ui.panels import HeatmapPanel, SlicePanel
 from awf.ui.zscale import Z_MODES
+from awf.ui.colormaps import COLORMAPS
 from awf.ui.nuclide_panel import NuclidePanel
 
 def load_spectrogram(path: str, *, max_slices: int | None = None):
@@ -64,6 +65,16 @@ class MainWindow(QtWidgets.QMainWindow):
         # связь выборки на карте -> панель срезов
         self._heatmap.roiChanged.connect(self._slices.show_roi)
 
+        # правый док: секущие плоскости 3D (Задача 13) — во вкладке поверх дока срезов
+        self._sections = SectionControls()
+        self._sdock = QtWidgets.QDockWidget("Сечения (3D)", self)
+        self._sdock.setWidget(self._sections)
+        self._sdock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
+        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self._sdock)
+        self.tabifyDockWidget(dock, self._sdock)
+        dock.raise_()
+        self._sections.planeChanged.connect(self._on_plane_changed)
+
         # левый док: библиотека нуклидов; выбор -> вертикальные маркеры энергий на спектре
         self._nuclides = NuclidePanel(default_library())
         ndock = QtWidgets.QDockWidget("Нуклиды", self)
@@ -71,6 +82,10 @@ class MainWindow(QtWidgets.QMainWindow):
         ndock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, ndock)
         self._nuclides.linesChanged.connect(self._slices.set_nuclide_lines)
+        # те же энергии нуклидов -> вертикальные лучи-маркеры в 3D (Задача 15)
+        self._nuclides.linesChanged.connect(self._view3d.set_energy_lines)
+        # и -> подсветка столбцов на 2D-карте (Задача 18)
+        self._nuclides.linesChanged.connect(self._heatmap.set_energy_lines)
 
         self._build_menu()
         self._build_toolbar()
@@ -97,12 +112,85 @@ class MainWindow(QtWidgets.QMainWindow):
         self._z_combo.setCurrentIndex(2)  # по умолчанию log (как было до переключателя)
         self._z_combo.currentIndexChanged.connect(self._on_z_scale_changed)
         tb.addWidget(self._z_combo)
+        tb.addWidget(QtWidgets.QLabel("  Палитра: "))
+        self._cmap_combo = QtWidgets.QComboBox()
+        for key, label in COLORMAPS:
+            self._cmap_combo.addItem(label, key)
+        self._cmap_combo.setCurrentIndex(0)  # iZotope Insight по умолчанию (Задача 17)
+        self._cmap_combo.currentIndexChanged.connect(self._on_colormap_changed)
+        tb.addWidget(self._cmap_combo)
+        self._axes_check = QtWidgets.QCheckBox("Оси")  # подписи делений 3D (Задача 14)
+        self._axes_check.setChecked(True)
+        self._axes_check.toggled.connect(self._on_axes_toggled)
+        tb.addWidget(self._axes_check)
+        self._hl_check = QtWidgets.QCheckBox("Подсветка")  # подсветка выбранных пиков (Задача 18)
+        self._hl_check.setChecked(False)
+        self._hl_check.toggled.connect(self._on_highlight_toggled)
+        tb.addWidget(self._hl_check)
+        self._build_contrast_controls(tb)
+
+    @QtCore.Slot(bool)
+    def _on_axes_toggled(self, on: bool) -> None:
+        """Переключатель подписей делений осей 3D (Задача 14)."""
+        self._view3d.set_axis_labels_visible(on)
+
+    @QtCore.Slot(bool)
+    def _on_highlight_toggled(self, on: bool) -> None:
+        """Переключатель режима подсветки выбранных пиков (Задача 18): база глушится в 3D и 2D,
+        столбцы выбранных энергий нуклидов выделяются."""
+        self._view3d.set_highlight_enabled(on)
+        self._heatmap.set_highlight_enabled(on)
+        self._sections.emit_all()  # 3D-поверхность пересоздана — переразместить плоскости
+
+    @QtCore.Slot()
+    def _on_colormap_changed(self) -> None:
+        """Переключатель палитры -> единая палитра для 2D-карты и 3D-поверхности."""
+        name = self._cmap_combo.currentData()
+        self._view3d.set_colormap(name)
+        self._heatmap.set_colormap(name)
+        self._sections.emit_all()  # 3D-поверхность пересоздана — переразместить плоскости
+
+    def _build_contrast_controls(self, tb) -> None:
+        """Слайдеры контраста (Задача 16): усиление, гамма, верхняя отсечка перцентиля.
+        Один обработчик задаёт единые параметры и для 2D-карты, и для 3D-поверхности."""
+        def _mk(label, lo, hi, val):
+            tb.addWidget(QtWidgets.QLabel(f"  {label}: "))
+            s = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+            s.setRange(lo, hi)
+            s.setValue(val)
+            s.setMaximumWidth(90)
+            s.valueChanged.connect(self._on_contrast_changed)
+            tb.addWidget(s)
+            return s
+        self._gain_slider = _mk("Усиление", 20, 500, 100)   # /100 -> 0.2..5.0
+        self._gamma_slider = _mk("Гамма", 20, 300, 100)     # /100 -> 0.2..3.0
+        self._clip_slider = _mk("Отсечка%", 80, 100, 100)   # верхний перцентиль (100 = без отсечки)
+
+    @QtCore.Slot()
+    def _on_contrast_changed(self) -> None:
+        """Слайдеры контраста -> единые параметры контраста для 2D-карты и 3D-поверхности."""
+        gain = self._gain_slider.value() / 100.0
+        gamma = self._gamma_slider.value() / 100.0
+        clip = (0.0, float(self._clip_slider.value()))
+        self._heatmap.set_contrast(gain=gain, gamma=gamma, clip=clip)
+        self._view3d.set_contrast(gain=gain, gamma=gamma, clip=clip)
+        # перестроение поверхности сбрасывает плоскости в исходную геометрию — обновить их
+        self._sections.emit_all()
 
     @QtCore.Slot()
     def _on_z_scale_changed(self) -> None:
         mode = self._z_combo.currentData()
         self._view3d.set_z_scale(mode)
         self._heatmap.set_z_scale(mode)
+        # после перестроения поверхности — обновить позиции/подписи секущих плоскостей
+        self._sections.emit_all()
+
+    @QtCore.Slot(str, int, float, bool)
+    def _on_plane_changed(self, axis: str, slot: int, frac: float, visible: bool) -> None:
+        """Слайдер/чекбокс дока «Сечения» -> позиция секущей плоскости в 3D + подпись реального значения."""
+        self._view3d.set_plane(axis, slot, frac, visible)
+        value, unit = self._view3d.plane_value(axis, frac)
+        self._sections.set_value_label(axis, slot, f"{value:.1f} {unit}")
 
     @QtCore.Slot()
     def _open_dialog(self) -> None:
@@ -129,6 +217,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._view3d.set_spectrogram(sg)
         self._slices.set_spectrogram(sg)
         self._heatmap.set_spectrogram(sg)
+        # обновить секущие плоскости под новую геометрию (позиции + реальные подписи)
+        self._sections.emit_all()
         total = int(np.asarray(sg.counts).sum(dtype=np.int64))
         t0 = sg.t0_iso if sg.t0_iso else "—"
         src = sg.source_path if sg.source_path else "?"

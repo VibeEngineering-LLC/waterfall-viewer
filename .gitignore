@@ -28,3 +28,6 @@ dist/
 
 # graphify — регенерируемая графовая карта проекта (graphify update .)
 graphify-out/
+
+# Кэш IAEA LiveChart (сырые ENSDF CSV, скачиваются по кнопке; офлайн-воспроизводимость) — не в git
+awf/data/iaea_cache/

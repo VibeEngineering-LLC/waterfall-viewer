@@ -5,7 +5,8 @@
     "database_version": "26",
     "note": "Энергии и интенсивности гамма-линий — физические константы. Извлечено парсером awf/io/nuclide_lib.py.",
     "nuclide_count": 21,
-    "line_count": 124
+    "line_count": 124,
+    "categorized": true
   },
   "nuclides": [
     {
@@ -14,6 +15,8 @@
       "half_life_unit": "year",
       "gamma_constant": 0.118348,
       "atomic_mass": 241,
+      "category": "technogenic",
+      "lifetime": "long",
       "lines": [
         {
           "energy": 59.5409,
@@ -31,6 +34,8 @@
       "half_life_unit": "year",
       "gamma_constant": 1.984837,
       "atomic_mass": 133,
+      "category": "technogenic",
+      "lifetime": "long",
       "lines": [
         {
           "energy": 53.1622,
@@ -88,6 +93,8 @@
       "half_life_unit": "year",
       "gamma_constant": 15.122747,
       "atomic_mass": 207,
+      "category": "technogenic",
+      "lifetime": "long",
       "lines": [
         {
           "energy": 74.969,
@@ -145,6 +152,8 @@
       "half_life_unit": "day",
       "gamma_constant": 0.014393,
       "atomic_mass": 109,
+      "category": "technogenic",
+      "lifetime": "long",
       "lines": [
         {
           "energy": 88.0336,
@@ -162,6 +171,8 @@
       "half_life_unit": "day",
       "gamma_constant": 0.64652,
       "atomic_mass": 139,
+      "category": "technogenic",
+      "lifetime": "long",
       "lines": [
         {
           "energy": 165.8575,
@@ -179,6 +190,8 @@
       "half_life_unit": "day",
       "gamma_constant": 0.550901,
       "atomic_mass": 57,
+      "category": "technogenic",
+      "lifetime": "long",
       "lines": [
         {
           "energy": 122.06065,
@@ -204,6 +217,8 @@
       "half_life_unit": "day",
       "gamma_constant": 12.472121,
       "atomic_mass": 60,
+      "category": "technogenic",
+      "lifetime": "long",
       "lines": [
         {
           "energy": 1173.228,
@@ -229,6 +244,8 @@
       "half_life_unit": "year",
       "gamma_constant": 8.673998,
       "atomic_mass": 134,
+      "category": "fission",
+      "lifetime": "long",
       "lines": [
         {
           "energy": 563.246,
@@ -286,6 +303,8 @@
       "half_life_unit": "year",
       "gamma_constant": 3.180164,
       "atomic_mass": 137,
+      "category": "fission",
+      "lifetime": "long",
       "lines": [
         {
           "energy": 661.657,
@@ -303,6 +322,8 @@
       "half_life_unit": "year",
       "gamma_constant": 5.919453,
       "atomic_mass": 152,
+      "category": "technogenic",
+      "lifetime": "long",
       "lines": [
         {
           "energy": 121.7817,
@@ -424,6 +445,8 @@
       "half_life_unit": "year",
       "gamma_constant": 6.404538,
       "atomic_mass": 154,
+      "category": "technogenic",
+      "lifetime": "long",
       "lines": [
         {
           "energy": 123.0706,
@@ -505,6 +528,8 @@
       "half_life_unit": "year",
       "gamma_constant": 0.763374,
       "atomic_mass": 40,
+      "category": "natural",
+      "lifetime": "long",
       "lines": [
         {
           "energy": 1460.822,
@@ -522,6 +547,8 @@
       "half_life_unit": "day",
       "gamma_constant": 4.588521,
       "atomic_mass": 54,
+      "category": "technogenic",
+      "lifetime": "long",
       "lines": [
         {
           "energy": 834.848,
@@ -539,6 +566,8 @@
       "half_life_unit": "year",
       "gamma_constant": 11.552679,
       "atomic_mass": 22,
+      "category": "natural",
+      "lifetime": "long",
       "lines": [
         {
           "energy": 511.003,
@@ -564,6 +593,8 @@
       "half_life_unit": "year",
       "gamma_constant": 8.7014,
       "atomic_mass": 94,
+      "category": "technogenic",
+      "lifetime": "long",
       "lines": [
         {
           "energy": 702.65,
@@ -589,6 +620,8 @@
       "half_life_unit": "year",
       "gamma_constant": 8.780581,
       "atomic_mass": 226,
+      "category": "natural",
+      "lifetime": "long",
       "lines": [
         {
           "energy": 186.211,
@@ -766,6 +799,8 @@
       "half_life_unit": "year",
       "gamma_constant": 6.811694,
       "atomic_mass": 228,
+      "category": "natural",
+      "lifetime": "long",
       "lines": [
         {
           "energy": 84.373,
@@ -895,6 +930,8 @@
       "half_life_unit": "year",
       "gamma_constant": 11.352686,
       "atomic_mass": 232,
+      "category": "natural",
+      "lifetime": "long",
       "lines": [
         {
           "energy": 84.373,
@@ -1104,6 +1141,8 @@
       "half_life_unit": "year",
       "gamma_constant": 12.131358,
       "atomic_mass": 44,
+      "category": "technogenic",
+      "lifetime": "long",
       "lines": [
         {
           "energy": 67.8679,
@@ -1145,6 +1184,8 @@
       "half_life_unit": "day",
       "gamma_constant": 13.094791,
       "atomic_mass": 88,
+      "category": "technogenic",
+      "lifetime": "long",
       "lines": [
         {
           "energy": 898.042,
@@ -1170,6 +1211,8 @@
       "half_life_unit": "day",
       "gamma_constant": 2.9558,
       "atomic_mass": 65,
+      "category": "technogenic",
+      "lifetime": "long",
       "lines": [
         {
           "energy": 511.003,
