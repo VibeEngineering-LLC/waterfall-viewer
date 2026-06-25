@@ -3,8 +3,9 @@
 Просмотрщик и анализатор **waterfall-спектрограмм** гамма-спектрометра.
 3D-просмотр с вращением и зумом, 2D-карта Время×Энергия, срезы / сечения / прямоугольные выборки.
 
-**Поддерживаемые форматы:** ANSI N42.42-2011 (`.n42`/`.xml`) и RadiaCode (`.rcspg`, JSON — проверено
-на модели RadiaCode-110). Калибровка энергии берётся из самого файла (полином из `coefficients`/`CoefficientValues`).
+**Поддерживаемые форматы:** AtomSpectra (`.aswf`, нативный бинарный waterfall прибора), RadiaCode
+(`.rcspg`, JSON — проверено на модели RadiaCode-110) и ANSI N42.42-2011 (`.n42`/`.xml`). Калибровка
+энергии берётся из самого файла (полином из заголовка `.aswf` / `coefficients` / `CoefficientValues`).
 
 ![Python](https://img.shields.io/badge/Python-3.12%20%7C%203.14-blue) ![GUI](https://img.shields.io/badge/GUI-PySide6%20(Qt)-green) ![3D](https://img.shields.io/badge/3D-pyqtgraph%20%2B%20OpenGL-orange) ![Format](https://img.shields.io/badge/format-ANSI%20N42.42--2011-yellowgreen) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
@@ -84,6 +85,8 @@ awf/
                            (срезы, сечения, ROI-суммы, LOD-downsample). Без зависимости от Qt.
   io/n42_loader.py       — потоковый загрузчик N42 (CountedZeroes-декодер: векторный + скалярный
                            эталон; iterparse с освобождением памяти для суточных файлов).
+  io/aswf_loader.py      — загрузчик AtomSpectra (.aswf): магия ASWF + uint32 len + JSON-заголовок +
+                           матрица uint16 LE (channels на строку); calib/interval/t0 из заголовка.
   io/rcspg_loader.py     — загрузчик RadiaCode (.rcspg, JSON): pulses->counts, calib из coefficients.
   io/nuclide_lib.py      — библиотека нуклидов: парсер LSRM .lib (win-1251 XML) + загрузка нашего JSON.
   data/nuclides.json     — встроенная библиотека (21 нуклид, энергии/интенсивности гамма-линий).
@@ -105,8 +108,10 @@ awf/
 .venv\Scripts\python.exe -m pytest -q
 ```
 
-(27 тестов: ISO-длительности, CountedZeroes hand-cases + fuzz vec≡scalar, полиномиальная калибровка,
+(38 тестов: ISO-длительности, CountedZeroes hand-cases + fuzz vec≡scalar, полиномиальная калибровка,
 обратное преобразование энергия→канал, загрузка реального образца, лимит срезов, аналитические примитивы;
++ загрузчик AtomSpectra `.aswf`: форма/dtype, значения отсчётов, writable-копия, калибровка, временные
+оси, t0, лимит срезов, неверная сигнатура, saved_rows-кэп и авто-вывод из размера, дефолт-калибровка;
 + загрузчик RadiaCode `.rcspg`: форма/dtype, дополнение каналов нулём, калибровка, временные оси,
 t0, лимит срезов, пустой файл, авто-вывод числа каналов;
 + библиотека нуклидов: парсинг LSRM `.lib` (запятая-разделитель, флаг used, line_type),

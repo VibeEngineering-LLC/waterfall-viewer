@@ -5,6 +5,7 @@ import numpy as np
 from PySide6 import QtCore, QtGui, QtWidgets
 from awf.io.n42_loader import load_n42
 from awf.io.rcspg_loader import load_rcspg
+from awf.io.aswf_loader import load_aswf
 from awf.io.nuclide_lib import default_library
 from awf.ui.view3d import Waterfall3DView
 from awf.ui.panels import HeatmapPanel, SlicePanel
@@ -12,8 +13,11 @@ from awf.ui.zscale import Z_MODES
 from awf.ui.nuclide_panel import NuclidePanel
 
 def load_spectrogram(path: str, *, max_slices: int | None = None):
-    """Диспетчер загрузчиков по расширению: .rcspg -> RadiaCode, иначе -> N42/XML."""
-    if Path(path).suffix.lower() == ".rcspg":
+    """Диспетчер загрузчиков по расширению: .aswf -> AtomSpectra, .rcspg -> RadiaCode, иначе -> N42/XML."""
+    suffix = Path(path).suffix.lower()
+    if suffix == ".aswf":
+        return load_aswf(path, max_slices=max_slices)
+    if suffix == ".rcspg":
         return load_rcspg(path, max_slices=max_slices)
     return load_n42(path, max_slices=max_slices)
 
@@ -104,8 +108,8 @@ class MainWindow(QtWidgets.QMainWindow):
     def _open_dialog(self) -> None:
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self, "Открыть спектрограмму", "",
-            "Спектрограммы (*.n42 *.xml *.rcspg);;N42 / XML (*.n42 *.xml);;"
-            "RadiaCode (*.rcspg);;Все файлы (*)")
+            "Спектрограммы (*.n42 *.xml *.rcspg *.aswf);;N42 / XML (*.n42 *.xml);;"
+            "RadiaCode (*.rcspg);;AtomSpectra (*.aswf);;Все файлы (*)")
         if path:
             self.open_file(path)
 
