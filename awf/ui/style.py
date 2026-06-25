@@ -16,10 +16,13 @@ QMenuBar {
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                 stop:0 #4a4d52, stop:1 #303338);
     color: #d8dade;
+    font-size: 14px;
 }
-QMenuBar::item { background: transparent; padding: 4px 10px; }
+QMenuBar::item { background: transparent; padding: 5px 12px; }
 QMenuBar::item:selected { background: #5a5e64; }
-QMenu { background: #303338; color: #d8dade; border: 1px solid #1c1e21; }
+QMenu { background: #303338; color: #d8dade; border: 1px solid #1c1e21;
+        font-size: 14px; }
+QMenu::item { padding: 5px 24px; }
 QMenu::item:selected { background: #4a7d4a; }
 
 QToolBar {
@@ -43,6 +46,13 @@ QDockWidget::title {
     padding: 5px;
     color: #d8dade;
 }
+/* Тело открепляемого дока (Задача #35): в плавающем состоянии док становится
+   отдельным top-level окном и без явного правила тело виджета-содержимого красится
+   системным светлым фоном. Прямой потомок QDockWidget ('>') = виджет содержимого
+   (NuclidePanel / SectionControls / SlicePanel); вложенные PlotWidget/GraphicsLayoutWidget
+   pyqtgraph — потомки панели, а не дока, поэтому комбинатор '>' их НЕ затрагивает и сцены
+   сохраняют собственную тёмную отрисовку. */
+QDockWidget > QWidget { background-color: #2b2d31; }
 
 QLabel { color: #cfd2d6; background: transparent; }
 QCheckBox { color: #cfd2d6; spacing: 5px; }

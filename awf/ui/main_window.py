@@ -89,6 +89,14 @@ class MainWindow(QtWidgets.QMainWindow):
         ndock.setWidget(self._nuclides)
         ndock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, ndock)
+
+        # Задача #35: правило QSS «QDockWidget > QWidget» красит тело панелей только при
+        # WA_StyledBackground — кастомные QWidget-подклассы иначе игнорируют background из
+        # таблицы стилей, и откреплённый (floating) док показывает системный светлый фон.
+        # Сцены pyqtgraph внутри SlicePanel не затронуты — они потомки панели, не дока.
+        for _panel in (self._slices, self._sections, self._nuclides):
+            _panel.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+
         self._nuclides.linesChanged.connect(self._slices.set_nuclide_lines)
         # те же энергии нуклидов -> вертикальные лучи-маркеры в 3D (Задача 15)
         self._nuclides.linesChanged.connect(self._view3d.set_energy_lines)
@@ -135,16 +143,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._hl_check.setChecked(False)
         self._hl_check.toggled.connect(self._on_highlight_toggled)
         tb.addWidget(self._hl_check)
-        self._iso_check = QtWidgets.QCheckBox("Изолинии")  # контурный план 2D-карты (Задача 20)
-        self._iso_check.setChecked(False)
-        self._iso_check.toggled.connect(self._on_contours_toggled)
-        tb.addWidget(self._iso_check)
-        self._iso_spin = QtWidgets.QSpinBox()              # число уровней изолиний (Задача 20)
-        self._iso_spin.setRange(1, 15)
-        self._iso_spin.setValue(5)
-        self._iso_spin.setMaximumWidth(50)
-        self._iso_spin.valueChanged.connect(self._on_contour_levels_changed)
-        tb.addWidget(self._iso_spin)
+        # Изолинии (Задача 20) ВРЕМЕННО отключены в UI: вернём после реализации поиска,
+        # идентификации пиков и подгонки их чистыми гауссианами. Механизм контуров в
+        # HeatmapPanel (set_contours_enabled / set_contour_levels) сохранён и покрыт тестами;
+        # обработчики _on_contours_toggled / _on_contour_levels_changed оставлены для возврата.
         self._build_contrast_controls(tb)
         tb.addWidget(QtWidgets.QLabel("  Сглаживание: "))  # усреднение спектра по энергии (IV-R4)
         self._smooth_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
