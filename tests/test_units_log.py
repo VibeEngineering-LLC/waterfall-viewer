@@ -329,3 +329,42 @@ def test_mainwindow_light_slider(app):
     w._light_slider.setValue(60)
     assert w._view3d._light == pytest.approx(0.6)
     w.close()
+
+
+# ---------- #51: кнопка сброса настроек отображения ----------
+
+def _assert_display_defaults(w):
+    assert w._z_combo.currentIndex() == 2
+    assert w._cmap_combo.currentIndex() == 0
+    assert w._unit_combo.currentIndex() == 0
+    assert w._axes_check.isChecked() is True
+    assert w._hl_check.isChecked() is False
+    assert w._gain_slider.value() == 100
+    assert w._gamma_slider.value() == 100
+    assert w._clip_slider.value() == 100
+    assert w._smooth_slider.value() == 0
+    assert w._light_slider.value() == 0
+    assert w._view3d._unit == "counts"
+    assert w._view3d._light == pytest.approx(0.0)
+    assert w._view3d._gain == pytest.approx(1.0)
+
+
+def test_display_reset_restores_defaults(app):
+    w = MainWindow()
+    sg = _make_sg(ns=20, nc=30)
+    w._view3d.set_spectrogram(sg)
+    w._heatmap.set_spectrogram(sg)
+    w._slices.set_spectrogram(sg)
+    w._z_combo.setCurrentIndex(0)          # увести все контролы с умолчаний
+    w._cmap_combo.setCurrentIndex(1)
+    w._unit_combo.setCurrentIndex(1)
+    w._axes_check.setChecked(False)
+    w._hl_check.setChecked(True)
+    w._gain_slider.setValue(250)
+    w._gamma_slider.setValue(150)
+    w._clip_slider.setValue(90)
+    w._smooth_slider.setValue(7)
+    w._light_slider.setValue(60)
+    w._on_reset_display()
+    _assert_display_defaults(w)             # дефолты доехали и до контролов, и до панелей
+    w.close()

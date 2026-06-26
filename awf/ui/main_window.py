@@ -198,6 +198,27 @@ class MainWindow(QtWidgets.QMainWindow):
         self._light_slider.setMaximumWidth(90)
         self._light_slider.valueChanged.connect(self._on_light_changed)
         tb.addWidget(self._light_slider)
+        # Задача #51: вернуть все настройки отображения к значениям по умолчанию
+        self._reset_btn = QtWidgets.QPushButton("Сброс")
+        self._reset_btn.setToolTip("Вернуть настройки отображения к значениям по умолчанию")
+        self._reset_btn.clicked.connect(self._on_reset_display)
+        tb.addWidget(self._reset_btn)
+
+    @QtCore.Slot()
+    def _on_reset_display(self) -> None:
+        """Задача #51: сброс настроек отображения к умолчанию. Каждый контрол ставится в своё
+        дефолтное значение; Qt шлёт valueChanged/currentIndexChanged/toggled только при реальном
+        изменении, и штатный обработчик применяет дефолт на все панели (2D/3D/срезы)."""
+        self._z_combo.setCurrentIndex(2)      # log
+        self._cmap_combo.setCurrentIndex(0)   # iZotope Insight
+        self._unit_combo.setCurrentIndex(0)   # отсчёты
+        self._axes_check.setChecked(True)     # оси видимы
+        self._hl_check.setChecked(False)      # подсветка выкл
+        self._gain_slider.setValue(100)       # усиление 1.0
+        self._gamma_slider.setValue(100)      # гамма 1.0
+        self._clip_slider.setValue(100)       # без отсечки
+        self._smooth_slider.setValue(0)       # без сглаживания
+        self._light_slider.setValue(0)        # без теней
 
     @QtCore.Slot(bool)
     def _on_axes_toggled(self, on: bool) -> None:
