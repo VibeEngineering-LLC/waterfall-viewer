@@ -2,6 +2,7 @@ from __future__ import annotations
 import numpy as np
 import pyqtgraph as pg
 import pyqtgraph.opengl as gl
+from OpenGL.GL import GL_DEPTH_TEST, GL_BLEND, GL_ALPHA_TEST, GL_CULL_FACE
 from PySide6 import QtCore, QtGui, QtWidgets
 from awf.ui.zscale import (apply_z_scale, DEFAULT_GAIN, DEFAULT_GAMMA,
                            DEFAULT_CLIP, desaturate_rgba, smooth_counts)
@@ -17,6 +18,13 @@ _AXIS_RGB = {
 _AXIS_LABEL = {"time": "Время (с)", "energy": "Энергия (кэВ)", "counts": "Отсчёты (выс.)"}
 _PLANE_ALPHA = 0.20
 _TICK_COLOR = (205, 205, 215)       # цвет подписей делений осей (Задача 14)
+
+# Задача #41: кривую сечения (профиль поверхности на секущей плоскости) рисуем ПОВЕРХ
+# непрозрачного рельефа с выключенным depth-тестом. Без этого профиль совпадает по высоте
+# с поверхностью, тонет в её «коже» (z-fighting) — на плоскости видна только пустая рамка.
+# Сплошной цвет оси (BLEND off), без alpha/cull — как 'opaque', но всегда сверху.
+_PROFILE_GL = {GL_DEPTH_TEST: False, GL_BLEND: False,
+               GL_ALPHA_TEST: False, GL_CULL_FACE: False}
 
 
 def _fmt_count(v: float) -> str:
@@ -122,7 +130,8 @@ class Waterfall3DView(gl.GLViewWidget):
                 border = gl.GLLinePlotItem(mode="line_strip", antialias=True, width=2.0)
                 border.setVisible(False)
                 self.addItem(border)
-                line = gl.GLLinePlotItem(mode="line_strip", antialias=True, width=2.0)
+                line = gl.GLLinePlotItem(mode="line_strip", antialias=True, width=2.5)
+                line.setGLOptions(_PROFILE_GL)   # Задача #41: профиль всегда поверх рельефа
                 line.setVisible(False)
                 self.addItem(line)
                 self._planes[(axis, slot)] = {
@@ -567,7 +576,9 @@ class Waterfall3DView(gl.GLViewWidget):
         border.setData(pos=loop, color=(r, g, b, 1.0), width=2.0)
         border.setVisible(True)
         if prof is not None:
-            line.setData(pos=prof, color=(r, g, b, 1.0), width=2.0)
+            # Задача #41: кривая спектра/ряда на самой секущей плоскости — высота = срез
+            # рельефа (prof.z = self._z_surface[...]), цвет оси, рисуется поверх (см. _PROFILE_GL).
+            line.setData(pos=prof, color=(r, g, b, 1.0), width=2.5)
             line.setVisible(True)
         else:
             line.setVisible(False)

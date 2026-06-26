@@ -68,14 +68,46 @@ def test_downsample_data_shape_mismatch_raises():
         sg.downsample(4, 4, data=np.zeros((3, 3)))
 
 
-# ---------- #41: цвет кривой спектра ----------
+# ---------- #41: кривая спектра на секущей плоскости 3D ----------
 
 def test_spectrum_curve_is_cyan(app):
+    # 2D-спектр среза — бирюзовый (совпадает с цветом плоскости Времени)
     p = SlicePanel()
     pen = pg.mkPen(p._spectrum_curve.opts["pen"])
     r, g, b, _ = pen.color().getRgb()
     assert (r, g, b) == (51, 217, 242)
     assert pen.width() == 2
+
+
+def test_view3d_time_plane_profile_matches_surface(app):
+    # На плоскости Времени рисуется кривая = сечение рельефа по энергии (профиль виден).
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=20, nc=30), max_time=400, max_chan=512)
+    v.set_plane("time", 0, 0.0, True)                  # frac=0 -> срез по индексу i=0
+    line = v._planes[("time", 0)]["line"]
+    assert line.visible() is True
+    assert line.pos.shape == (v._nc, 3)                # точка на каждый канал
+    assert np.allclose(line.pos[:, 2], v._z_surface[0, :])   # высота = срез поверхности
+
+
+def test_view3d_profile_always_on_top(app):
+    # Профиль рисуется поверх непрозрачного рельефа: depth-тест выключен (иначе тонет).
+    from awf.ui.view3d import _PROFILE_GL
+    from OpenGL.GL import GL_DEPTH_TEST
+    assert _PROFILE_GL[GL_DEPTH_TEST] is False
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=15, nc=25))
+    line = v._planes[("energy", 1)]["line"]
+    opts = getattr(line, "_GLGraphicsItem__glOpts", {})
+    assert opts.get(GL_DEPTH_TEST) is False
+
+
+def test_view3d_counts_plane_has_no_profile(app):
+    # Горизонтальная плоскость уровня Отсчётов 1D-профиля не имеет — кривая скрыта.
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=15, nc=25))
+    v.set_plane("counts", 0, 0.5, True)
+    assert v._planes[("counts", 0)]["line"].visible() is False
 
 
 # ---------- #43: лог/лин шкала спектра ----------
