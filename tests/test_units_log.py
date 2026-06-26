@@ -1,0 +1,190 @@
+import os
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+import numpy as np
+import pytest
+import pyqtgraph as pg
+from PySide6 import QtWidgets
+
+from awf.model.spectrogram import Calibration, Spectrogram
+from awf.ui.view3d import Waterfall3DView
+from awf.ui.panels import HeatmapPanel, SlicePanel
+from awf.ui.main_window import MainWindow
+
+
+@pytest.fixture(scope="module")
+def app():
+    a = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    yield a
+
+
+def _make_sg(ns=30, nc=40, t_step=2.0):
+    counts = np.random.RandomState(1).poisson(50, size=(ns, nc)).astype(np.int64)
+    cal = Calibration(coeffs=[0.0, 1.0])  # E(ch) = ch keV
+    t = np.arange(ns, dtype=np.float64) * t_step
+    return Spectrogram(counts=counts, calibration=cal, time_offsets_s=t,
+                       real_time_s=np.full(ns, t_step), live_time_s=np.full(ns, t_step))
+
+
+# ---------- #44: модель — единицы и делители ----------
+
+def test_counts_in_unit_counts_is_identity():
+    sg = _make_sg()
+    assert np.array_equal(sg.counts_in_unit("counts"), sg.counts.astype(np.float64))
+
+
+def test_counts_in_unit_cps_divides_per_slice():
+    sg = _make_sg(t_step=2.0)
+    cps = sg.counts_in_unit("cps")
+    assert np.allclose(cps, sg.counts.astype(np.float64) / 2.0)
+
+
+def test_counts_in_unit_cps_dead_slice_zero():
+    sg = _make_sg(ns=5, nc=4)
+    sg.live_time_s[2] = 0.0           # «мёртвый» срез -> деление на inf -> 0
+    cps = sg.counts_in_unit("cps")
+    assert np.all(cps[2] == 0.0)
+
+
+def test_live_time_total_window():
+    sg = _make_sg(ns=10, t_step=2.0)
+    assert sg.live_time_total() == pytest.approx(20.0)
+    assert sg.live_time_total(0, 3) == pytest.approx(6.0)
+    assert sg.live_time_total(8, 8) == 0.0
+
+
+def test_downsample_data_param_uses_given_matrix():
+    sg = _make_sg(ns=12, nc=12)
+    src = sg.counts_in_unit("cps")
+    ds_cps, _, _ = sg.downsample(6, 6, method="max", data=src)
+    ds_cnt, _, _ = sg.downsample(6, 6, method="max")
+    # постоянный делитель 2.0 -> прорежённая cps = прорежённые counts / 2
+    assert np.allclose(ds_cps, ds_cnt / 2.0)
+
+
+def test_downsample_data_shape_mismatch_raises():
+    sg = _make_sg(ns=8, nc=8)
+    with pytest.raises(ValueError):
+        sg.downsample(4, 4, data=np.zeros((3, 3)))
+
+
+# ---------- #41: цвет кривой спектра ----------
+
+def test_spectrum_curve_is_cyan(app):
+    p = SlicePanel()
+    pen = pg.mkPen(p._spectrum_curve.opts["pen"])
+    r, g, b, _ = pen.color().getRgb()
+    assert (r, g, b) == (51, 217, 242)
+    assert pen.width() == 2
+
+
+# ---------- #43: лог/лин шкала спектра ----------
+
+def test_spectrum_log_toggle(app):
+    p = SlicePanel()
+    p.set_spectrogram(_make_sg())
+    p.set_spectrum_log(True)
+    assert p._spec_log is True
+    assert p._spectrum_plot.getAxis("left").logMode is True
+    assert p._spectrum_plot.getAxis("bottom").logMode is False
+    p.set_spectrum_log(False)
+    assert p._spectrum_plot.getAxis("left").logMode is False
+
+
+# ---------- #42: маркеры сечений на нижнем графике ----------
+
+def test_series_section_markers_time_only(app):
+    p = SlicePanel()
+    p.set_spectrogram(_make_sg(ns=30, nc=40))
+    p.sync_sections([10.0, 40.0], [None, None])    # две плоскости Времени -> 2 метки
+    assert len(p._series_section_items) == 2
+    assert all(it.angle == 90 for it in p._series_section_items)   # вертикали по оси времени
+
+
+def test_series_section_markers_none_when_no_time(app):
+    p = SlicePanel()
+    p.set_spectrogram(_make_sg(ns=30, nc=40))
+    p.sync_sections([None, None], [5.0, 20.0])     # только энергии -> нет временных меток
+    assert len(p._series_section_items) == 0
+
+
+def test_series_section_markers_cleared_on_new_file(app):
+    p = SlicePanel()
+    p.set_spectrogram(_make_sg(ns=30, nc=40))
+    p.sync_sections([10.0, None], [None, None])
+    assert len(p._series_section_items) == 1
+    p.set_spectrogram(_make_sg(ns=20, nc=30))      # новый файл -> метки сброшены
+    assert len(p._series_section_items) == 0
+
+
+# ---------- #44: SlicePanel единицы ----------
+
+def test_slice_spectrum_cps_scaled(app):
+    sg = _make_sg(ns=10, nc=20, t_step=2.0)
+    p = SlicePanel()
+    p.set_spectrogram(sg)                            # интегральный спектр, lt_total = 20 с
+    p.set_unit_mode("cps")
+    y = p._spectrum_curve.getData()[1]
+    assert np.allclose(y, sg.total_spectrum() / 20.0)
+    assert "/с" in p._spectrum_plot.getAxis("left").labelText
+
+
+def test_slice_series_cps_scaled(app):
+    sg = _make_sg(ns=10, nc=20, t_step=2.0)
+    p = SlicePanel()
+    p.set_spectrogram(sg)
+    p.set_unit_mode("cps")
+    y = p._series_curve.getData()[1]
+    assert np.allclose(y, sg.band_time_series(0, sg.n_channels) / 2.0)
+
+
+def test_slice_unit_back_to_counts(app):
+    sg = _make_sg(ns=10, nc=20)
+    p = SlicePanel()
+    p.set_spectrogram(sg)
+    p.set_unit_mode("cps")
+    p.set_unit_mode("counts")
+    y = p._spectrum_curve.getData()[1]
+    assert np.allclose(y, sg.total_spectrum().astype(np.float64))
+    assert p._spectrum_plot.getAxis("left").labelText == "Отсчёты"
+
+
+# ---------- #44: HeatmapPanel единицы ----------
+
+def test_heatmap_cps_halves_small_map(app):
+    sg = _make_sg(ns=20, nc=30, t_step=2.0)         # мельче cap -> без прорежения
+    h = HeatmapPanel()
+    h.set_spectrogram(sg)
+    cnt_max = float(h._disp_counts.max())
+    h.set_unit_mode("cps")
+    assert h._unit == "cps"
+    assert float(h._disp_counts.max()) == pytest.approx(cnt_max / 2.0, rel=1e-5)
+
+
+# ---------- #44: view3d единицы ----------
+
+def test_view3d_unit_mode_smoke(app):
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=20, nc=30), max_time=400, max_chan=512)
+    v.set_unit_mode("cps")
+    assert v._unit == "cps"
+    v.set_plane("counts", 0, 0.5, True)
+    _value, unit = v.plane_value("counts", 0.5)
+    assert "отсч/с" in unit
+
+
+# ---------- #44: глобальный веер из тулбара главного окна ----------
+
+def test_mainwindow_unit_combo_fans_out(app):
+    w = MainWindow()
+    sg = _make_sg(ns=20, nc=30)
+    w._view3d.set_spectrogram(sg)
+    w._heatmap.set_spectrogram(sg)
+    w._slices.set_spectrogram(sg)
+    assert w._unit_combo.itemData(0) == "counts"
+    assert w._unit_combo.itemData(1) == "cps"
+    w._unit_combo.setCurrentIndex(1)                # -> cps веером на все панели
+    assert w._view3d._unit == "cps"
+    assert w._heatmap._unit == "cps"
+    assert w._slices._unit == "cps"
+    w.close()

@@ -621,6 +621,35 @@ UI-контролы (пресет нуклида `DEFAULT_WINDOWS` + два сп
   `sync_sections` (3 режима + noop без данных), `set_section_markers` (число/углы/сброс),
   персистентность раскладки (round-trip через изолированный INI). **Полный pytest — 232 passed.**
 
+### Графики среза: подсветка, синк, лог/лин, counts/cps (скриншоты оператора 2026-06-26/27)
+- **#41 — кривая спектра среза цветом секущей плоскости** (`awf/ui/panels.py` `SlicePanel`): перо
+  `_spectrum_curve` переведено с `"c"` (width 1) на **бирюзу рамки плоскости Времени 3D**
+  `(51,217,242)` width 2 — спектр визуально привязан к секущей плоскости. Тест: цвет/толщина пера.
+- **#42 — нижний график отсчётов синхронизируется с сечениями** (`awf/ui/panels.py` `SlicePanel`):
+  `sync_sections` рисует вертикальные бирюзовые пунктирные `InfiniteLine`-маркеры срезов Времени
+  (`_draw_series_sections`) на оси времени графика «Отсчёты в полосе»; цвет совпадает с плоскостью
+  Времени 3D и маркерами 2D-карты. Сбрасываются при загрузке нового файла (`_clear_series_sections`
+  в `set_spectrogram`). Тесты: 2 метки на 2 плоскости (углы 90°), 0 без плоскостей Времени, сброс.
+- **#43 — спектр среза: переключатель лог/лин по Y** (`awf/ui/panels.py` `SlicePanel`): чекбокс
+  «лог Y» в строке энергоокна → `set_spectrum_log(on)` → `_spectrum_plot.setLogMode(False, on)`
+  (только ось Y). Тест: `getAxis("left").logMode` True/False, ось X не трогается.
+- **#44 — все счётные графики: counts/cps** (`awf/model/spectrogram.py` + `view3d.py` + `panels.py`
+  + `main_window.py`): cps = counts / live_time. Модель: `counts_in_unit(mode)` (полноразмерная
+  по-срезовая скорость, «мёртвый» срез → 0), `live_time_total(t_lo,t_hi)` (делитель спектра окна),
+  `downsample(..., data=src)` (прорежать cps-матрицу, а не counts). Комбо «Единицы: отсчёты /
+  отсч-в-сек» в тулбаре → `MainWindow._on_unit_changed` веером на `view3d.set_unit_mode` /
+  `heatmap.set_unit_mode` / `slices.set_unit_mode` + `emit_all()` (3D/2D пересчитываются от
+  исходника → переразместить плоскости). Семантика: **спектр** ÷ суммарное live_time окна;
+  **временной ряд** ÷ по-срезовое live_time; **2D-карта/3D-поверхность** — по-срезовая cps на ПОЛНОМ
+  разрешении ДО `downsample(method="max")` (autoLevels/нормировка по zmax сокращают постоянный
+  делитель — раскрываем только по-срезовую вариацию). Подписи осей Y переключаются (отсч. ↔ отсч/с).
+  **Вкладка «Аналитика» исключена** — её величины (градиент, PCA, кластеры, деконволюция) не в
+  счётных единицах. Тесты: модель (identity/делёж/мёртвый срез/`live_time_total`/`data`-param/
+  shape-mismatch), SlicePanel (спектр и ряд масштабируются, подписи, возврат в counts), HeatmapPanel
+  (малая карта делится на live_time), view3d (smoke + `plane_value` unit), глобальный веер из тулбара.
+- Тесты: `tests/test_units_log.py` (17) — модель единиц (6), #41 цвет (1), #43 лог (1), #42 маркеры
+  (3), #44 SlicePanel/Heatmap/view3d/MainWindow (6). **Полный pytest — 249 passed.**
+
 **Задача 26 — Вкладка «Аналитика»** (`awf/ui/analytics_panel.py` + `main_window.py`): `AnalyticsPanel`
 (2D-скаттер проекций, по одному `ScatterPlotItem` на кластер для легенды; каждая точка несёт индекс
 среза). Сигнал `sliceClicked(i)` → `MainWindow._on_analytics_slice` → `SlicePanel.show_time_slice` +
