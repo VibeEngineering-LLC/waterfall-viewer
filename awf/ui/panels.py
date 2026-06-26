@@ -22,6 +22,7 @@ class HeatmapPanel(QtWidgets.QWidget):
         super().__init__(parent)
         self._sg = None
         self._disp_counts = None  # последняя дисплейная (возможно прорежённая) матрица counts
+        self._unit = "counts"     # единицы карты: counts | cps (Задача #44)
         self._z_mode = "log"      # текущая Z-шкала контраста (linear/sqrt/log)
         self._gain = DEFAULT_GAIN    # регулировка контраста (Задача 16)
         self._gamma = DEFAULT_GAMMA
@@ -67,16 +68,8 @@ class HeatmapPanel(QtWidgets.QWidget):
         прорежённую через sg.downsample версию, но ROI пересчитываем обратно в ПОЛНЫЕ индексы."""
         self._sg = sg
         ns, nc = sg.n_slices, sg.n_channels
-        if ns * nc > self.DISPLAY_CELL_CAP:
-            # подобрать дисплейный размер так, чтобы ячеек было <= cap, сохраняя пропорцию
-            import math
-            factor = math.sqrt(self.DISPLAY_CELL_CAP / float(ns * nc))
-            disp_t = max(1, min(ns, int(ns * factor)))
-            disp_c = max(1, min(nc, int(nc * factor)))
-            disp_counts, _, _ = sg.downsample(disp_t, disp_c, method="max")
-            disp_counts = np.asarray(disp_counts, dtype=np.float32)
-        else:
-            disp_counts = np.asarray(sg.counts, dtype=np.float32)
+        # Задача #44: источник — counts или по-срезовая скорость cps (counts/live_time)
+        disp_counts = self._disp_from_source(sg, sg.counts_in_unit(self._unit))
         self._disp_counts = disp_counts
         self._disp_rows, self._disp_cols = disp_counts.shape
         self._t_scale = ns / float(self._disp_rows)
@@ -95,6 +88,27 @@ class HeatmapPanel(QtWidgets.QWidget):
         self._apply_highlight()  # перерисовать маркеры подсветки под новую геометрию (Задача 18)
         self._apply_contours()   # пересчитать изолинии под новые данные (Задача 20)
         self._clear_section_items()  # сбросить маркеры сечений старого файла (Задача #39)
+
+    def _disp_from_source(self, sg, src):
+        """Дисплейная матрица из источника src (counts или cps): прорежаем method='max', если
+        ячеек больше cap, иначе берём как есть (Задача #44 — единицы задаёт вызывающий)."""
+        ns, nc = sg.n_slices, sg.n_channels
+        if ns * nc > self.DISPLAY_CELL_CAP:
+            import math
+            factor = math.sqrt(self.DISPLAY_CELL_CAP / float(ns * nc))
+            disp_t = max(1, min(ns, int(ns * factor)))
+            disp_c = max(1, min(nc, int(nc * factor)))
+            dc, _, _ = sg.downsample(disp_t, disp_c, method="max", data=src)
+            return np.asarray(dc, dtype=np.float32)
+        return np.asarray(src, dtype=np.float32)
+
+    def set_unit_mode(self, mode: str) -> None:
+        """Единицы карты: 'counts' | 'cps' (Задача #44). Пересчитать дисплейную матрицу из нового
+        источника и перерисовать; ROI/маркеры сечений сохраняются (autoLevels подхватит масштаб)."""
+        self._unit = "cps" if mode == "cps" else "counts"
+        if self._sg is not None:
+            self._disp_counts = self._disp_from_source(self._sg, self._sg.counts_in_unit(self._unit))
+            self._redraw()
 
     def _roi_full_indices(self):
         """Текущий ROI -> (t_lo, t_hi, ch_lo, ch_hi) в ПОЛНЫХ индексах матрицы, с клиппингом."""
@@ -303,8 +317,14 @@ class SlicePanel(QtWidgets.QWidget):
         self._sg = None
         self._energies = None
         self._times = None
+        self._live = None         # live_time_s по срезам — делитель cps (Задача #44)
+        self._unit = "counts"     # единицы графиков: counts | cps (Задача #44)
+        self._spec_log = False    # лог-шкала Y графика спектра (Задача #43)
         self._smooth = 0          # радиус усреднения спектра по энергии (Замечание IV-R4)
-        self._raw_spec = None     # (energies, spec_raw) последнего показанного спектра
+        self._raw_spec = None     # (energies, spec_raw, lt_total) последнего спектра (Задача #44)
+        self._raw_series = None   # (times, band_raw) кривой полосы ROII (Задача #44)
+        self._raw_ewin = None     # (times, series_raw) кривой энергоокна (Задача #44)
+        self._series_section_items = []  # маркеры сечений Времени на графике отсчётов (Задача #42)
         self._ewin_active = None  # (e_lo,e_hi) активного энергоокна временного профиля (Задача 19)
         layout = QtWidgets.QVBoxLayout(self)
         self._header = QtWidgets.QLabel("Файл не загружен")
@@ -326,6 +346,10 @@ class SlicePanel(QtWidgets.QWidget):
         ewin_row.addWidget(QtWidgets.QLabel("–"))
         ewin_row.addWidget(self._ewin_hi)
         ewin_row.addStretch(1)
+        # Задача #43: лог/лин шкала Y графика спектра среза
+        self._log_check = QtWidgets.QCheckBox("лог Y")
+        self._log_check.toggled.connect(self.set_spectrum_log)
+        ewin_row.addWidget(self._log_check)
         layout.addLayout(ewin_row)
         self._spectrum_plot = pg.PlotWidget()
         self._spectrum_plot.setLabel("bottom", "Энергия, кэВ")
@@ -337,7 +361,9 @@ class SlicePanel(QtWidgets.QWidget):
         self._series_plot.setLabel("left", "Отсчёты в полосе")
         self._series_plot.showGrid(x=True, y=True, alpha=0.3)
         layout.addWidget(self._series_plot)
-        self._spectrum_curve = self._spectrum_plot.plot([], [], pen=pg.mkPen("c", width=1))
+        # Задача #41: кривая спектра среза — бирюза рамки плоскости Времени 3D (51,217,242)
+        self._spectrum_curve = self._spectrum_plot.plot(
+            [], [], pen=pg.mkPen((51, 217, 242), width=2))
         self._series_plot.addLegend(offset=(-10, 10))
         self._series_curve = self._series_plot.plot([], [], pen=pg.mkPen("m", width=1),
                                                     name="полоса ROI")
@@ -353,11 +379,13 @@ class SlicePanel(QtWidgets.QWidget):
         self._sg = sg
         self._energies = np.asarray(sg.energies(), dtype=np.float64)
         self._times = np.asarray(sg.time_offsets_s, dtype=np.float64)
+        self._live = np.asarray(sg.live_time_s, dtype=np.float64)   # делитель cps (Задача #44)
+        self._clear_series_sections()   # новые данные -> снять старые маркеры сечений (Задача #42)
         # начальный вид: полный интегральный спектр и полная полоса по времени
         spec = np.asarray(sg.total_spectrum(), dtype=np.float64)
-        self._plot_spectrum(self._energies, spec)
+        self._plot_spectrum(self._energies, spec, sg.live_time_total())
         band = np.asarray(sg.band_time_series(0, sg.n_channels), dtype=np.float64)
-        self._series_curve.setData(self._times, band)
+        self._set_series(self._times, band)
         self._header.setText(
             f"Загружено: срезов {sg.n_slices}, каналов {sg.n_channels}. "
             f"Интегральный спектр и полная полоса.")
@@ -375,19 +403,96 @@ class SlicePanel(QtWidgets.QWidget):
         self._ewin_hi.blockSignals(True); self._ewin_hi.setValue(hi); self._ewin_hi.blockSignals(False)
         self.show_energy_window(lo, hi)
 
-    def _plot_spectrum(self, energies, spec_raw) -> None:
-        """Показать спектр с усреднением по энергии (IV-R4); сырой кэшируем для смены радиуса."""
+    def _plot_spectrum(self, energies, spec_raw, lt_total=None) -> None:
+        """Кэшировать сырой спектр (+ живое время окна для cps, Задача #44) и отрисовать."""
         e = np.asarray(energies, dtype=np.float64)
         s = np.asarray(spec_raw, dtype=np.float64)
-        self._raw_spec = (e, s)
-        self._spectrum_curve.setData(e, smooth_counts(s, self._smooth, axis=-1))
+        self._raw_spec = (e, s, lt_total)
+        self._render_spectrum()
+
+    def _render_spectrum(self) -> None:
+        """Перерисовать кривую спектра из кэша в текущих единицах (Задача #44) и со сглаживанием."""
+        if self._raw_spec is None:
+            return
+        e, s, lt_total = self._raw_spec
+        disp = self._spec_to_unit(s, lt_total)
+        self._spectrum_curve.setData(e, smooth_counts(disp, self._smooth, axis=-1))
 
     def set_smoothing(self, radius: int) -> None:
         """Радиус скользящего среднего спектра по энергии (Замечание IV-R4); перерисовать кривую."""
         self._smooth = max(0, int(radius))
-        if self._raw_spec is not None:
-            e, s = self._raw_spec
-            self._spectrum_curve.setData(e, smooth_counts(s, self._smooth, axis=-1))
+        self._render_spectrum()
+
+    def _spec_to_unit(self, spec_raw, lt_total):
+        """Спектр в текущих единицах (Задача #44): cps = сумма отсчётов / живое время окна."""
+        s = np.asarray(spec_raw, dtype=np.float64)
+        if self._unit == "cps" and lt_total and float(lt_total) > 0.0:
+            return s / float(lt_total)
+        return s
+
+    def _series_to_unit(self, series_raw):
+        """Временной ряд в текущих единицах (Задача #44): cps = по-срезово counts/live_time."""
+        s = np.asarray(series_raw, dtype=np.float64)
+        if self._unit == "cps" and self._live is not None:
+            lt = np.asarray(self._live, dtype=np.float64)
+            safe = np.where(lt > 0.0, lt, np.inf)   # «мёртвый» срез -> 0
+            return s / safe[:s.size]
+        return s
+
+    def _set_series(self, times, band_raw) -> None:
+        """Кэшировать сырой ряд полосы ROI и нарисовать в текущих единицах (Задача #42/#44)."""
+        t = np.asarray(times, dtype=np.float64)
+        b = np.asarray(band_raw, dtype=np.float64)
+        self._raw_series = (t, b)
+        self._series_curve.setData(t, self._series_to_unit(b))
+
+    def _set_ewin(self, times, series_raw) -> None:
+        """Кэшировать сырой ряд энергоокна и нарисовать в текущих единицах (Задача #44)."""
+        t = np.asarray(times, dtype=np.float64)
+        s = np.asarray(series_raw, dtype=np.float64)
+        self._raw_ewin = (t, s)
+        self._ewin_curve.setData(t, self._series_to_unit(s))
+
+    def _apply_unit_labels(self) -> None:
+        """Подписи осей Y графиков под текущие единицы (Задача #44)."""
+        if self._unit == "cps":
+            self._spectrum_plot.setLabel("left", "Отсчёты/с")
+            self._series_plot.setLabel("left", "Скорость в полосе, отсч/с")
+        else:
+            self._spectrum_plot.setLabel("left", "Отсчёты")
+            self._series_plot.setLabel("left", "Отсчёты в полосе")
+
+    def set_unit_mode(self, mode: str) -> None:
+        """Единицы всех графиков среза: 'counts' | 'cps' (Задача #44). Перерисовать из кэша."""
+        self._unit = "cps" if mode == "cps" else "counts"
+        self._apply_unit_labels()
+        self._render_spectrum()
+        if self._raw_series is not None:
+            self._series_curve.setData(self._raw_series[0], self._series_to_unit(self._raw_series[1]))
+        if self._raw_ewin is not None:
+            self._ewin_curve.setData(self._raw_ewin[0], self._series_to_unit(self._raw_ewin[1]))
+
+    def set_spectrum_log(self, on: bool) -> None:
+        """Лог/лин шкала Y графика спектра среза (Задача #43)."""
+        self._spec_log = bool(on)
+        self._spectrum_plot.setLogMode(False, self._spec_log)
+
+    def _clear_series_sections(self) -> None:
+        """Снять маркеры сечений Времени с нижнего графика (Задача #42)."""
+        for item in self._series_section_items:
+            self._series_plot.removeItem(item)
+        self._series_section_items = []
+
+    def _draw_series_sections(self, t_vals) -> None:
+        """Вертикальные бирюзовые маркеры срезов Времени на графике отсчётов (Задача #42)."""
+        self._clear_series_sections()
+        for v in t_vals:
+            if v is None:
+                continue
+            ln = pg.InfiniteLine(pos=float(v), angle=90, movable=False,
+                                 pen=pg.mkPen((51, 217, 242), width=1, style=QtCore.Qt.DashLine))
+            self._series_plot.addItem(ln)
+            self._series_section_items.append(ln)
 
     def set_nuclide_lines(self, lines) -> None:
         """Отметить энергии гамма-линий нуклидов вертикальными линиями на графике спектра.
@@ -411,7 +516,7 @@ class SlicePanel(QtWidgets.QWidget):
             return
         i = max(0, min(self._sg.n_slices - 1, int(i)))
         spec = np.asarray(self._sg.energy_spectrum(i), dtype=np.float64)
-        self._plot_spectrum(self._energies, spec)
+        self._plot_spectrum(self._energies, spec, self._sg.live_time_total(i, i + 1))
         t = float(self._times[i]) if self._times is not None and self._times.size > i else 0.0
         self._header.setText(f"Срез времени #{i} (t = {t:.1f} с)")
 
@@ -422,9 +527,9 @@ class SlicePanel(QtWidgets.QWidget):
         if self._sg is None:
             return
         spec = np.asarray(self._sg.sum_spectrum(t_lo, t_hi), dtype=np.float64)
-        self._plot_spectrum(self._energies, spec)
+        self._plot_spectrum(self._energies, spec, self._sg.live_time_total(t_lo, t_hi))
         band = np.asarray(self._sg.band_time_series(ch_lo, ch_hi), dtype=np.float64)
-        self._series_curve.setData(self._times, band)
+        self._set_series(self._times, band)
         total = int(self._sg.roi_sum(t_lo, t_hi, ch_lo, ch_hi))
         e_lo = float(self._energies[ch_lo]) if self._energies is not None else 0.0
         e_hi = float(self._energies[min(ch_hi, self._sg.n_channels) - 1]) if self._energies is not None else 0.0
@@ -442,7 +547,7 @@ class SlicePanel(QtWidgets.QWidget):
         if hi <= lo:
             hi = lo + 1.0
         series = np.asarray(self._sg.energy_band_time_series(lo, hi), dtype=np.float64)
-        self._ewin_curve.setData(self._times, series)
+        self._set_ewin(self._times, series)
         self._ewin_active = (lo, hi)
 
     def _time_to_index(self, t) -> int:
@@ -464,6 +569,7 @@ class SlicePanel(QtWidgets.QWidget):
         или вся ось); одна Времени -> спектр этого среза."""
         if self._sg is None:
             return
+        self._draw_series_sections(t_vals)   # бирюзовые метки срезов Времени на графике отсчётов (#42)
         e_both = e_vals[0] is not None and e_vals[1] is not None
         if e_both:
             self.show_energy_window(e_vals[0], e_vals[1])

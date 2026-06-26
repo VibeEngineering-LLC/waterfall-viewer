@@ -17,6 +17,19 @@ _AXIS_RGB = {
 _AXIS_LABEL = {"time": "Время (с)", "energy": "Энергия (кэВ)", "counts": "Отсчёты (выс.)"}
 _PLANE_ALPHA = 0.20
 _TICK_COLOR = (205, 205, 215)       # цвет подписей делений осей (Задача 14)
+
+
+def _fmt_count(v: float) -> str:
+    """Подпись деления оси счёта: целое для крупных значений, дробное для малых cps (Задача #44)."""
+    a = abs(float(v))
+    if a >= 10.0:
+        return f"{v:.0f}"
+    if a >= 1.0:
+        return f"{v:.1f}"
+    if a > 0.0:
+        return f"{v:.2f}"
+    return "0"
+
 _ENERGY_TICK_RGBA = (0.62, 0.69, 0.45, 0.95)  # оливковые отрезки-зубцы шкалы энергий (IV-R2)
 
 
@@ -62,6 +75,7 @@ class Waterfall3DView(gl.GLViewWidget):
         self._clip = DEFAULT_CLIP
         self._cmap_name = "insight"   # палитра рельефа/цвета (Задача 17)
         self._smooth = 0              # радиус усреднения спектра по энергии (Замечание IV-R4)
+        self._unit = "counts"         # единицы рельефа/цвета: counts | cps (Задача #44)
         self._max_time = 400          # параметры LOD-прорежки последнего рендера
         self._max_chan = 512
         self._grid = gl.GLGridItem()  # опорная сетка под поверхностью
@@ -121,8 +135,10 @@ class Waterfall3DView(gl.GLViewWidget):
         по counts. Реальные единицы (с / кэВ) подписываем делениями осей (Задача 14)."""
         self._sg = sg
         self._max_time, self._max_chan = max_time, max_chan
-        # 1) LOD-прорежка; t_centers/ch_centers — реальные с/кэВ для центров бинов
-        z_counts, t_centers, ch_centers = sg.downsample(max_time, max_chan, method="max")
+        # 1) LOD-прорежка; t_centers/ch_centers — реальные с/кэВ для центров бинов. В режиме cps
+        #    (Задача #44) прорежаем матрицу скорости (counts/live_time по срезу), а не сами отсчёты.
+        src = sg.counts_in_unit(self._unit)
+        z_counts, t_centers, ch_centers = sg.downsample(max_time, max_chan, method="max", data=src)
         z_counts = np.asarray(z_counts, dtype=np.float32)
         # 1b) регулируемое усреднение спектра по энергетической оси (axis=1) — Замечание IV-R4
         z_counts = smooth_counts(z_counts, self._smooth, axis=1)
@@ -233,6 +249,12 @@ class Waterfall3DView(gl.GLViewWidget):
     def set_smoothing(self, radius: int) -> None:
         """Радиус скользящего среднего по энергии (Замечание IV-R4); ре-рендер из той же sg."""
         self._smooth = max(0, int(radius))
+        if self._sg is not None:
+            self.set_spectrogram(self._sg, self._max_time, self._max_chan)
+
+    def set_unit_mode(self, mode: str) -> None:
+        """Единицы рельефа/цвета: 'counts' | 'cps' (Задача #44); ре-рендер из той же sg."""
+        self._unit = "cps" if mode == "cps" else "counts"
         if self._sg is not None:
             self.set_spectrogram(self._sg, self._max_time, self._max_chan)
 
@@ -347,10 +369,11 @@ class Waterfall3DView(gl.GLViewWidget):
             cs = cflat[order]; hs = hflat[order]
             cmax = float(cs[-1])
             if cmax > 0:
+                ztitle = "N, отсч/с" if self._unit == "cps" else "N, отсч."
                 for cv in self._nice_ticks(0.0, cmax):
                     wz = float(np.interp(cv, cs, hs))
-                    self._add_text((xmin - pad, ymin - pad, wz), f"{cv:.0f}", font)
-                self._add_text((xmin - pad, ymin - pad, zmax + pad), "N, отсч.", title_font)
+                    self._add_text((xmin - pad, ymin - pad, wz), _fmt_count(cv), font)
+                self._add_text((xmin - pad, ymin - pad, zmax + pad), ztitle, title_font)
 
     # ---------- вертикальные лучи энергий (Задача 15) ----------
     def set_energy_lines(self, lines) -> None:
@@ -455,12 +478,13 @@ class Waterfall3DView(gl.GLViewWidget):
                 return (0.0, "кэВ")
             j = self._frac_to_index(self._ch_centers, frac)
             return (float(self._ch_centers[j]), "кэВ")
-        # counts: доля высоты рельефа -> приблизительный уровень реальных отсчётов
+        # counts: доля высоты рельефа -> приблизительный уровень реальных отсчётов/скорости
         peak = 0.0
         if self._z_surface is not None and self._z_surface.size and self._height_scale > 0:
             # высота нормирована: frac высоты == frac пикового дисплейного уровня
-            peak = float(np.asarray(self._sg.counts).max()) if self._sg is not None else 0.0
-        return (frac * peak, "отсч. (≈)")
+            peak = float(self._sg.counts_in_unit(self._unit).max()) if self._sg is not None else 0.0
+        unit = "отсч/с (≈)" if self._unit == "cps" else "отсч. (≈)"
+        return (frac * peak, unit)
 
     def active_plane_values(self):
         """Реальные значения видимых секущих плоскостей по слотам (Задачи #38/#39):

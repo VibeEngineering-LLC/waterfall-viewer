@@ -142,6 +142,22 @@ class Spectrogram:
     def total_spectrum(self) -> np.ndarray:
         return self.sum_spectrum(None, None)
 
+    def live_time_total(self, t_lo: int | None = None, t_hi: int | None = None) -> float:
+        """Суммарное «живое время» (с) срезов окна [t_lo:t_hi] (Задача #44, делитель cps)."""
+        lo = 0 if t_lo is None else max(0, t_lo)
+        hi = self.n_slices if t_hi is None else min(self.n_slices, t_hi)
+        return float(self.live_time_s[lo:hi].sum()) if hi > lo else 0.0
+
+    def counts_in_unit(self, mode: str) -> np.ndarray:
+        """Полноразмерная матрица в выбранных единицах (Задача #44): 'counts' -> отсчёты как есть,
+        'cps' -> по-срезовая скорость counts[k]/live_time_s[k] (срез с live_time<=0 -> 0)."""
+        base = self.counts.astype(np.float64)
+        if mode != "cps":
+            return base
+        lt = np.asarray(self.live_time_s, dtype=np.float64)
+        safe = np.where(lt > 0.0, lt, np.inf)   # деление на inf -> 0 для «мёртвых» срезов
+        return base / safe[:, None]
+
     def trimmed_channels(self, drop_last: int = 1) -> "Spectrogram":
         """Вернуть новую спектрограмму без последних drop_last каналов (Замечание IV-R5:
         последний канал АЦП содержит мусор — переполнение). Калибровка и временные оси не
@@ -172,7 +188,10 @@ class Spectrogram:
             raise ValueError("Неверный диапазон выборки")
         return int(self.counts[lo:hi, ch_lo:ch_hi].sum(dtype=np.int64))
 
-    def downsample(self, max_time: int, max_chan: int, method: str = "max") -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def downsample(self, max_time: int, max_chan: int, method: str = "max",
+                   data: np.ndarray | None = None) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        # data=None -> прорежаем counts; иначе прорежаем переданную матрицу той же формы
+        # (нужно для режима cps, Задача #44: прорежаем counts/live_time, а не counts).
         ns, ncyh = self.n_slices, self.n_channels
         nt = min(int(max_time), ns)
         nc = min(int(max_chan), ncyh)
@@ -185,7 +204,10 @@ class Spectrogram:
         t_starts = t_edges[:-1]
         ch_starts = ch_edges[:-1]
 
-        data = self.counts.astype(np.float64, copy=False)
+        src = self.counts if data is None else np.asarray(data)
+        if src.shape != self.counts.shape:
+            raise ValueError("downsample: data должен иметь форму counts")
+        data = src.astype(np.float64, copy=False)
 
         if method == "max":
             red = np.maximum

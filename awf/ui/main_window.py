@@ -164,6 +164,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self._cmap_combo.setCurrentIndex(0)  # iZotope Insight по умолчанию (Задача 17)
         self._cmap_combo.currentIndexChanged.connect(self._on_colormap_changed)
         tb.addWidget(self._cmap_combo)
+        tb.addWidget(QtWidgets.QLabel("  Единицы: "))  # Задача #44: счёт / скорость счёта
+        self._unit_combo = QtWidgets.QComboBox()
+        self._unit_combo.addItem("отсчёты", "counts")
+        self._unit_combo.addItem("отсч/с (cps)", "cps")
+        self._unit_combo.setCurrentIndex(0)
+        self._unit_combo.currentIndexChanged.connect(self._on_unit_changed)
+        tb.addWidget(self._unit_combo)
         self._axes_check = QtWidgets.QCheckBox("Оси")  # подписи делений 3D (Задача 14)
         self._axes_check.setChecked(True)
         self._axes_check.toggled.connect(self._on_axes_toggled)
@@ -189,6 +196,16 @@ class MainWindow(QtWidgets.QMainWindow):
     def _on_axes_toggled(self, on: bool) -> None:
         """Переключатель подписей делений осей 3D (Задача 14)."""
         self._view3d.set_axis_labels_visible(on)
+
+    @QtCore.Slot(int)
+    def _on_unit_changed(self, _idx: int) -> None:
+        """Глобальные единицы графиков: отсчёты / отсч-в-секунду (Задача #44). Веером на все
+        панели; 3D/2D пересчитываются от исходника, поэтому переразмещаем плоскости сечений."""
+        mode = self._unit_combo.currentData() or "counts"
+        self._view3d.set_unit_mode(mode)
+        self._heatmap.set_unit_mode(mode)
+        self._slices.set_unit_mode(mode)
+        self._sections.emit_all()  # 3D-поверхность пересоздана — переразместить плоскости
 
     @QtCore.Slot(int)
     def _on_analytics_slice(self, i: int) -> None:
