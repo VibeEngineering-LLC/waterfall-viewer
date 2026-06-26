@@ -41,6 +41,9 @@ class HeatmapPanel(QtWidgets.QWidget):
         self._contours_on = False
         self._contour_levels = 5
         self._iso_items = []
+        # маркеры секущих плоскостей 3D (Задача #39): Время -> горизонтальная линия (ось Y),
+        # Энергия -> вертикальная (ось X); цвета совпадают с осями 3D (бирюза/пурпур)
+        self._section_items = []
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self._glw = pg.GraphicsLayoutWidget()
@@ -91,6 +94,7 @@ class HeatmapPanel(QtWidgets.QWidget):
         self._emit_roi()
         self._apply_highlight()  # перерисовать маркеры подсветки под новую геометрию (Задача 18)
         self._apply_contours()   # пересчитать изолинии под новые данные (Задача 20)
+        self._clear_section_items()  # сбросить маркеры сечений старого файла (Задача #39)
 
     def _roi_full_indices(self):
         """Текущий ROI -> (t_lo, t_hi, ch_lo, ch_hi) в ПОЛНЫХ индексах матрицы, с клиппингом."""
@@ -256,6 +260,37 @@ class HeatmapPanel(QtWidgets.QWidget):
             self._plot.addItem(iso)
             self._iso_items.append(iso)
 
+    def _clear_section_items(self) -> None:
+        for it in self._section_items:
+            self._plot.removeItem(it)
+        self._section_items = []
+
+    def _add_section_lines(self, vals, ref, scale, angle, rgb) -> None:
+        """Нарисовать линии-маркеры по списку real-значений vals (None -> пропуск). ref —
+        полный массив реальных координат оси, scale — LOD-множитель (полный/дисплейный)."""
+        if ref.size == 0:
+            return
+        for v in vals:
+            if v is None:
+                continue
+            full = int(np.argmin(np.abs(ref - float(v))))
+            ln = pg.InfiniteLine(pos=(full + 0.5) / scale, angle=angle, movable=False,
+                                 pen=pg.mkPen(rgb, width=2, style=QtCore.Qt.DashLine))
+            self._plot.addItem(ln)
+            self._section_items.append(ln)
+
+    def set_section_markers(self, t_vals, e_vals) -> None:
+        """Позиции видимых секущих плоскостей 3D на 2D-карте (Задача #39): Время -> горизонталь
+        (ось Y), Энергия -> вертикаль (ось X). Real (с/кэВ) -> дисплейные коорд. через
+        _t_scale/_ch_scale; цвета осей 3D (время=бирюза, энергия=пурпур)."""
+        self._clear_section_items()
+        if self._sg is None:
+            return
+        times = np.asarray(self._sg.time_offsets_s, dtype=np.float64)
+        energies = np.asarray(self._sg.energies(), dtype=np.float64)
+        self._add_section_lines(t_vals, times, self._t_scale, 0, (51, 217, 242))
+        self._add_section_lines(e_vals, energies, self._ch_scale, 90, (242, 89, 217))
+
 
 class SlicePanel(QtWidgets.QWidget):
     """Два графика: верх — спектр (Энергия кэВ → Отсчёты), низ — временной ряд (Время с → Отсчёты).
@@ -409,6 +444,37 @@ class SlicePanel(QtWidgets.QWidget):
         series = np.asarray(self._sg.energy_band_time_series(lo, hi), dtype=np.float64)
         self._ewin_curve.setData(self._times, series)
         self._ewin_active = (lo, hi)
+
+    def _time_to_index(self, t) -> int:
+        """Реальное время (с) -> ПОЛНЫЙ индекс среза (ближайший)."""
+        if self._times is None or self._times.size == 0:
+            return 0
+        return int(np.argmin(np.abs(self._times - float(t))))
+
+    def _energy_to_index(self, e) -> int:
+        """Реальная энергия (кэВ) -> ПОЛНЫЙ индекс канала (ближайший)."""
+        if self._energies is None or self._energies.size == 0:
+            return 0
+        return int(np.argmin(np.abs(self._energies - float(e))))
+
+    def sync_sections(self, t_vals, e_vals) -> None:
+        """Синхронизация дока срезов с секущими плоскостями 3D (Задача #38). t_vals/e_vals —
+        по 2 слота реальных значений (с/кэВ), скрытая плоскость = None. Обе плоскости Энергии ->
+        жёлтый профиль энергоокна; обе Времени -> ROI окна времени (каналы из энергоплоскостей
+        или вся ось); одна Времени -> спектр этого среза."""
+        if self._sg is None:
+            return
+        e_both = e_vals[0] is not None and e_vals[1] is not None
+        if e_both:
+            self.show_energy_window(e_vals[0], e_vals[1])
+        t_active = [v for v in t_vals if v is not None]
+        if len(t_active) == 2:
+            ch = ((self._energy_to_index(min(e_vals)), self._energy_to_index(max(e_vals)) + 1)
+                  if e_both else (0, self._sg.n_channels))
+            self.show_roi(self._time_to_index(min(t_active)),
+                          self._time_to_index(max(t_active)) + 1, ch[0], ch[1])
+        elif len(t_active) == 1:
+            self.show_time_slice(self._time_to_index(t_active[0]))
 
     @QtCore.Slot(int)
     def _on_ewin_preset(self, idx: int) -> None:

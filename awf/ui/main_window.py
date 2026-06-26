@@ -15,6 +15,11 @@ from awf.ui.colormaps import COLORMAPS
 from awf.ui.nuclide_panel import NuclidePanel
 from awf.ui.style import APP_QSS
 
+# Задача #40: организация/приложение для QSettings (запоминание расположения окон между
+# запусками). На Windows пишется в реестр HKCU\Software\<ORG>\<APP>.
+SETTINGS_ORG = "VibeEngineering-LLC"
+SETTINGS_APP = "AtomSpectraWaterfallViewer"
+
 def load_spectrogram(path: str, *, max_slices: int | None = None):
     """Диспетчер загрузчиков по расширению: .aswf -> AtomSpectra, .rcspg -> RadiaCode, иначе -> N42/XML."""
     suffix = Path(path).suffix.lower()
@@ -63,6 +68,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # правый док: срезы/сечения/выборки
         self._slices = SlicePanel()
         dock = QtWidgets.QDockWidget("Срезы / Сечения / Выборки", self)
+        dock.setObjectName("dock_slices")   # Задача #40: имя нужно saveState/restoreState
         dock.setWidget(self._slices)
         dock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, dock)
@@ -76,6 +82,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # правый док: секущие плоскости 3D (Задача 13) — во вкладке поверх дока срезов
         self._sections = SectionControls()
         self._sdock = QtWidgets.QDockWidget("Сечения (3D)", self)
+        self._sdock.setObjectName("dock_sections")   # Задача #40
         self._sdock.setWidget(self._sections)
         self._sdock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self._sdock)
@@ -86,6 +93,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # левый док: библиотека нуклидов; выбор -> вертикальные маркеры энергий на спектре
         self._nuclides = NuclidePanel(default_library())
         ndock = QtWidgets.QDockWidget("Нуклиды", self)
+        ndock.setObjectName("dock_nuclides")   # Задача #40
         ndock.setWidget(self._nuclides)
         ndock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, ndock)
@@ -107,6 +115,26 @@ class MainWindow(QtWidgets.QMainWindow):
         self._build_toolbar()
         self.statusBar().showMessage("Готов. Файл → Открыть… (Ctrl+O)")
 
+        # Задача #40: восстановить геометрию окна и раскладку доков/тулбара из прошлого запуска.
+        # Вызывается ПОСЛЕ создания всех доков/тулбара (иначе restoreState не к чему применять).
+        self._settings = QtCore.QSettings(SETTINGS_ORG, SETTINGS_APP)
+        self._restore_layout()
+
+    def _restore_layout(self) -> None:
+        """Применить сохранённые QSettings геометрию/состояние окна, если они есть."""
+        geo = self._settings.value("geometry")
+        state = self._settings.value("windowState")
+        if geo is not None:
+            self.restoreGeometry(geo)
+        if state is not None:
+            self.restoreState(state)
+
+    def closeEvent(self, event) -> None:
+        """Задача #40: сохранить геометрию и раскладку доков/тулбара при закрытии окна."""
+        self._settings.setValue("geometry", self.saveGeometry())
+        self._settings.setValue("windowState", self.saveState())
+        super().closeEvent(event)
+
     def _build_menu(self) -> None:
         menu = self.menuBar().addMenu("Файл")
         act_open = QtGui.QAction("Открыть…", self)
@@ -121,6 +149,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _build_toolbar(self) -> None:
         tb = self.addToolBar("Вид")
+        tb.setObjectName("toolbar_view")   # Задача #40: имя нужно saveState/restoreState
         tb.addWidget(QtWidgets.QLabel(" Z-шкала: "))
         self._z_combo = QtWidgets.QComboBox()
         for key, label in Z_MODES:
@@ -242,10 +271,14 @@ class MainWindow(QtWidgets.QMainWindow):
 
     @QtCore.Slot(str, int, float, bool)
     def _on_plane_changed(self, axis: str, slot: int, frac: float, visible: bool) -> None:
-        """Слайдер/чекбокс дока «Сечения» -> позиция секущей плоскости в 3D + подпись реального значения."""
+        """Слайдер/чекбокс дока «Сечения» -> позиция секущей плоскости в 3D + подпись реального
+        значения + синхронизация дока срезов (#38) и 2D-карты (#39) с выбранными сечениями."""
         self._view3d.set_plane(axis, slot, frac, visible)
         value, unit = self._view3d.plane_value(axis, frac)
         self._sections.set_value_label(axis, slot, f"{value:.1f} {unit}")
+        state = self._view3d.active_plane_values()
+        self._slices.sync_sections(state["time"], state["energy"])
+        self._heatmap.set_section_markers(state["time"], state["energy"])
 
     @QtCore.Slot()
     def _open_dialog(self) -> None:
@@ -294,6 +327,8 @@ def main(argv: list[str] | None = None) -> int:
     """Точка входа. Необязательный первый аргумент — путь к файлу N42 для авто-открытия."""
     argv = list(sys.argv if argv is None else argv)
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(argv)
+    app.setOrganizationName(SETTINGS_ORG)     # Задача #40: дефолтные имена для QSettings()
+    app.setApplicationName(SETTINGS_APP)
     win = MainWindow()
     win.show()
     if len(argv) > 1:

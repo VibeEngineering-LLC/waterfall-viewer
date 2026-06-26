@@ -96,15 +96,24 @@ class Waterfall3DView(gl.GLViewWidget):
         self._planes = {}
         for axis in PLANE_AXES:
             for slot in (0, 1):
-                mesh = gl.GLMeshItem(smooth=False, drawEdges=True, drawFaces=True,
+                # Задача #37: плоскость сечения больше НЕ заливается полупрозрачным
+                # цветом — заливка перекрывала данные водопада за ней. mesh оставлен
+                # как невидимый держатель состояния (drawFaces/drawEdges=False — ничего
+                # не рисует, диагонального ребра quad'а тоже нет); видимый контур сечения
+                # рисует отдельный border — замкнутый прямоугольник по 4 углам.
+                mesh = gl.GLMeshItem(smooth=False, drawEdges=False, drawFaces=False,
                                      glOptions="translucent")
                 mesh.setVisible(False)
                 self.addItem(mesh)
+                border = gl.GLLinePlotItem(mode="line_strip", antialias=True, width=2.0)
+                border.setVisible(False)
+                self.addItem(border)
                 line = gl.GLLinePlotItem(mode="line_strip", antialias=True, width=2.0)
                 line.setVisible(False)
                 self.addItem(line)
                 self._planes[(axis, slot)] = {
-                    "mesh": mesh, "line": line, "frac": 0.5, "visible": False}
+                    "mesh": mesh, "border": border, "line": line,
+                    "frac": 0.5, "visible": False}
 
     def set_spectrogram(self, sg, max_time: int = 400, max_chan: int = 512) -> None:
         """Прорядить через sg.downsample(method='max') и построить цветную поверхность.
@@ -453,6 +462,23 @@ class Waterfall3DView(gl.GLViewWidget):
             peak = float(np.asarray(self._sg.counts).max()) if self._sg is not None else 0.0
         return (frac * peak, "отсч. (≈)")
 
+    def active_plane_values(self):
+        """Реальные значения видимых секущих плоскостей по слотам (Задачи #38/#39):
+        {axis: [val_or_None, val_or_None]} в с / кэВ / отсч.; скрытая плоскость -> None.
+        Источник синхронизации дока срезов и 2D-карты с сечениями 3D."""
+        out = {}
+        for axis in PLANE_AXES:
+            vals = []
+            for slot in (0, 1):
+                entry = self._planes[(axis, slot)]
+                if entry["visible"]:
+                    value, _ = self.plane_value(axis, entry["frac"])
+                    vals.append(value)
+                else:
+                    vals.append(None)
+            out[axis] = vals
+        return out
+
     def set_plane(self, axis: str, slot: int, frac: float, visible: bool) -> None:
         """Поставить плоскость (axis, slot) на долю frac оси и показать/скрыть её вместе с профилем.
         При включении/перемещении пары плоскостей оси пересобираем обрезку поверхности (IV-R3)."""
@@ -472,9 +498,10 @@ class Waterfall3DView(gl.GLViewWidget):
 
     def _apply_plane(self, axis: str, slot: int) -> None:
         entry = self._planes[(axis, slot)]
-        mesh, line = entry["mesh"], entry["line"]
+        mesh, border, line = entry["mesh"], entry["border"], entry["line"]
         if not entry["visible"] or self._z_surface is None:
             mesh.setVisible(False)
+            border.setVisible(False)
             line.setVisible(False)
             return
         frac = entry["frac"]
@@ -510,6 +537,11 @@ class Waterfall3DView(gl.GLViewWidget):
         mesh.setMeshData(vertexes=verts, faces=faces,
                          color=(r, g, b, _PLANE_ALPHA))
         mesh.setVisible(True)
+        # Задача #37: видимый контур сечения — замкнутый прямоугольник по 4 углам
+        # quad'а (без диагонали и без заливки). Цвет оси, непрозрачный.
+        loop = np.vstack([verts, verts[0:1]]).astype(np.float32)
+        border.setData(pos=loop, color=(r, g, b, 1.0), width=2.0)
+        border.setVisible(True)
         if prof is not None:
             line.setData(pos=prof, color=(r, g, b, 1.0), width=2.0)
             line.setVisible(True)

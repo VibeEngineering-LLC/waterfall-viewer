@@ -593,6 +593,34 @@ UI-контролы (пресет нуклида `DEFAULT_WINDOWS` + два сп
 - **#36 — мелкий шрифт меню** (`awf/ui/style.py`): `font-size: 14px` для `QMenuBar`/`QMenu` +
   увеличенные `padding` пунктов.
 
+### Доработки секущих плоскостей + раскладка (скриншоты оператора 2026-06-26)
+- **#37 — плоскость сечения 3D перекрывала данные** (`awf/ui/view3d.py`): убрана полупрозрачная
+  голубая заливка квадрата. `mesh` (GLMeshItem) переведён в `drawFaces=False, drawEdges=False` —
+  ничего не рисует (и диагонального ребра quad'а больше нет), оставлен как держатель состояния
+  видимости (тесты `_planes[...]["mesh"].visible()` сохранены). Видимый **контур прямоугольника**
+  рисует новый `border` (GLLinePlotItem, замкнутый цикл по 4 углам, цвет оси). Профиль-кривая
+  (`line`) сохранена. Проверено: `drawFaces=False`, контур из 5 точек замкнут.
+- **#38 — синк дока «Срезы/Сечения/Выборки» с сечениями 3D** (`awf/ui/panels.py` `SlicePanel` +
+  `awf/ui/view3d.py` + `main_window.py`): `Waterfall3DView.active_plane_values()` отдаёт реальные
+  значения видимых плоскостей `{axis:[v0_or_None,v1_or_None]}`; `SlicePanel.sync_sections(t_vals,
+  e_vals)` — обе плоскости Энергии → жёлтый временной профиль энергоокна; обе Времени → ROI окна
+  времени (каналы из энергоплоскостей либо вся ось); одна Времени → спектр этого среза. real→индекс
+  через `argmin|центры−v|` (LOD-aware).
+- **#39 — синк 2D-карты с сечениями 3D** (`awf/ui/panels.py` `HeatmapPanel`):
+  `set_section_markers(t_vals, e_vals)` рисует `pg.InfiniteLine`-маркеры — Время → горизонталь
+  (ось Y), Энергия → вертикаль (ось X); real(с/кэВ) → дисплейные координаты через `_t_scale`/
+  `_ch_scale`; цвета совпадают с осями 3D (время=бирюза `(51,217,242)`, энергия=пурпур
+  `(242,89,217)`). Маркеры сбрасываются при загрузке нового файла. Оркестрация — в
+  `MainWindow._on_plane_changed` (вызывается и из `emit_all()` после загрузки).
+- **#40 — запоминание расположения окон** (`awf/ui/main_window.py`): `QSettings` (org
+  `VibeEngineering-LLC`, app `AtomSpectraWaterfallViewer`). `closeEvent` сохраняет
+  `saveGeometry()`/`saveState()`, `_restore_layout()` в конце `__init__` восстанавливает. Докам и
+  тулбару заданы `objectName` (требование `saveState/restoreState`); `main()` ставит org/app на
+  `QApplication`.
+- Тесты: `tests/test_section_sync.py` (10) — `active_plane_values` (видимость/реальные единицы),
+  `sync_sections` (3 режима + noop без данных), `set_section_markers` (число/углы/сброс),
+  персистентность раскладки (round-trip через изолированный INI). **Полный pytest — 232 passed.**
+
 **Задача 26 — Вкладка «Аналитика»** (`awf/ui/analytics_panel.py` + `main_window.py`): `AnalyticsPanel`
 (2D-скаттер проекций, по одному `ScatterPlotItem` на кластер для легенды; каждая точка несёт индекс
 среза). Сигнал `sliceClicked(i)` → `MainWindow._on_analytics_slice` → `SlicePanel.show_time_slice` +
