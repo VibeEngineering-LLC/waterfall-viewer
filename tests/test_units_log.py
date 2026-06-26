@@ -79,15 +79,32 @@ def test_spectrum_curve_is_cyan(app):
     assert pen.width() == 2
 
 
-def test_view3d_time_plane_profile_matches_surface(app):
-    # На плоскости Времени рисуется кривая = сечение рельефа по энергии (профиль виден).
+def test_view3d_time_plane_profile_is_projection(app):
+    # Задача #47: на плоскости Времени — проекция-сумма рельефа (не срез по одному индексу).
+    # Одна плоскость видима -> окно суммирования = вся ось времени.
     v = Waterfall3DView()
     v.set_spectrogram(_make_sg(ns=20, nc=30), max_time=400, max_chan=512)
-    v.set_plane("time", 0, 0.0, True)                  # frac=0 -> срез по индексу i=0
+    v.set_plane("time", 0, 0.0, True)
     line = v._planes[("time", 0)]["line"]
     assert line.visible() is True
     assert line.pos.shape == (v._nc, 3)                # точка на каждый канал
-    assert np.allclose(line.pos[:, 2], v._z_surface[0, :])   # высота = срез поверхности
+    s = v._z_surface.sum(axis=0)
+    s = s / s.max() * v._height_scale
+    assert np.allclose(line.pos[:, 2], s)              # высота = нормированная проекция суммы
+
+
+def test_view3d_time_projection_between_planes(app):
+    # Задача #47: обе плоскости Времени видимы -> профиль = сумма рельефа в окне МЕЖДУ ними;
+    # обе плоскости показывают одну и ту же проекцию.
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=24, nc=20), max_time=400, max_chan=512)
+    v.set_plane("time", 0, 0.2, True)
+    v.set_plane("time", 1, 0.8, True)
+    i0, i1 = v._clip_windows()[0:2]
+    s = v._z_surface[i0:i1 + 1, :].sum(axis=0)
+    s = s / s.max() * v._height_scale
+    assert np.allclose(v._planes[("time", 0)]["line"].pos[:, 2], s)
+    assert np.allclose(v._planes[("time", 1)]["line"].pos[:, 2], s)
 
 
 def test_view3d_profile_always_on_top(app):
@@ -224,14 +241,17 @@ def test_mainwindow_unit_combo_fans_out(app):
 
 # ---------- #45/#46: контраст профиля и затенение рельефа ----------
 
-def test_view3d_profile_is_white(app):
-    from awf.ui.view3d import _PROFILE_RGB
-    assert _PROFILE_RGB == (1.0, 1.0, 1.0)
+def test_view3d_profile_matches_frame(app):
+    # Задача #48: профиль красится цветом рамки/оси (time=бирюза, energy=пурпур), не белым.
+    from awf.ui.view3d import _AXIS_RGB
     v = Waterfall3DView()
     v.set_spectrogram(_make_sg(ns=15, nc=25))
-    v.set_plane("time", 0, 0.0, True)
+    v.set_plane("time", 0, 0.3, True)
     col = np.asarray(v._planes[("time", 0)]["line"].color, dtype=float).ravel()
-    assert np.allclose(col[:3], 1.0)        # белый профиль не тонет на рельефе
+    assert np.allclose(col[:3], _AXIS_RGB["time"])
+    v.set_plane("energy", 0, 0.4, True)
+    cole = np.asarray(v._planes[("energy", 0)]["line"].color, dtype=float).ravel()
+    assert np.allclose(cole[:3], _AXIS_RGB["energy"])
 
 
 def test_surface_shading_none_when_zero():
