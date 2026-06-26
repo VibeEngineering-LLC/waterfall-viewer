@@ -8,6 +8,7 @@ from PySide6 import QtWidgets
 
 from awf.model.spectrogram import Calibration, Spectrogram
 from awf.ui.view3d import Waterfall3DView
+from awf.ui.zscale import apply_z_scale
 from awf.ui.panels import HeatmapPanel, SlicePanel
 from awf.ui.main_window import MainWindow
 
@@ -88,7 +89,9 @@ def test_view3d_time_plane_profile_is_projection(app):
     line = v._planes[("time", 0)]["line"]
     assert line.visible() is True
     assert line.pos.shape == (v._nc, 3)                # точка на каждый канал
-    s = v._z_surface.sum(axis=0)
+    # Задача #50: проекция = Z-шкала(Σ сырых counts), нормированная в высоту плоскости
+    s = apply_z_scale(v._z_counts.sum(axis=0), v._z_mode, gain=v._gain,
+                      gamma=v._gamma, clip=v._clip).astype(np.float64)
     s = s / s.max() * v._height_scale
     assert np.allclose(line.pos[:, 2], s)              # высота = нормированная проекция суммы
 
@@ -101,7 +104,8 @@ def test_view3d_time_projection_between_planes(app):
     v.set_plane("time", 0, 0.2, True)
     v.set_plane("time", 1, 0.8, True)
     i0, i1 = v._clip_windows()[0:2]
-    s = v._z_surface[i0:i1 + 1, :].sum(axis=0)
+    s = apply_z_scale(v._z_counts[i0:i1 + 1, :].sum(axis=0), v._z_mode, gain=v._gain,
+                      gamma=v._gamma, clip=v._clip).astype(np.float64)
     s = s / s.max() * v._height_scale
     assert np.allclose(v._planes[("time", 0)]["line"].pos[:, 2], s)
     assert np.allclose(v._planes[("time", 1)]["line"].pos[:, 2], s)
@@ -125,6 +129,36 @@ def test_view3d_counts_plane_has_no_profile(app):
     v.set_spectrogram(_make_sg(ns=15, nc=25))
     v.set_plane("counts", 0, 0.5, True)
     assert v._planes[("counts", 0)]["line"].visible() is False
+
+
+def test_view3d_profile_depth_value_above_surface(app):
+    # Задача #49: профиль имеет больший depthValue, чем поверхность -> рисуется ПОСЛЕ неё
+    # (поверхность пересоздаётся каждый рендер и иначе перекрыла бы линию снаружи плоскостей).
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=15, nc=25))
+    line = v._planes[("time", 0)]["line"]
+    assert line.depthValue() == 10
+    assert line.depthValue() > v._surface.depthValue()
+
+
+def test_view3d_transient_peak_counted(app):
+    # Задача #50: узкий транзиентный пик (вспышка в нескольких срезах) должен попадать в
+    # проекцию-сумму. Старый метод (Σ log-высот) сажал максимум кривой на широкую полку.
+    ns, nc = 60, 80
+    counts = np.random.RandomState(7).poisson(30, size=(ns, nc)).astype(np.int64)
+    counts[:, 10:30] += 40                       # широкая слабая полка во всех срезах
+    pk = nc // 2
+    counts[ns // 2:ns // 2 + 3, pk - 1:pk + 2] += 600   # вспышка 3 среза у центрального канала
+    cal = Calibration(coeffs=[0.0, 1.0])
+    t = np.arange(ns, dtype=np.float64)
+    sg = Spectrogram(counts=counts, calibration=cal, time_offsets_s=t,
+                     real_time_s=np.full(ns, 1.0), live_time_s=np.full(ns, 1.0))
+    v = Waterfall3DView()
+    v.set_spectrogram(sg, max_time=400, max_chan=512)
+    v.set_plane("time", 0, 0.0, True)
+    prof = v._planes[("time", 0)]["line"].pos[:, 2]
+    pc = int(np.argmax(v._z_counts.sum(axis=0)))   # канал интегрального пика
+    assert int(np.argmax(prof)) == pc              # максимум кривой — на пике, не на полке
 
 
 # ---------- #43: лог/лин шкала спектра ----------

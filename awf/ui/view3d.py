@@ -156,6 +156,11 @@ class Waterfall3DView(gl.GLViewWidget):
                 self.addItem(border)
                 line = gl.GLLinePlotItem(mode="line_strip", antialias=True, width=2.5)
                 line.setGLOptions(_PROFILE_GL)   # Задача #41: профиль всегда поверх рельефа
+                # Задача #49: поверхность пересоздаётся каждый рендер (removeItem+addItem) и
+                # потому рисуется ПОСЛЕДНЕЙ, перекрывая линию (depth-тест у линии выключен, но
+                # решает порядок отрисовки). Больший depthValue => линия сортируется после
+                # поверхности и видна снаружи плоскостей, в т.ч. на дальней.
+                line.setDepthValue(10)
                 line.setVisible(False)
                 self.addItem(line)
                 self._planes[(axis, slot)] = {
@@ -572,16 +577,23 @@ class Waterfall3DView(gl.GLViewWidget):
         """Профиль на секущей плоскости (Задача #47): проекция-сумма рельефа в объёме между
         парой плоскостей оси, вписанная в высоту плоскости [0, zmax]. Окно суммирования — как у
         обрезки (IV-R3): обе плоскости оси видимы -> между ними, иначе вся ось. time -> сумма по
-        времени (кривая по энергии, nc); energy -> сумма по энергии (кривая по времени, nt)."""
+        времени (кривая по энергии, nc); energy -> сумма по энергии (кривая по времени, nt).
+
+        Задача #50: суммируем СЫРЫЕ counts (z_counts), затем применяем Z-шкалу к ИНТЕГРАЛУ —
+        log(Σ), а НЕ Σ log(дисплейных высот). Иначе суммирование уже log-сжатых высот
+        переоценивает широкие полки и теряет узкие/транзиентные пики (рельеф по method='max'
+        показывает такой пик башней, а кривая суммы — нет: пик «не считается»)."""
         i0, i1, j0, j1, _zlo, _zhi, _ca = self._clip_windows()
         if axis == "time":
-            s = self._z_surface[i0:i1 + 1, :].sum(axis=0).astype(np.float64)
+            s = self._z_counts[i0:i1 + 1, :].sum(axis=0).astype(np.float64)   # интеграл по времени
         else:
-            s = self._z_surface[:, j0:j1 + 1].sum(axis=1).astype(np.float64)
-        m = float(s.max()) if s.size else 0.0
+            s = self._z_counts[:, j0:j1 + 1].sum(axis=1).astype(np.float64)   # интеграл по энергии
+        d = apply_z_scale(s, self._z_mode, gain=self._gain, gamma=self._gamma, clip=self._clip)
+        d = np.asarray(d, dtype=np.float64)
+        m = float(d.max()) if d.size else 0.0
         if m > 0.0:
-            s = s / m * self._height_scale          # вписать проекцию в высоту плоскости
-        return s.astype(np.float32)
+            d = d / m * self._height_scale          # вписать проекцию в высоту плоскости
+        return d.astype(np.float32)
 
     def _apply_plane(self, axis: str, slot: int) -> None:
         entry = self._planes[(axis, slot)]
