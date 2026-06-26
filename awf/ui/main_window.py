@@ -191,6 +191,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self._smooth_slider.setMaximumWidth(90)
         self._smooth_slider.valueChanged.connect(self._on_smooth_changed)
         tb.addWidget(self._smooth_slider)
+        tb.addWidget(QtWidgets.QLabel("  Освещение: "))   # Задача #46: интенсивность теней 3D
+        self._light_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self._light_slider.setRange(0, 100)        # /100 -> 0.0..1.0 (0 = без теней)
+        self._light_slider.setValue(0)
+        self._light_slider.setMaximumWidth(90)
+        self._light_slider.valueChanged.connect(self._on_light_changed)
+        tb.addWidget(self._light_slider)
 
     @QtCore.Slot(bool)
     def _on_axes_toggled(self, on: bool) -> None:
@@ -276,6 +283,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self._heatmap.set_smoothing(r)
         self._slices.set_smoothing(r)
         # 3D-поверхность пересоздана при смене радиуса — переразместить секущие плоскости
+        self._sections.emit_all()
+
+    @QtCore.Slot()
+    def _on_light_changed(self) -> None:
+        """Слайдер «Освещение» (Задача #46) -> интенсивность рельефного затенения 3D 0..1.
+        Только 3D-поверхность (у плоской 2D-карты теней нет). Плоскости переразместить."""
+        self._view3d.set_light_intensity(self._light_slider.value() / 100.0)
         self._sections.emit_all()
 
     @QtCore.Slot()

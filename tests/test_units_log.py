@@ -220,3 +220,58 @@ def test_mainwindow_unit_combo_fans_out(app):
     assert w._heatmap._unit == "cps"
     assert w._slices._unit == "cps"
     w.close()
+
+
+# ---------- #45/#46: контраст профиля и затенение рельефа ----------
+
+def test_view3d_profile_is_white(app):
+    from awf.ui.view3d import _PROFILE_RGB
+    assert _PROFILE_RGB == (1.0, 1.0, 1.0)
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=15, nc=25))
+    v.set_plane("time", 0, 0.0, True)
+    col = np.asarray(v._planes[("time", 0)]["line"].color, dtype=float).ravel()
+    assert np.allclose(col[:3], 1.0)        # белый профиль не тонет на рельефе
+
+
+def test_surface_shading_none_when_zero():
+    from awf.ui.view3d import _surface_shading
+    z = np.random.RandomState(0).random((10, 12)).astype(np.float32)
+    assert _surface_shading(z, 0.0) is None     # intensity 0 -> без затенения
+
+
+def test_surface_shading_in_range():
+    from awf.ui.view3d import _surface_shading, _SHADE_AMBIENT
+    z = (np.random.RandomState(0).random((10, 12)) * 5).astype(np.float32)
+    sh = _surface_shading(z, 1.0)
+    assert sh.shape == z.shape
+    assert sh.min() >= _SHADE_AMBIENT - 1e-6 and sh.max() <= 1.0 + 1e-6
+
+
+def test_view3d_light_darkens_colors(app):
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=20, nc=30))
+    c0 = v._colors_full.copy()
+    v.set_light_intensity(0.8)
+    c1 = v._colors_full
+    assert not np.allclose(c0[..., :3], c1[..., :3])    # рельеф затенён
+    assert np.allclose(c0[..., 3], c1[..., 3])           # alpha не трогаем
+    assert (c1[..., :3] <= c0[..., :3] + 1e-6).all()     # затенение только затемняет
+
+
+def test_view3d_light_zero_restores(app):
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=15, nc=25))
+    c0 = v._colors_full.copy()
+    v.set_light_intensity(0.5)
+    v.set_light_intensity(0.0)
+    assert np.allclose(c0, v._colors_full)               # 0 == как без теней
+
+
+def test_mainwindow_light_slider(app):
+    w = MainWindow()
+    w._view3d.set_spectrogram(_make_sg(ns=15, nc=25))
+    assert w._light_slider.value() == 0                  # по умолчанию тени выключены
+    w._light_slider.setValue(60)
+    assert w._view3d._light == pytest.approx(0.6)
+    w.close()
