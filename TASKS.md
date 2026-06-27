@@ -814,6 +814,17 @@ UI-контролы (пресет нуклида `DEFAULT_WINDOWS` + два сп
   bypass-семантика, все 6 регуляторов — без изменений.** Тест `test_knob_is_vertical_fader` →
   `test_knob_is_horizontal_fader` (`sizeHint`: ширина>высоты) + smoke-рендер горизонтальной
   панели (вкл/выкл/крайние значения). **Полный pytest — 275 passed.**
+- **#59 — окно управления сечениями в том же knob-стиле, по умолчанию все выкл**
+  (`awf/ui/view3d.py`, `SectionControls`): оператор (скриншот панели сечений под новой панелью
+  регулировок) — оформить «Секущие плоскости (2 на ось)» в том же стиле горизонтальных движков.
+  Панель получила `objectName("adjustPanel")` (общий фон/QSS), заголовки осей и слотов — стиль
+  `knobTitle`, значение — `knobValue`. Каждый слот теперь ряд `#N | Knob | значение | вкл/выкл`:
+  `QSlider` → `Knob` (горизонтальный фейдер #58), `QCheckBox` → `QToolButton` `knobToggle` с
+  текстом «вкл»/«выкл». **По умолчанию все слоты выкл** — кнопки не нажаты, движки погашены
+  (`setEnabled(False)`); включение слота оживляет движок и переиздаёт `planeChanged(visible=True)`.
+  Публичный API без изменений (сигнал `planeChanged`, ключи `_rows`, `_frac`/`_emit`/
+  `set_value_label`/`emit_all`) — проводка `main_window` и прежние тесты валидны. Тест
+  `test_section_controls_default_all_off` + smoke-рендер панели. **Полный pytest — 276 passed.**
 
 **Задача 26 — Вкладка «Аналитика»** (`awf/ui/analytics_panel.py` + `main_window.py`): `AnalyticsPanel`
 (2D-скаттер проекций, по одному `ScatterPlotItem` на кластер для легенды; каждая точка несёт индекс

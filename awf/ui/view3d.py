@@ -7,6 +7,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from awf.ui.zscale import (apply_z_scale, DEFAULT_GAIN, DEFAULT_GAMMA,
                            DEFAULT_CLIP, desaturate_rgba, smooth_counts)
 from awf.ui.colormaps import get_colormap
+from awf.ui.knobs import Knob          # Задача #59: панель сечений в том же knob-стиле
 
 # Оси секущих плоскостей и их цвета (RGB 0..1). По 2 плоскости (slot 0/1) на ось.
 PLANE_AXES = ("time", "energy", "counts")
@@ -674,8 +675,10 @@ class Waterfall3DView(gl.GLViewWidget):
 
 
 class SectionControls(QtWidgets.QWidget):
-    """Док «Сечения»: по 2 ряда на каждую ось (Время/Энергия/Отсчёты) — чекбокс видимости,
-    слайдер позиции (0..1000 -> доля 0..1) и подпись реального значения. Излучает planeChanged."""
+    """Док «Сечения» в knob-стиле панели регулировок (Задача #59): по 2 ряда на ось
+    (Время/Энергия/Отсчёты) — горизонтальный движок `Knob` позиции (0..1000 → доля 0..1),
+    подпись реального значения и стилизованная кнопка вкл/выкл. Излучает planeChanged.
+    По умолчанию все слоты выключены (движки погашены, плоскости не рисуются)."""
 
     # axis: str, slot: int, frac: float, visible: bool
     planeChanged = QtCore.Signal(str, int, float, bool)
@@ -684,31 +687,56 @@ class SectionControls(QtWidgets.QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setObjectName("adjustPanel")        # тот же фон/QSS, что у панели регулировок (#59)
         self._rows = {}  # (axis, slot) -> dict(check, slider, label)
         layout = QtWidgets.QVBoxLayout(self)
-        layout.addWidget(QtWidgets.QLabel("Секущие плоскости (2 на ось)"))
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(4)
+        cap = QtWidgets.QLabel("Секущие плоскости (2 на ось)")
+        cap.setObjectName("knobTitle")
+        layout.addWidget(cap)
         grid = QtWidgets.QGridLayout()
+        grid.setSpacing(4)
         layout.addLayout(grid)
         row = 0
         for axis in PLANE_AXES:
-            grid.addWidget(QtWidgets.QLabel(_AXIS_LABEL[axis]), row, 0, 1, 4)
+            head = QtWidgets.QLabel(_AXIS_LABEL[axis])
+            head.setObjectName("knobTitle")
+            grid.addWidget(head, row, 0, 1, 4)
             row += 1
             for slot in (0, 1):
-                check = QtWidgets.QCheckBox(f"#{slot + 1}")
-                slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
-                slider.setRange(0, self._SLIDER_MAX)
-                slider.setValue(int(self._SLIDER_MAX * (0.33 if slot == 0 else 0.66)))
-                vlabel = QtWidgets.QLabel("—")
-                vlabel.setMinimumWidth(90)
-                grid.addWidget(check, row, 0)
-                grid.addWidget(slider, row, 1)
-                grid.addWidget(vlabel, row, 2)
-                self._rows[(axis, slot)] = {
-                    "check": check, "slider": slider, "label": vlabel}
-                check.toggled.connect(lambda _=False, a=axis, s=slot: self._emit(a, s))
-                slider.valueChanged.connect(lambda _=0, a=axis, s=slot: self._emit(a, s))
+                self._build_slot(grid, axis, slot, row)
                 row += 1
         layout.addStretch(1)
+
+    def _build_slot(self, grid, axis, slot, row):
+        """Задача #59: ряд слота — #N | движок | значение | вкл/выкл."""
+        title = QtWidgets.QLabel(f"#{slot + 1}")
+        title.setObjectName("knobTitle")
+        title.setFixedWidth(28)
+        slider = Knob(0, self._SLIDER_MAX,
+                      int(self._SLIDER_MAX * (0.33 if slot == 0 else 0.66)))
+        slider.setEnabled(False)                 # по умолчанию слот выкл (#59)
+        vlabel = QtWidgets.QLabel("—")
+        vlabel.setObjectName("knobValue")
+        vlabel.setMinimumWidth(80)
+        vlabel.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        check = QtWidgets.QToolButton()
+        check.setCheckable(True)
+        check.setText("выкл")                    # дефолт — все выкл (#59)
+        check.setObjectName("knobToggle")
+        for col, wdg in ((0, title), (1, slider), (2, vlabel), (3, check)):
+            grid.addWidget(wdg, row, col)
+        self._rows[(axis, slot)] = {"check": check, "slider": slider, "label": vlabel}
+        check.toggled.connect(
+            lambda on, b=check, s=slider, a=axis, sl=slot: self._on_slot_toggle(on, b, s, a, sl))
+        slider.valueChanged.connect(lambda _=0, a=axis, s=slot: self._emit(a, s))
+
+    def _on_slot_toggle(self, on, btn, slider, axis, slot) -> None:
+        """Переключение слота (#59): текст вкл/выкл, гашение движка, переиздание planeChanged."""
+        btn.setText("вкл" if on else "выкл")
+        slider.setEnabled(bool(on))
+        self._emit(axis, slot)
 
     def _frac(self, axis: str, slot: int) -> float:
         return self._rows[(axis, slot)]["slider"].value() / float(self._SLIDER_MAX)

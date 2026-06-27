@@ -102,3 +102,18 @@ def test_section_controls_emit_all(app):
     assert len(got) == len(PLANE_AXES) * 2
     sc.set_value_label("time", 0, "12.3 с")
     assert sc._rows[("time", 0)]["label"].text() == "12.3 с"
+
+
+def test_section_controls_default_all_off(app):
+    """Задача #59: по умолчанию все слоты выкл (плоскости скрыты), движки погашены."""
+    sc = SectionControls()
+    got = []
+    sc.planeChanged.connect(lambda a, s, f, vis: got.append(vis))
+    sc.emit_all()
+    assert got and all(v is False for v in got)      # все плоскости — невидимы
+    for r in sc._rows.values():
+        assert r["check"].isChecked() is False       # все кнопки — «выкл»
+        assert r["slider"].isEnabled() is False      # движки погашены
+    sc._rows[("energy", 0)]["check"].setChecked(True)  # вкл слот → движок оживает
+    assert sc._rows[("energy", 0)]["slider"].isEnabled() is True
+    assert sc._rows[("energy", 0)]["check"].text() == "вкл"
