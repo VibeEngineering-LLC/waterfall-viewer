@@ -1,19 +1,19 @@
-"""Вертикальные движки-фейдеры панели регулировок (Задача #57; раньше — поворотные
-рукоятки #55, имя классов сохранено ради внешнего API).
+"""Горизонтальные движки-фейдеры панели регулировок (Задача #58; раньше — вертикальные
+фейдеры #57, ещё раньше поворотные рукоятки #55, имя классов сохранено ради внешнего API).
 
-`Knob` — вертикальный фейдер: тёмный паз, зелёный «уровень», риски-шкала по бокам и
-светлая металлическая каретка; управление вертикальным drag мыши. API совместим с
+`Knob` — горизонтальный фейдер: тёмный паз, зелёный «уровень», риски-шкала сверху/снизу и
+светлая металлическая каретка; управление горизонтальным drag мыши. API совместим с
 QSlider (value/setValue/setRange/valueChanged), поэтому обработчики main_window читают
 значение тем же способом (имя Knob и _*_slider-алиасы целы — внешний код не трогаем).
-`KnobRow` добавляет подпись, поле значения, индивидуальные вкл/выкл и сброс.
-`AdjustPanel` собирает ряды и общий выключатель (bypass к дефолтам).
+`KnobRow` — горизонтальный ряд: подпись + движок + значение + индивидуальные вкл/выкл и сброс.
+`AdjustPanel` собирает ряды одной колонкой (Задача #58) и общий выключатель (bypass к дефолтам).
 """
 from __future__ import annotations
 from PySide6 import QtCore, QtGui, QtWidgets
 
 
 class Knob(QtWidgets.QWidget):
-    """Вертикальный движок-фейдер (Задача #57; имя Knob сохранено ради внешнего API).
+    """Горизонтальный движок-фейдер (Задача #58; имя Knob сохранено ради внешнего API).
     Работает в целых «тиках» (как QSlider), чтобы обработчики main_window читали value()
     и делили на 100 без изменений."""
     valueChanged = QtCore.Signal(int)
@@ -23,10 +23,16 @@ class Knob(QtWidgets.QWidget):
         self._min = int(minimum)
         self._max = int(maximum)
         self._val = max(self._min, min(self._max, int(value)))
-        self._drag_y = None
+        self._drag_x = None
         self._drag_v0 = 0
-        self.setFixedSize(44, 92)                 # узкий вертикальный фейдер (#57)
-        self.setCursor(QtCore.Qt.SizeVerCursor)
+        self.setMinimumWidth(80)                   # Задача #58: горизонтальный фейдер —
+        self.setFixedHeight(24)                    #   низкий, тянется по ширине ряда
+        self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding,
+                           QtWidgets.QSizePolicy.Policy.Fixed)
+        self.setCursor(QtCore.Qt.SizeHorCursor)
+
+    def sizeHint(self):
+        return QtCore.QSize(120, 24)
 
     # --- QSlider-совместимый API (минимум, чтобы интегрироваться без правок логики) ---
     def minimum(self) -> int:
@@ -55,25 +61,25 @@ class Knob(QtWidgets.QWidget):
         rng = self._max - self._min
         return 0.0 if rng <= 0 else (self._val - self._min) / float(rng)
 
-    # --- управление мышью: вертикальный drag (вверх = +, вниз = −), как у аудио-knob ---
+    # --- управление мышью: горизонтальный drag (Задача #58; вправо = +, влево = −) ---
     def mousePressEvent(self, e):
         if e.button() == QtCore.Qt.LeftButton:
-            self._drag_y = e.position().y()
+            self._drag_x = e.position().x()
             self._drag_v0 = self._val
             e.accept()
 
     def mouseMoveEvent(self, e):
-        if self._drag_y is None:
+        if self._drag_x is None:
             return
-        dy = self._drag_y - e.position().y()      # вверх — положительно
+        dx = e.position().x() - self._drag_x      # вправо — положительно
         span = max(1, self._max - self._min)
-        # полный ход рукоятки ≈ 150 px; Shift — точная подстройка ×0.25
+        # полный ход движка ≈ 150 px; Shift — точная подстройка ×0.25
         sens = span / 150.0 * (0.25 if e.modifiers() & QtCore.Qt.ShiftModifier else 1.0)
-        self.setValue(self._drag_v0 + dy * sens)
+        self.setValue(self._drag_v0 + dx * sens)
         e.accept()
 
     def mouseReleaseEvent(self, e):
-        self._drag_y = None
+        self._drag_x = None
         e.accept()
 
     def wheelEvent(self, e):
@@ -81,42 +87,42 @@ class Knob(QtWidgets.QWidget):
         self.setValue(self._val + step)
         e.accept()
 
-    # --- отрисовка: вертикальный движок-фейдер (Задача #57) — паз, зелёный «уровень»,
-    #     риски-шкала по бокам и светлая металлическая каретка-указатель ---
+    # --- отрисовка: горизонтальный движок-фейдер (Задача #58) — паз, зелёный «уровень»,
+    #     риски-шкала сверху/снизу и светлая металлическая каретка-указатель ---
     def paintEvent(self, _e):
         p = QtGui.QPainter(self)
         p.setRenderHint(QtGui.QPainter.Antialiasing, True)
         w, h = self.width(), self.height()
-        cx = w / 2.0
-        y0, y1 = 7.0, h - 7.0                  # верх (макс.) и низ (мин.) хода каретки
-        track_h = y1 - y0
+        cy = h / 2.0
+        x0, x1 = 7.0, w - 7.0                  # лево (мин.) и право (макс.) хода каретки
+        track_w = x1 - x0
         frac = self._frac()
-        hy = y1 - frac * track_h               # центр каретки по текущему значению
-        gx = cx - 3.5                          # жёлоб: вертикальный паз
-        gg = QtGui.QLinearGradient(gx, 0.0, gx + 7.0, 0.0)
+        hx = x0 + frac * track_w               # центр каретки по текущему значению
+        gy = cy - 3.5                          # жёлоб: горизонтальный паз
+        gg = QtGui.QLinearGradient(0.0, gy, 0.0, gy + 7.0)
         gg.setColorAt(0.0, QtGui.QColor("#1c1e21"))
         gg.setColorAt(1.0, QtGui.QColor("#34373c"))
         p.setPen(QtGui.QPen(QtGui.QColor("#15161a"), 1.0))
         p.setBrush(QtGui.QBrush(gg))
-        p.drawRoundedRect(QtCore.QRectF(gx, y0, 7.0, track_h), 3.0, 3.0)
+        p.drawRoundedRect(QtCore.QRectF(x0, gy, track_w, 7.0), 3.0, 3.0)
 
-        if frac > 0.0:                         # зелёный «уровень» снизу до каретки
+        if frac > 0.0:                         # зелёный «уровень» слева до каретки
             fill = QtGui.QColor("#4a7d4a") if self.isEnabled() else QtGui.QColor("#55585e")
             p.setPen(QtCore.Qt.NoPen)
             p.setBrush(QtGui.QBrush(fill))
-            p.drawRoundedRect(QtCore.QRectF(gx + 1.0, hy, 5.0, y1 - hy), 2.0, 2.0)
-        p.setPen(QtGui.QPen(QtGui.QColor("#55585e"), 1.0))   # риски-шкала по бокам паза
+            p.drawRoundedRect(QtCore.QRectF(x0 + 1.0, gy + 1.0, hx - x0, 5.0), 2.0, 2.0)
+        p.setPen(QtGui.QPen(QtGui.QColor("#55585e"), 1.0))   # риски-шкала сверху/снизу паза
         for k in range(5):
-            ty = y0 + track_h * k / 4.0
-            p.drawLine(QtCore.QPointF(cx + 6.0, ty), QtCore.QPointF(cx + 9.0, ty))
-            p.drawLine(QtCore.QPointF(cx - 9.0, ty), QtCore.QPointF(cx - 6.0, ty))
-        self._draw_cap(p, cx, hy, w)
+            tx = x0 + track_w * k / 4.0
+            p.drawLine(QtCore.QPointF(tx, cy + 6.0), QtCore.QPointF(tx, cy + 9.0))
+            p.drawLine(QtCore.QPointF(tx, cy - 9.0), QtCore.QPointF(tx, cy - 6.0))
+        self._draw_cap(p, cy, hx, h)
         p.end()
 
-    def _draw_cap(self, p, cx, hy, w):
-        """Каретка-указатель фейдера (Задача #57): светлая металлическая планка с прорезью."""
-        hw = w / 2.0 - 4.0
-        cg = QtGui.QLinearGradient(0.0, hy - 5.0, 0.0, hy + 5.0)
+    def _draw_cap(self, p, cy, hx, h):
+        """Каретка-указатель фейдера (Задача #58): светлая металлическая планка с прорезью."""
+        hh = h / 2.0 - 3.0
+        cg = QtGui.QLinearGradient(hx - 5.0, 0.0, hx + 5.0, 0.0)
         if self.isEnabled():
             cg.setColorAt(0.0, QtGui.QColor("#d8dbe0"))
             cg.setColorAt(1.0, QtGui.QColor("#8a8d92"))
@@ -125,9 +131,9 @@ class Knob(QtWidgets.QWidget):
             cg.setColorAt(1.0, QtGui.QColor("#4a4d52"))
         p.setPen(QtGui.QPen(QtGui.QColor("#15161a"), 1.0))
         p.setBrush(QtGui.QBrush(cg))
-        p.drawRoundedRect(QtCore.QRectF(cx - hw, hy - 5.0, 2 * hw, 10.0), 3.0, 3.0)
+        p.drawRoundedRect(QtCore.QRectF(hx - 5.0, cy - hh, 10.0, 2 * hh), 3.0, 3.0)
         p.setPen(QtGui.QPen(QtGui.QColor("#3a3d42"), 1.4))
-        p.drawLine(QtCore.QPointF(cx - hw + 3.0, hy), QtCore.QPointF(cx + hw - 3.0, hy))
+        p.drawLine(QtCore.QPointF(hx, cy - hh + 3.0), QtCore.QPointF(hx, cy + hh - 3.0))
 
 
 class KnobRow(QtWidgets.QWidget):
@@ -147,11 +153,13 @@ class KnobRow(QtWidgets.QWidget):
         self.knob.valueChanged.connect(self._on_knob)
 
         self._title = QtWidgets.QLabel(label, self)
-        self._title.setAlignment(QtCore.Qt.AlignCenter)
+        self._title.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         self._title.setObjectName("knobTitle")
+        self._title.setFixedWidth(96)                    # Задача #58: ряд в одну колонку
         self._readout = QtWidgets.QLabel(self._fmt(default), self)
-        self._readout.setAlignment(QtCore.Qt.AlignCenter)
+        self._readout.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self._readout.setObjectName("knobValue")
+        self._readout.setFixedWidth(56)
 
         self._chk = QtWidgets.QToolButton(self)         # индивидуальный вкл/выкл
         self._chk.setCheckable(True)
@@ -167,19 +175,16 @@ class KnobRow(QtWidgets.QWidget):
         self._reset.setToolTip("Сбросить к значению по умолчанию")
         self._reset.clicked.connect(self.reset)
 
-        lay = QtWidgets.QVBoxLayout(self)
-        lay.setContentsMargins(4, 4, 4, 4)
-        lay.setSpacing(2)
+        # Задача #58: ряд горизонтальный (подпись | движок | значение | вкл | сброс);
+        # вся панель — одна колонка из таких рядов.
+        lay = QtWidgets.QHBoxLayout(self)
+        lay.setContentsMargins(6, 3, 6, 3)
+        lay.setSpacing(6)
         lay.addWidget(self._title)
-        lay.addWidget(self.knob, 0, QtCore.Qt.AlignHCenter)
+        lay.addWidget(self.knob, 1)             # горизонтальный движок тянется по ширине
         lay.addWidget(self._readout)
-        btns = QtWidgets.QHBoxLayout()
-        btns.setSpacing(3)
-        btns.addStretch(1)
-        btns.addWidget(self._chk)
-        btns.addWidget(self._reset)
-        btns.addStretch(1)
-        lay.addLayout(btns)
+        lay.addWidget(self._chk)
+        lay.addWidget(self._reset)
 
     # --- реакции ---
     def _on_knob(self, v):
@@ -260,7 +265,7 @@ class AdjustPanel(QtWidgets.QWidget):
             row = KnobRow(key, label, lo, hi, dflt, fmt, self)
             row.changed.connect(self.changed)
             self.rows[key] = row
-            grid.addWidget(row, i // 3, i % 3)
+            grid.addWidget(row, i, 0)           # Задача #58: одна колонка (ряды друг под другом)
 
         self._global = QtWidgets.QToolButton(self)      # общий выключатель всех регулировок
         self._global.setCheckable(True)
