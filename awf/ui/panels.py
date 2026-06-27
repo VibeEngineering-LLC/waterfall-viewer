@@ -340,6 +340,8 @@ class SlicePanel(QtWidgets.QWidget):
         self._raw_ewin = None     # (times, series_raw) кривой энергоокна (Задача #44)
         self._series_section_items = []  # маркеры сечений Времени на графике отсчётов (Задача #42)
         self._ewin_active = None  # (e_lo,e_hi) активного энергоокна временного профиля (Задача 19)
+        self._bg_cps = None       # поканальный фон cps (Задача #96), длина = n_channels
+        self._bg_overlay = False  # наложение кривой фона на спектр среза (Задача #96)
         layout = QtWidgets.QVBoxLayout(self)
         self._header = QtWidgets.QLabel("Файл не загружен")
         self._header.setWordWrap(True)
@@ -380,6 +382,9 @@ class SlicePanel(QtWidgets.QWidget):
         # Задача #41: кривая спектра среза — бирюза рамки плоскости Времени 3D (51,217,242)
         self._spectrum_curve = self._spectrum_plot.plot(
             [], [], pen=pg.mkPen((51, 217, 242), width=2))
+        # Задача #96: кривая фона поверх спектра среза (оранжевый пунктир), в текущих единицах
+        self._bg_curve = self._spectrum_plot.plot(
+            [], [], pen=pg.mkPen((255, 165, 0), width=1, style=QtCore.Qt.DashLine))
         self._series_plot.addLegend(offset=(-10, 10))
         self._series_curve = self._series_plot.plot([], [], pen=pg.mkPen("m", width=1),
                                                     name="полоса ROI")
@@ -451,6 +456,7 @@ class SlicePanel(QtWidgets.QWidget):
         e, s, lt_total = self._raw_spec
         disp = self._spec_to_unit(s, lt_total)
         self._spectrum_curve.setData(e, smooth_counts(disp, self._smooth, axis=-1))
+        self._render_background(e, lt_total)   # Задача #96: кривая фона в тех же единицах
 
     def set_smoothing(self, radius: int) -> None:
         """Радиус скользящего среднего спектра по энергии (Замечание IV-R4); перерисовать кривую."""
@@ -505,6 +511,27 @@ class SlicePanel(QtWidgets.QWidget):
             self._series_curve.setData(self._raw_series[0], self._series_to_unit(self._raw_series[1]))
         if self._raw_ewin is not None:
             self._ewin_curve.setData(self._raw_ewin[0], self._series_to_unit(self._raw_ewin[1]))
+
+    def set_background(self, bg_cps) -> None:
+        """Задача #96: задать поканальный фон (cps) для наложения; None — снять. Перерисовать."""
+        self._bg_cps = None if bg_cps is None else np.asarray(bg_cps, dtype=np.float64).ravel()
+        self._render_spectrum()
+
+    def set_background_overlay(self, on: bool) -> None:
+        """Задача #96: вкл/выкл наложение кривой фона на спектр среза."""
+        self._bg_overlay = bool(on)
+        self._render_spectrum()
+
+    def _render_background(self, energies, lt_total) -> None:
+        """Задача #96: кривая фона в единицах текущего спектра. cps: bg как есть; counts:
+        bg*живое_время_окна (то же окно, что у спектра). Длины bg и энергий должны совпадать."""
+        bg = self._bg_cps
+        e = np.asarray(energies, dtype=np.float64)
+        if not self._bg_overlay or bg is None or bg.size != e.size:
+            self._bg_curve.setData([], [])
+            return
+        disp = bg if self._unit == "cps" else bg * float(lt_total or 0.0)
+        self._bg_curve.setData(e, smooth_counts(disp, self._smooth, axis=-1))
 
     def set_spectrum_log(self, on: bool) -> None:
         """Лог/лин шкала Y графика спектра среза (Задача #43)."""

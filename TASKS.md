@@ -1153,6 +1153,36 @@ UI-контролы (пресет нуклида `DEFAULT_WINDOWS` + два сп
   −1 вместо 0. Тесты: новый `test_ewin_preset_has_no_manual_item` + правки `test_preset_combobox_sets_window`
   (пресет 0 = Cs-137) и `test_manual_spin_edit_resets_preset` (ручное → idx −1). **Полный pytest — 308 passed.**
 
+- **#95 — маркеры изотопов не должны просвечивать сквозь рельеф 3D** (`awf/ui/view3d.py`):
+  вертикальные маркеры нуклидов (`_add_plane_nuclide_line`) создавались `GLLinePlotItem` с дефолтными
+  glOptions, а дефолт у `GLLinePlotItem` в pyqtgraph 0.14.0 — `'additive'` (`GL_DEPTH_TEST` ВЫКЛ),
+  поэтому они всегда рисовались поверх и были видны «за массивом». Передал `glOptions="opaque"` (depth-тест
+  ВКЛ) + `antialias=False` (без blend сглаживание линии не применяется) — рельеф теперь перекрывает
+  маркеры, оказавшиеся позади него; `'opaque'` корректен при любом порядке отрисовки. Профиль сечения
+  (#41, `_PROFILE_GL`) намеренно остаётся поверх — его не трогал. Тест `test_plane_marker_depth_tested_not_additive`
+  (проверка `GL_DEPTH_TEST is True` у построенного маркера). **Полный pytest — 309 passed.**
+
+- **#96 — фон и вычитание; меню «Анализ»: выбор/наложение/вычет фона** (`awf/model/background.py` —
+  новый; `awf/ui/background_dialog.py` — новый; `awf/ui/panels.py::SlicePanel`; `awf/ui/main_window.py`):
+  фон — поканальная скорость счёта (cps, нормировка по живому времени). Источник — ЛЮБОЙ из двух:
+  (а) диапазон срезов текущего измерения — `background_from_range` = `Σcounts[t_lo:t_hi]/Σlive_time`;
+  (б) отдельный файл (.aswf/.rcspg/.n42) — `background_from_spectrogram`: при иной калибровке фон
+  переводится в спектральную плотность (cps/кэВ через `|∇E|`), интерполируется по энергии цели
+  (`np.interp`, вне диапазона → 0, без экстраполяции) и умножается на ширину каналов цели —
+  метрологически корректно, при совпадающей калибровке сводится к поканальному cps. **Наложение фона:**
+  `SlicePanel._bg_curve` (оранжевый пунктир) поверх спектра среза в текущих единицах (cps — фон как
+  есть; counts — `bg_cps·live_time` окна). **Вычет фона = весь водопад (3D+2D+срез):** `subtract_background`
+  строит производную `Spectrogram` `clip(counts[t,ch] − bg_cps[ch]·live_time[t], 0)` (отрицательное → 0),
+  раздаётся через `MainWindow._redistribute`/`_active_spectrogram` в 3D-рельеф, 2D-карту и панель срезов;
+  вкладка «Аналитика» — ВСЕГДА на исходных данных. Меню «Анализ»: «Выбор фона…» (диалог
+  `BackgroundDialog`), «Наложение фона» и «Вычет фона» (checkable, активны только после выбора фона);
+  загрузка нового файла сбрасывает фон (`_reset_background`). Тесты: `tests/test_background.py` (10 —
+  математика: диапазон-cps, взвешивание по живому времени, клип отрицательных, масштаб по live_time,
+  файл-фон та же/иная калибровка `[2,2,2,2,2,0]`), `tests/test_bg_ui.py` (10 — наложение скрыто до
+  включения, единичное масштабирование cps/counts, очистка по None, вычет уменьшает водопад и
+  восстанавливается, аналитика на исходных, сброс при перезагрузке, диалог range/file/default) + правка
+  #75 `test_top_menus_skeleton_present` (меню «Анализ» теперь наполнено). **Полный pytest — 329 passed.**
+
 **Задача 26 — Вкладка «Аналитика»** (`awf/ui/analytics_panel.py` + `main_window.py`): `AnalyticsPanel`
 (2D-скаттер проекций, по одному `ScatterPlotItem` на кластер для легенды; каждая точка несёт индекс
 среза). Сигнал `sliceClicked(i)` → `MainWindow._on_analytics_slice` → `SlicePanel.show_time_slice` +
