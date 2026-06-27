@@ -5,12 +5,44 @@ from awf.ui.zscale import (
 )
 
 
+def _expected_log(x):
+    # Эталон истинного log10 с авто-порогом (Задача #54): floor = 1-й перцентиль ненулевых.
+    nn = np.maximum(np.asarray(x, dtype=np.float64), 0.0)
+    pos = nn[nn > 0.0]
+    floor = float(np.percentile(pos, 1.0))
+    return np.log10(np.maximum(nn, floor) / floor)
+
+
 def test_backward_compat_defaults():
     """При дефолтных параметрах apply_z_scale == базовая Z-шкала (short-circuit)."""
     x = np.array([[0.0, 1.0, 4.0], [9.0, 100.0, -5.0]], dtype=np.float64)
     assert np.allclose(apply_z_scale(x, "linear"), np.maximum(x, 0.0))
     assert np.allclose(apply_z_scale(x, "sqrt"), np.sqrt(np.maximum(x, 0.0)))
-    assert np.allclose(apply_z_scale(x, "log"), np.log10(1.0 + np.maximum(x, 0.0)))
+    assert np.allclose(apply_z_scale(x, "log"), _expected_log(x))
+
+
+def test_log_scale_invariant_for_units():
+    """Задача #54: истинный log10 — масштаб-инвариантен. counts и cps (counts/live_time)
+    одного спектра дают ОДИНАКОВУЮ нормированную форму рельефа (раньше log10(1+x) для
+    cps<1 вырождался в линейный, форма зависела от единиц)."""
+    counts = np.array([5.0, 50.0, 500.0, 5000.0, 0.0])
+    cps = counts / 20.0                       # та же физика в др. единицах (live_time=20 с)
+    lc = apply_z_scale(counts, "log")
+    lp = apply_z_scale(cps, "log")
+    assert np.allclose(lc / lc.max(), lp / lp.max(), atol=1e-5)
+
+
+def test_log_not_degenerate_for_subunit_cps():
+    """Задача #54: для cps<1 лог НЕ должен быть ≈линейным. Нормированная лог-форма
+    заметно отличается от линейной (иначе логарифм бесполезен)."""
+    cps = np.array([0.05, 0.2, 0.5, 1.0, 2.0])
+    lg = apply_z_scale(cps, "log")
+    lin = apply_z_scale(cps, "linear")
+    lg_n = lg / lg.max()
+    lin_n = lin / lin.max()
+    # средне-слабый канал (0.2 cps) в логе поднят заметно выше, чем в линейной шкале
+    # (нижний канал-дно = floor уходит в 0 — это отсечение шума, не «вырождение»)
+    assert lg_n[1] - lin_n[1] > 0.1
 
 
 def test_returns_float32():
