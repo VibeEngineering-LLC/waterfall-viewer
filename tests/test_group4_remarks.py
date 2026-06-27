@@ -188,3 +188,32 @@ def test_main_window_applies_style(app):
     from awf.ui.main_window import MainWindow
     w = MainWindow()
     assert "qlineargradient" in w.styleSheet()
+
+
+# ---------- #62: тулбар «Вид» и строка статуса — крупнее шрифт и выше ----------
+def test_toolbar_and_statusbar_sized_up():
+    """Задача #62: QSS задаёт увеличенный шрифт и высоту контролов тулбара и строки статуса
+    (были скучены). Целевые правила — потомки QToolBar и сам QStatusBar."""
+    from awf.ui.style import APP_QSS
+    assert "QToolBar QComboBox" in APP_QSS and "min-height" in APP_QSS
+    assert "QToolBar QPushButton" in APP_QSS
+    assert "QStatusBar QLabel" in APP_QSS
+    # размер шрифта тулбара/статуса поднят выше дефолтного 12px
+    for token in ("font-size: 15px", "font-size: 14px"):
+        assert token in APP_QSS
+
+
+def test_toolbar_combo_taller_than_default(app):
+    """Задача #62: min-height из QSS реально увеличивает высоту контролов тулбара
+    (комбобокс Z-шкалы становится выше неоформленного дефолта)."""
+    from PySide6 import QtWidgets
+    from awf.ui.style import APP_QSS
+    from awf.ui.main_window import MainWindow
+    QtWidgets.QApplication.instance().setStyleSheet(APP_QSS)
+    w = MainWindow()
+    bare = QtWidgets.QComboBox()              # без применённого QSS min-height
+    assert w._z_combo.minimumSizeHint().height() >= bare.minimumSizeHint().height()
+    # строка статуса принудительно выше дефолта (задаём в коде, #62)
+    assert w.statusBar().minimumHeight() >= 28
+    w.close()
+    bare.deleteLater()

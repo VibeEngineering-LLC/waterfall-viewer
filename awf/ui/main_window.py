@@ -127,7 +127,12 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._build_menu()
         self._build_toolbar()
-        self.statusBar().showMessage("Готов. Файл → Открыть… (Ctrl+O)")
+        # Задача #62: строка статуса была скучена — задаём минимальную высоту и шрифт в коде
+        # (QSS min-height сам бар QStatusBar в Qt не применяет, высота берётся из layout).
+        sb = self.statusBar()
+        sb.setMinimumHeight(28)
+        f = sb.font(); f.setPointSize(max(10, f.pointSize() + 1)); sb.setFont(f)
+        sb.showMessage("Готов. Файл → Открыть… (Ctrl+O)")
 
         # Задача #40: восстановить геометрию окна и раскладку доков/тулбара из прошлого запуска.
         # Вызывается ПОСЛЕ создания всех доков/тулбара (иначе restoreState не к чему применять).

@@ -856,6 +856,19 @@ UI-контролы (пресет нуклида `DEFAULT_WINDOWS` + два сп
   видимость mesh+border и скрытость line на всех осях. **Полный pytest — 271 passed** (счётчик ниже
   278 — удалены 7 тестов снятой фичи профиля).
 
+- **#62 — тулбар «Вид» и строка статуса скучены: крупнее шрифт, выше панели**
+  (`awf/ui/style.py`, `awf/ui/main_window.py`): оператор (скриншот) — «тут очень скученно. увеличить
+  высоту и размер шрифта». (1) **Тулбар «Вид»** — в QSS подняты `spacing` 3→8px и `padding` 3→7/8px,
+  добавлен `font-size:15px`; целевые правила потомков `QToolBar QComboBox/QPushButton` дают
+  `min-height:28px` + увеличенный `padding` (комбобоксы Z-шкала/Палитра/Единицы и кнопка «Сброс»
+  выросли с 22 до 40–42px, сам тулбар ~58px), `QToolBar QLabel/QCheckBox` — 15px. Селекторы по
+  потомкам `QToolBar`, поэтому доки-панели (рукоятки/сечения) не раздуты. (2) **Строка статуса** —
+  QSS `font-size:14px` + `QStatusBar QLabel`; высота `QStatusBar` Qt из QSS `min-height` не берёт
+  (считает от layout), поэтому в коде `statusBar().setMinimumHeight(28)` и `pointSize+1`. Тесты
+  `test_toolbar_and_statusbar_sized_up` (QSS содержит целевые правила) и
+  `test_toolbar_combo_taller_than_default` (комбобокс выше дефолтного, строка статуса ≥28px).
+  **Полный pytest — 273 passed.**
+
 **Задача 26 — Вкладка «Аналитика»** (`awf/ui/analytics_panel.py` + `main_window.py`): `AnalyticsPanel`
 (2D-скаттер проекций, по одному `ScatterPlotItem` на кластер для легенды; каждая точка несёт индекс
 среза). Сигнал `sliceClicked(i)` → `MainWindow._on_analytics_slice` → `SlicePanel.show_time_slice` +

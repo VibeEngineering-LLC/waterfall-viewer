@@ -29,15 +29,27 @@ QToolBar {
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                 stop:0 #484b50, stop:0.5 #34373c, stop:1 #2a2c30);
     border: 0px;
-    spacing: 3px;
-    padding: 3px;
+    spacing: 8px;            /* Задача #62: было 3px — тулбар «Вид» скучен */
+    padding: 7px 8px;        /* Задача #62: было 3px — выше панель, больше воздух */
+    font-size: 15px;
 }
+/* Задача #62: контролы тулбара «Вид» крупнее и выше. Целюсь по потомкам QToolBar —
+   доки-панели (рукоятки/сечения) не вложены в тулбар и не затрагиваются. */
+QToolBar QLabel { font-size: 15px; }
+QToolBar QCheckBox { font-size: 15px; spacing: 7px; }
+QToolBar QComboBox { font-size: 15px; padding: 5px 10px; min-height: 28px; }
+QToolBar QPushButton { font-size: 15px; padding: 6px 16px; min-height: 28px; }
 
 QStatusBar {
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                 stop:0 #3a3d42, stop:1 #2a2c30);
     color: #c0c2c6;
+    font-size: 14px;         /* Задача #62: строка статуса была мелкой и скученной */
+    min-height: 26px;        /* Задача #62: выше строка — путь файла не лепится к тулбару */
+    padding: 4px 10px;
 }
+QStatusBar QLabel { font-size: 14px; }
+QStatusBar::item { border: 0px; }   /* без рамок-сепараторов между секциями */
 
 QDockWidget { color: #d8dade; titlebar-close-icon: none; }
 QDockWidget::title {
