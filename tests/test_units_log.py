@@ -89,8 +89,8 @@ def test_view3d_time_plane_profile_is_projection(app):
     line = v._planes[("time", 0)]["line"]
     assert line.visible() is True
     assert line.pos.shape == (v._nc, 3)                # точка на каждый канал
-    # Задача #50: проекция = Z-шкала(Σ сырых counts), нормированная в высоту плоскости
-    s = apply_z_scale(v._z_counts.sum(axis=0), v._z_mode, gain=v._gain,
+    # Задача #52: проекция = Z-шкала(Σ sum-LOD counts) = спектр окна, нормированная в высоту
+    s = apply_z_scale(v._z_counts_sum.sum(axis=0), v._z_mode, gain=v._gain,
                       gamma=v._gamma, clip=v._clip).astype(np.float64)
     s = s / s.max() * v._height_scale
     assert np.allclose(line.pos[:, 2], s)              # высота = нормированная проекция суммы
@@ -104,7 +104,7 @@ def test_view3d_time_projection_between_planes(app):
     v.set_plane("time", 0, 0.2, True)
     v.set_plane("time", 1, 0.8, True)
     i0, i1 = v._clip_windows()[0:2]
-    s = apply_z_scale(v._z_counts[i0:i1 + 1, :].sum(axis=0), v._z_mode, gain=v._gain,
+    s = apply_z_scale(v._z_counts_sum[i0:i1 + 1, :].sum(axis=0), v._z_mode, gain=v._gain,
                       gamma=v._gamma, clip=v._clip).astype(np.float64)
     s = s / s.max() * v._height_scale
     assert np.allclose(v._planes[("time", 0)]["line"].pos[:, 2], s)
@@ -141,14 +141,14 @@ def test_view3d_profile_depth_value_above_surface(app):
     assert line.depthValue() > v._surface.depthValue()
 
 
-def test_view3d_transient_peak_counted(app):
-    # Задача #50: узкий транзиентный пик (вспышка в нескольких срезах) должен попадать в
-    # проекцию-сумму. Старый метод (Σ log-высот) сажал максимум кривой на широкую полку.
-    ns, nc = 60, 80
-    counts = np.random.RandomState(7).poisson(30, size=(ns, nc)).astype(np.int64)
-    counts[:, 10:30] += 40                       # широкая слабая полка во всех срезах
-    pk = nc // 2
-    counts[ns // 2:ns // 2 + 3, pk - 1:pk + 2] += 600   # вспышка 3 среза у центрального канала
+def test_view3d_profile_matches_window_spectrum(app):
+    # Задача #52: профиль на плоскости = спектр верхнего-правого окна (sg.sum_spectrum по окну).
+    # Устойчивый пик (бо́льший ИНТЕГРАЛ) выше короткого транзиента-башни — как в окне; старый
+    # max-метод (#50) сажал максимум на башню. Без прорежки каналов профиль поканально = sum_spectrum.
+    ns, nc = 40, 100
+    counts = np.random.RandomState(3).poisson(5, size=(ns, nc)).astype(np.int64)
+    counts[:, 70] += 30                         # устойчивый пик: интеграл 30*40=1200
+    counts[ns // 2:ns // 2 + 2, 20] += 400      # транзиент-башня: интеграл 800, но высота 405
     cal = Calibration(coeffs=[0.0, 1.0])
     t = np.arange(ns, dtype=np.float64)
     sg = Spectrogram(counts=counts, calibration=cal, time_offsets_s=t,
@@ -157,8 +157,9 @@ def test_view3d_transient_peak_counted(app):
     v.set_spectrogram(sg, max_time=400, max_chan=512)
     v.set_plane("time", 0, 0.0, True)
     prof = v._planes[("time", 0)]["line"].pos[:, 2]
-    pc = int(np.argmax(v._z_counts.sum(axis=0)))   # канал интегрального пика
-    assert int(np.argmax(prof)) == pc              # максимум кривой — на пике, не на полке
+    win = np.asarray(sg.sum_spectrum(0, ns), dtype=np.float64)   # спектр окна (полное разрешение)
+    assert int(np.argmax(prof)) == int(np.argmax(win)) == 70     # плоскость = окно (sum), не max
+    assert prof[70] > prof[20]                                   # устойчивый пик выше транзиента
 
 
 # ---------- #43: лог/лин шкала спектра ----------

@@ -119,7 +119,8 @@ class Waterfall3DView(gl.GLViewWidget):
         self._nc = 0
         self._height_scale = 1.0
         self._z_surface = None        # (nt, nc) высоты рельефа (дисплейные)
-        self._z_counts = None         # (nt, nc) исходные counts бинов (для оси счёта, Задача 14)
+        self._z_counts = None         # (nt, nc) исходные counts бинов (max-LOD, для оси счёта/рельефа)
+        self._z_counts_sum = None     # (nt, nc) sum-LOD: интеграл counts в бине (Задача #52 — спектр окна)
         self._colors_full = None      # (nt, nc, 4) полный RGBA рельефа (до обрезки, IV-R3)
         self._clip_sig = None         # сигнатура текущих окон обрезки (IV-R3)
         self._t_centers = None        # (nt,) реальное время бинов, с
@@ -178,6 +179,11 @@ class Waterfall3DView(gl.GLViewWidget):
         src = sg.counts_in_unit(self._unit)
         z_counts, t_centers, ch_centers = sg.downsample(max_time, max_chan, method="max", data=src)
         z_counts = np.asarray(z_counts, dtype=np.float32)
+        # Задача #52: профиль на плоскости = спектр верхнего-правого окна (sum по окну, НЕ max).
+        # Отдельная sum-LOD на ТЕХ ЖЕ бинах: интеграл counts в каждом (бин времени × бин канала).
+        # Сумма по окну времени == sg.sum_spectrum, прорежённому к nc каналам — точно как окно.
+        z_sum, _ts, _cs = sg.downsample(max_time, max_chan, method="sum", data=src)
+        self._z_counts_sum = np.asarray(z_sum, dtype=np.float64)
         # 1b) регулируемое усреднение спектра по энергетической оси (axis=1) — Замечание IV-R4
         z_counts = smooth_counts(z_counts, self._smooth, axis=1)
         nt, nc = z_counts.shape
@@ -579,15 +585,17 @@ class Waterfall3DView(gl.GLViewWidget):
         обрезки (IV-R3): обе плоскости оси видимы -> между ними, иначе вся ось. time -> сумма по
         времени (кривая по энергии, nc); energy -> сумма по энергии (кривая по времени, nt).
 
-        Задача #50: суммируем СЫРЫЕ counts (z_counts), затем применяем Z-шкалу к ИНТЕГРАЛУ —
-        log(Σ), а НЕ Σ log(дисплейных высот). Иначе суммирование уже log-сжатых высот
-        переоценивает широкие полки и теряет узкие/транзиентные пики (рельеф по method='max'
-        показывает такой пик башней, а кривая суммы — нет: пик «не считается»)."""
+        Задача #52: профиль = спектр верхнего-правого окна «Срезы/Сечения/Выборки». Окно строит
+        sg.sum_spectrum(t_lo,t_hi) — ИНТЕГРАЛ сырых counts по окну времени. Поэтому суммируем
+        sum-LOD (`_z_counts_sum`, прорежка method='sum'), а НЕ max-LOD `_z_counts`: сумма sum-бинов
+        по окну == sum_spectrum, прорежённому к nc каналам. Суммирование max-бинов (как было в #50)
+        раздувало фон и расходилось с окном; истинная сумма совпадает с окном (устойчивая полка с
+        бо́льшим интегралом может быть выше короткого транзиента — ровно как в окне)."""
         i0, i1, j0, j1, _zlo, _zhi, _ca = self._clip_windows()
         if axis == "time":
-            s = self._z_counts[i0:i1 + 1, :].sum(axis=0).astype(np.float64)   # интеграл по времени
+            s = self._z_counts_sum[i0:i1 + 1, :].sum(axis=0).astype(np.float64)  # интеграл по времени
         else:
-            s = self._z_counts[:, j0:j1 + 1].sum(axis=1).astype(np.float64)   # интеграл по энергии
+            s = self._z_counts_sum[:, j0:j1 + 1].sum(axis=1).astype(np.float64)  # интеграл по энергии
         d = apply_z_scale(s, self._z_mode, gain=self._gain, gamma=self._gamma, clip=self._clip)
         d = np.asarray(d, dtype=np.float64)
         m = float(d.max()) if d.size else 0.0
