@@ -1,24 +1,22 @@
-"""Поворотные рукоятки (knob) в стиле iZotope/ircam VERB (Задача #55).
+"""Вертикальные движки-фейдеры панели регулировок (Задача #57; раньше — поворотные
+рукоятки #55, имя классов сохранено ради внешнего API).
 
-`Knob` — круглый регулятор с зелёной дугой-индикатором и светлым указателем,
-управление вертикальным drag мыши. API совместим с QSlider (value/setValue/setRange/
-valueChanged), поэтому обработчики main_window читают значение тем же способом.
+`Knob` — вертикальный фейдер: тёмный паз, зелёный «уровень», риски-шкала по бокам и
+светлая металлическая каретка; управление вертикальным drag мыши. API совместим с
+QSlider (value/setValue/setRange/valueChanged), поэтому обработчики main_window читают
+значение тем же способом (имя Knob и _*_slider-алиасы целы — внешний код не трогаем).
 `KnobRow` добавляет подпись, поле значения, индивидуальные вкл/выкл и сброс.
 `AdjustPanel` собирает ряды и общий выключатель (bypass к дефолтам).
 """
 from __future__ import annotations
-import math
 from PySide6 import QtCore, QtGui, QtWidgets
 
 
 class Knob(QtWidgets.QWidget):
-    """Круглый поворотный регулятор. Работает в целых «тиках» (как QSlider), чтобы
-    обработчики main_window читали value() и делили на 100 без изменений."""
+    """Вертикальный движок-фейдер (Задача #57; имя Knob сохранено ради внешнего API).
+    Работает в целых «тиках» (как QSlider), чтобы обработчики main_window читали value()
+    и делили на 100 без изменений."""
     valueChanged = QtCore.Signal(int)
-
-    # Дуга индикатора: 240° раскрыта вниз (как на скрине), от -210° до +30° по экрану.
-    _A0 = 210.0
-    _SPAN = 240.0
 
     def __init__(self, minimum=0, maximum=100, value=0, parent=None):
         super().__init__(parent)
@@ -27,7 +25,7 @@ class Knob(QtWidgets.QWidget):
         self._val = max(self._min, min(self._max, int(value)))
         self._drag_y = None
         self._drag_v0 = 0
-        self.setFixedSize(50, 50)
+        self.setFixedSize(44, 92)                 # узкий вертикальный фейдер (#57)
         self.setCursor(QtCore.Qt.SizeVerCursor)
 
     # --- QSlider-совместимый API (минимум, чтобы интегрироваться без правок логики) ---
@@ -83,42 +81,53 @@ class Knob(QtWidgets.QWidget):
         self.setValue(self._val + step)
         e.accept()
 
-    # --- отрисовка: тёмное тело + металлический обод + зелёная дуга + светлый указатель ---
+    # --- отрисовка: вертикальный движок-фейдер (Задача #57) — паз, зелёный «уровень»,
+    #     риски-шкала по бокам и светлая металлическая каретка-указатель ---
     def paintEvent(self, _e):
         p = QtGui.QPainter(self)
         p.setRenderHint(QtGui.QPainter.Antialiasing, True)
         w, h = self.width(), self.height()
-        cx, cy = w / 2.0, h / 2.0
-        rim = min(w, h) / 2.0 - 3.0           # радиус обода
-        body = rim - 4.0                       # радиус тёмного тела
-        # тело: радиальный градиент (центр светлее края) — объём «шайбы»
-        grad = QtGui.QRadialGradient(cx, cy - body * 0.3, body * 1.6)
-        grad.setColorAt(0.0, QtGui.QColor("#3a3d42"))
-        grad.setColorAt(1.0, QtGui.QColor("#1f2124"))
-        p.setPen(QtGui.QPen(QtGui.QColor("#15161a"), 1.0))
-        p.setBrush(QtGui.QBrush(grad))
-        p.drawEllipse(QtCore.QPointF(cx, cy), body, body)
-
-        # дуга-индикатор: трек (тёмный) + заполнение (зелёный акцент) на радиусе обода
-        arc_rect = QtCore.QRectF(cx - rim, cy - rim, 2 * rim, 2 * rim)
+        cx = w / 2.0
+        y0, y1 = 7.0, h - 7.0                  # верх (макс.) и низ (мин.) хода каретки
+        track_h = y1 - y0
         frac = self._frac()
-        p.setBrush(QtCore.Qt.NoBrush)
-        p.setPen(QtGui.QPen(QtGui.QColor("#15171a"), 3.0, QtCore.Qt.SolidLine,
-                            QtCore.Qt.FlatCap))
-        p.drawArc(arc_rect, int(self._A0 * 16), int(-self._SPAN * 16))
-        if frac > 0.0:
-            fill = QtGui.QColor("#4a7d4a") if self.isEnabled() else QtGui.QColor("#55585e")
-            p.setPen(QtGui.QPen(fill, 3.0, QtCore.Qt.SolidLine, QtCore.Qt.FlatCap))
-            p.drawArc(arc_rect, int(self._A0 * 16), int(-self._SPAN * frac * 16))
+        hy = y1 - frac * track_h               # центр каретки по текущему значению
+        gx = cx - 3.5                          # жёлоб: вертикальный паз
+        gg = QtGui.QLinearGradient(gx, 0.0, gx + 7.0, 0.0)
+        gg.setColorAt(0.0, QtGui.QColor("#1c1e21"))
+        gg.setColorAt(1.0, QtGui.QColor("#34373c"))
+        p.setPen(QtGui.QPen(QtGui.QColor("#15161a"), 1.0))
+        p.setBrush(QtGui.QBrush(gg))
+        p.drawRoundedRect(QtCore.QRectF(gx, y0, 7.0, track_h), 3.0, 3.0)
 
-        # указатель: радиальная риска от ~0.45R до края тела на угле текущего значения
-        th = math.radians(self._A0 - self._SPAN * frac)
-        ux, uy = math.cos(th), -math.sin(th)          # экранный y вниз → знак минус
-        ptr = QtGui.QColor("#e3e5e9") if self.isEnabled() else QtGui.QColor("#6a6d72")
-        p.setPen(QtGui.QPen(ptr, 2.4, QtCore.Qt.SolidLine, QtCore.Qt.RoundCap))
-        p.drawLine(QtCore.QPointF(cx + ux * body * 0.42, cy + uy * body * 0.42),
-                   QtCore.QPointF(cx + ux * (body - 1.5), cy + uy * (body - 1.5)))
+        if frac > 0.0:                         # зелёный «уровень» снизу до каретки
+            fill = QtGui.QColor("#4a7d4a") if self.isEnabled() else QtGui.QColor("#55585e")
+            p.setPen(QtCore.Qt.NoPen)
+            p.setBrush(QtGui.QBrush(fill))
+            p.drawRoundedRect(QtCore.QRectF(gx + 1.0, hy, 5.0, y1 - hy), 2.0, 2.0)
+        p.setPen(QtGui.QPen(QtGui.QColor("#55585e"), 1.0))   # риски-шкала по бокам паза
+        for k in range(5):
+            ty = y0 + track_h * k / 4.0
+            p.drawLine(QtCore.QPointF(cx + 6.0, ty), QtCore.QPointF(cx + 9.0, ty))
+            p.drawLine(QtCore.QPointF(cx - 9.0, ty), QtCore.QPointF(cx - 6.0, ty))
+        self._draw_cap(p, cx, hy, w)
         p.end()
+
+    def _draw_cap(self, p, cx, hy, w):
+        """Каретка-указатель фейдера (Задача #57): светлая металлическая планка с прорезью."""
+        hw = w / 2.0 - 4.0
+        cg = QtGui.QLinearGradient(0.0, hy - 5.0, 0.0, hy + 5.0)
+        if self.isEnabled():
+            cg.setColorAt(0.0, QtGui.QColor("#d8dbe0"))
+            cg.setColorAt(1.0, QtGui.QColor("#8a8d92"))
+        else:
+            cg.setColorAt(0.0, QtGui.QColor("#6a6d72"))
+            cg.setColorAt(1.0, QtGui.QColor("#4a4d52"))
+        p.setPen(QtGui.QPen(QtGui.QColor("#15161a"), 1.0))
+        p.setBrush(QtGui.QBrush(cg))
+        p.drawRoundedRect(QtCore.QRectF(cx - hw, hy - 5.0, 2 * hw, 10.0), 3.0, 3.0)
+        p.setPen(QtGui.QPen(QtGui.QColor("#3a3d42"), 1.4))
+        p.drawLine(QtCore.QPointF(cx - hw + 3.0, hy), QtCore.QPointF(cx + hw - 3.0, hy))
 
 
 class KnobRow(QtWidgets.QWidget):

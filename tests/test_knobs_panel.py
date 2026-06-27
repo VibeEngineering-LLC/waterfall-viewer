@@ -43,6 +43,12 @@ def test_knob_qslider_api(app):
     assert k.value() == 15
 
 
+def test_knob_is_vertical_fader(app):
+    """Задача #57: регулятор — вертикальный движок (высота > ширины), не круглая крутилка."""
+    k = Knob(0, 100, 50)
+    assert k.height() > k.width()
+
+
 # ---------- KnobRow: per-row bypass ----------
 
 def test_knobrow_bypass_preserves_position(app):
