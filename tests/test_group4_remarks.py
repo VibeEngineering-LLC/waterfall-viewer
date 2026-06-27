@@ -497,12 +497,17 @@ def test_top_menus_skeleton_present(app):
     for expected in ("Изотопы", "Анализ", "Сервис", "Помощь", "О программе"):
         assert expected in titles
     assert set(w._menus) == {"isotopes", "analysis", "service", "help", "about"}
-    # остальные пункты пока неактивны (каркас); «Изотопы» наполнено в #79
+    # остальные пункты пока неактивны (каркас); «Изотопы» наполнено в #79, «Анализ» — в #96
     for key, m in w._menus.items():
-        if key == "isotopes":
+        if key in ("isotopes", "analysis"):
             continue
         acts = m.actions()
         assert acts and all(not a.isEnabled() for a in acts)
+    # Задача #96: меню «Анализ» наполнено — «Выбор фона…» активен, «Наложение/Вычет» до выбора нет
+    analysis_titles = [a.text() for a in w._menus["analysis"].actions()]
+    assert "Выбор фона…" in analysis_titles
+    assert "Наложение фона" in analysis_titles and "Вычет фона" in analysis_titles
+    assert w._act_bg_overlay.isEnabled() is False and w._act_bg_subtract.isEnabled() is False
     w.close()
 
 

@@ -10,6 +10,9 @@ from awf.io.nuclide_lib import default_library
 from awf.ui.view3d import Waterfall3DView, SectionControls
 from awf.ui.panels import HeatmapPanel, SlicePanel
 from awf.ui.analytics_panel import AnalyticsPanel
+from awf.ui.background_dialog import BackgroundDialog   # Задача #96
+from awf.model.background import (background_from_range, background_from_spectrogram,
+                                  subtract_background)
 from awf.ui.zscale import Z_MODES
 from awf.ui.colormaps import COLORMAPS
 from awf.ui.nuclide_panel import NuclidePanel
@@ -56,6 +59,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setStyleSheet(APP_QSS)    # серая градиентная схема оформления (Замечание IV-R1)
         self._sg = None
         self._loader = None            # ссылка на текущий поток (чтобы не был собран GC)
+        # Задача #96: фон и вычитание. _bg_cps — поканальная скорость фона (cps), выровненная по
+        # энергии текущего файла; _bg_subtract/_bg_overlay — состояние пунктов меню «Анализ».
+        self._bg_cps = None
+        self._bg_subtract = False
+        self._bg_overlay = False
 
         # центральная область: вкладки 3D / 2D
         self._tabs = QtWidgets.QTabWidget()
@@ -201,11 +209,31 @@ class MainWindow(QtWidgets.QMainWindow):
                 act = self._ndock.toggleViewAction()
                 act.setText("Окно изотопов (нуклиды)")
                 m.addAction(act)
+            elif key == "analysis":
+                self._build_analysis_menu(m)   # Задача #96: фон и вычитание
             else:
                 stub = QtGui.QAction("— наполняется позже —", self)
                 stub.setEnabled(False)   # каркас: действие будет подключено позже
                 m.addAction(stub)
             self._menus[key] = m
+
+    def _build_analysis_menu(self, m) -> None:
+        """Задача #96: пункты «Анализ» — фон и вычитание. «Выбор фона» задаёт поканальный фон
+        (диапазон срезов текущего файла или отдельный файл); «Наложение» рисует фон поверх
+        спектра среза; «Вычет» вычитает фон из всего водопада (3D/2D/срез), отрицательное -> 0."""
+        act_sel = QtGui.QAction("Выбор фона…", self)
+        act_sel.triggered.connect(self._on_bg_select)
+        m.addAction(act_sel)
+        self._act_bg_overlay = QtGui.QAction("Наложение фона", self)
+        self._act_bg_overlay.setCheckable(True)
+        self._act_bg_overlay.setEnabled(False)   # до выбора фона недоступно
+        self._act_bg_overlay.toggled.connect(self._on_bg_overlay_toggled)
+        m.addAction(self._act_bg_overlay)
+        self._act_bg_subtract = QtGui.QAction("Вычет фона", self)
+        self._act_bg_subtract.setCheckable(True)
+        self._act_bg_subtract.setEnabled(False)   # до выбора фона недоступно
+        self._act_bg_subtract.toggled.connect(self._on_bg_subtract_toggled)
+        m.addAction(self._act_bg_subtract)
 
     def _build_toolbar(self) -> None:
         tb = self.addToolBar("Вид")
@@ -312,6 +340,82 @@ class MainWindow(QtWidgets.QMainWindow):
         self._slices_dock.raise_()
         self._slices_dock.show()
 
+    @QtCore.Slot()
+    def _on_bg_select(self) -> None:
+        """Задача #96: открыть диалог выбора фона; вычислить поканальный фон (cps) и применить."""
+        if self._sg is None:
+            self.statusBar().showMessage("Сначала откройте файл, затем выбирайте фон.")
+            return
+        dlg = BackgroundDialog(self._sg.n_slices, self._sg.time_offsets_s, self)
+        if dlg.exec() != QtWidgets.QDialog.Accepted:
+            return
+        try:
+            bg = self._compute_background(dlg.result_spec())
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Выбор фона", f"{type(exc).__name__}: {exc}")
+            return
+        self._bg_cps = bg
+        self._slices.set_background(bg)
+        self._act_bg_overlay.setEnabled(True)
+        self._act_bg_subtract.setEnabled(True)
+        self._redistribute()
+        self.statusBar().showMessage("Фон выбран. Доступны «Наложение» и «Вычет».")
+
+    def _compute_background(self, spec):
+        """Задача #96: спецификация диалога -> поканальный фон (cps), выровненный по текущему файлу."""
+        if spec and spec[0] == "range":
+            return background_from_range(self._sg, spec[1], spec[2])
+        if spec and spec[0] == "file":
+            bg_sg = load_spectrogram(spec[1]).trimmed_channels(1)
+            return background_from_spectrogram(bg_sg, self._sg)
+        raise ValueError("неизвестный источник фона")
+
+    @QtCore.Slot(bool)
+    def _on_bg_overlay_toggled(self, on: bool) -> None:
+        """Задача #96: наложение кривой фона на спектр среза (панель срезов)."""
+        self._bg_overlay = bool(on)
+        self._slices.set_background_overlay(self._bg_overlay)
+
+    @QtCore.Slot(bool)
+    def _on_bg_subtract_toggled(self, on: bool) -> None:
+        """Задача #96: вычет фона из всего водопада (3D/2D/срез); отрицательное -> 0."""
+        self._bg_subtract = bool(on)
+        self._redistribute()
+
+    def _active_spectrogram(self):
+        """Задача #96: активная спектрограмма для 3D/2D/срезов — с вычтенным фоном, если вычет
+        включён и фон задан, иначе исходная."""
+        if self._bg_subtract and self._bg_cps is not None and self._sg is not None:
+            return subtract_background(self._sg, self._bg_cps)
+        return self._sg
+
+    def _redistribute(self) -> None:
+        """Задача #96: раздать активную спектрограмму в 3D/2D/срезы (аналитика — всегда на
+        исходных данных). Порядок как в _on_loaded: срезы -> карта (она шлёт roiChanged)."""
+        sg = self._active_spectrogram()
+        if sg is None:
+            return
+        self._view3d.set_spectrogram(sg)
+        self._slices.set_spectrogram(sg)
+        self._heatmap.set_spectrogram(sg)
+        self._sections.emit_all()
+
+    def _reset_background(self) -> None:
+        """Задача #96: сброс фона при загрузке нового файла — снять кривую/вычет и обесточить
+        пункты меню «Наложение/Вычет фона» (на новых данных старый фон бессмыслен)."""
+        self._bg_cps = None
+        self._bg_subtract = False
+        self._bg_overlay = False
+        self._slices.set_background(None)
+        self._slices.set_background_overlay(False)
+        for act in (getattr(self, "_act_bg_overlay", None), getattr(self, "_act_bg_subtract", None)):
+            if act is None:
+                continue
+            act.blockSignals(True)
+            act.setChecked(False)
+            act.setEnabled(False)
+            act.blockSignals(False)
+
     @QtCore.Slot(bool)
     def _on_contours_toggled(self, on: bool) -> None:
         """Переключатель изолиний на 2D-карте (Задача 20)."""
@@ -416,12 +520,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._sg = sg
         # порядок важен: сперва панель срезов получает данные, затем карта — её set_spectrogram
         # испускает roiChanged, который сразу нарисует срез по умолчанию.
-        self._view3d.set_spectrogram(sg)
-        self._slices.set_spectrogram(sg)
-        self._heatmap.set_spectrogram(sg)
-        self._analytics.set_spectrogram(sg)   # вкладка «Аналитика» (Задача 26)
-        # обновить секущие плоскости под новую геометрию (позиции + реальные подписи)
-        self._sections.emit_all()
+        self._reset_background()              # Задача #96: новый файл -> сбросить фон/вычет
+        self._analytics.set_spectrogram(sg)   # «Аналитика» (Задача 26) — всегда на исходных данных
+        # 3D/2D/срезы + секущие плоскости под новую геометрию (через активную спектрограмму)
+        self._redistribute()
         total = int(np.asarray(sg.counts).sum(dtype=np.int64))
         t0 = sg.t0_iso if sg.t0_iso else "—"
         src = sg.source_path if sg.source_path else "?"
