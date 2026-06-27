@@ -139,4 +139,25 @@ QScrollBar::handle:horizontal {
     background: #50545a; border-radius: 4px; min-width: 24px;
 }
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0px; }
+
+/* Задача #55 — панель регулировок «рукоятки» (knob-стиль). */
+#adjustPanel { background-color: #2b2d31; }
+QLabel#knobTitle { color: #b6b9be; font-size: 11px; }
+QLabel#knobValue { color: #9fd29f; font-size: 12px; font-weight: bold; }
+QToolButton#knobToggle, QToolButton#knobReset {
+    background: #34373c; color: #cfd2d6;
+    border: 1px solid #1c1e21; border-radius: 3px; padding: 1px 5px;
+}
+QToolButton#knobToggle:checked { background: #3d6b3d; color: #ffffff; }
+QToolButton#knobToggle:!checked { background: #4a3030; color: #c8b0b0; }
+QToolButton#knobReset:hover, QToolButton#knobToggle:hover { background: #50545a; }
+QToolButton#knobGlobal, QToolButton#knobResetAll {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #45484d, stop:1 #2f3236);
+    color: #d8dade; border: 1px solid #1c1e21;
+    border-radius: 3px; padding: 3px 10px;
+}
+QToolButton#knobGlobal:checked { background: #3d6b3d; color: #ffffff; }
+QToolButton#knobGlobal:!checked { background: #4a3030; color: #d8c0c0; }
+QToolButton#knobResetAll:hover, QToolButton#knobGlobal:hover { background: #50545a; }
 """
