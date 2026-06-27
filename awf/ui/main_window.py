@@ -201,6 +201,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self._unit_combo.setCurrentIndex(1)   # Задача #53: дефолт — cps (connect ниже, сигнал не шлём)
         self._unit_combo.currentIndexChanged.connect(self._on_unit_changed)
         tb.addWidget(self._unit_combo)
+        tb.addWidget(QtWidgets.QLabel("  Время: "))  # Задача #64: единицы оси времени 3D-сетки
+        self._tunit_combo = QtWidgets.QComboBox()
+        for unit in ("с", "мин", "ч"):
+            self._tunit_combo.addItem(unit, unit)
+        self._tunit_combo.setCurrentIndex(0)          # дефолт — секунды
+        self._tunit_combo.currentIndexChanged.connect(self._on_time_unit_changed)
+        tb.addWidget(self._tunit_combo)
         self._axes_check = QtWidgets.QCheckBox("Оси")  # подписи делений 3D (Задача 14)
         self._axes_check.setChecked(True)
         self._axes_check.toggled.connect(self._on_axes_toggled)
@@ -229,6 +236,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._z_combo.setCurrentIndex(2)      # log
         self._cmap_combo.setCurrentIndex(0)   # iZotope Insight
         self._unit_combo.setCurrentIndex(1)   # cps (Задача #53 — дефолт)
+        self._tunit_combo.setCurrentIndex(0)  # Задача #64: единицы времени — секунды (дефолт)
         self._axes_check.setChecked(True)     # оси видимы
         self._hl_check.setChecked(False)      # подсветка выкл
         # Задача #55: регулировки (усиление/гамма/отсечка/сглаживание/освещение) живут на
@@ -239,6 +247,12 @@ class MainWindow(QtWidgets.QMainWindow):
     def _on_axes_toggled(self, on: bool) -> None:
         """Переключатель подписей делений осей 3D (Задача 14)."""
         self._view3d.set_axis_labels_visible(on)
+
+    @QtCore.Slot(int)
+    def _on_time_unit_changed(self, _idx: int) -> None:
+        """Единицы оси времени 3D-сетки: с / мин / ч (Задача #64)."""
+        unit = self._tunit_combo.currentData() or "с"
+        self._view3d.set_time_unit(unit)
 
     @QtCore.Slot(int)
     def _on_unit_changed(self, _idx: int) -> None:

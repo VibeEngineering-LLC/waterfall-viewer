@@ -217,3 +217,130 @@ def test_toolbar_combo_taller_than_default(app):
     assert w.statusBar().minimumHeight() >= 28
     w.close()
     bare.deleteLater()
+
+
+# ---------- #63/#68: координатная сетка на делениях шкал + рамка в 1 клетку ----------
+def test_grid_built_with_border(app):
+    """Задача #63/#68: линии сетки на делениях обеих осей + 4 ребра рамки поля."""
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=30, nc=50))
+    lines = [it for it in v._grid_items if isinstance(it, gl.GLLinePlotItem)]
+    assert len(lines) >= 8     # деления по двум осям (≥2+2) + 4 ребра рамки
+
+
+def test_grid_cleared_when_axes_hidden(app):
+    """Задача #63: сетка снимается вместе с осями."""
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=30, nc=50))
+    v.set_axis_labels_visible(False)
+    assert len(v._grid_items) == 0
+
+
+def test_grid_border_extends_one_cell_beyond_data(app):
+    """Задача #63: рамка поля отстоит за край данных (поле обрамлено пустой клеткой)."""
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=30, nc=50))
+    xmin, xmax, ymin, ymax, _z = v._axis_extent()
+    xs, ys = [], []
+    for it in v._grid_items:
+        p = np.asarray(it.pos)
+        xs.extend(p[:, 0].tolist()); ys.extend(p[:, 1].tolist())
+    assert min(xs) < xmin - 1e-6 and max(xs) > xmax + 1e-6
+    assert min(ys) < ymin - 1e-6 and max(ys) > ymax + 1e-6
+
+
+# ---------- #65: вертикальная шкала счёта (Z) убрана ----------
+def test_vertical_count_scale_removed(app):
+    """Задача #65: ни заголовка, ни делений вертикальной (Z/счёт) шкалы."""
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=30, nc=50))
+    texts = [it.text for it in v._axis_items if isinstance(it, gl.GLTextItem)]
+    assert all("отсч" not in t for t in texts)   # нет «N, отсч.»/«N, отсч/с»
+
+
+# ---------- #66: единицы на каждой клетке ----------
+def test_axis_cell_labels_carry_units(app):
+    """Задача #66: подпись каждой клетки несёт единицу (кэВ для энергии, с для времени)."""
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=30, nc=50))
+    texts = [it.text for it in v._axis_items if isinstance(it, gl.GLTextItem)]
+    assert any("кэВ" in t for t in texts)
+    assert any(t.endswith(" с") for t in texts)
+
+
+# ---------- #64: единицы оси времени переключаются (с/мин/ч) ----------
+def test_time_unit_switch_changes_labels(app):
+    """Задача #64: переключение единицы времени пересобирает подписи в выбранной размерности."""
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=60, nc=50, t_step=60.0))   # 0..3540 с
+    v.set_time_unit("мин")
+    texts = [it.text for it in v._axis_items if isinstance(it, gl.GLTextItem)]
+    assert v._time_unit == "мин"
+    assert any(t.endswith(" мин") for t in texts)
+
+
+def test_mainwindow_time_unit_fans_out(app):
+    """Задача #64: комбобокс «Время» в тулбаре прокидывает единицу во view3d."""
+    from awf.ui.main_window import MainWindow
+    w = MainWindow()
+    w._view3d.set_spectrogram(_make_sg(ns=30, nc=50))
+    w._tunit_combo.setCurrentIndex(1)   # «мин»
+    assert w._view3d._time_unit == "мин"
+    w.close()
+
+
+# ---------- #67/#69: маркеры нуклидов на секущих плоскостях Времени ----------
+def test_plane_nuclides_drawn_on_visible_time_plane(app):
+    """Задача #67: на видимой плоскости Времени рисуются маркеры выбранных линий нуклидов."""
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=30, nc=50))
+    v.set_plane("time", 0, 0.5, True)
+    v.set_energy_lines([(10.0, "#ff0000", "Cs-137", 0.85)])
+    items = [it for it in v._plane_nuclide_items if isinstance(it, gl.GLLinePlotItem)]
+    assert len(items) == 1
+
+
+def test_plane_nuclides_absent_without_visible_plane(app):
+    """Задача #67: без видимой плоскости Времени маркеры не рисуются."""
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=30, nc=50))
+    v.set_energy_lines([(10.0, "#ff0000", "Cs-137", 0.85)])
+    assert len(v._plane_nuclide_items) == 0
+
+
+def test_plane_nuclide_height_scales_with_intensity(app):
+    """Задача #69: высота маркера ∝ интенсивности; ярчайшая линия = полная высота zmax."""
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=30, nc=50))
+    v.set_plane("time", 0, 0.5, True)
+    v.set_energy_lines([(10.0, "#ff0000", "A", 1.0), (30.0, "#00ff00", "A", 0.25)])
+    items = [it for it in v._plane_nuclide_items if isinstance(it, gl.GLLinePlotItem)]
+    assert len(items) == 2
+    zmax = v._axis_extent()[4]
+    h_hi = float(items[0].pos[1][2])   # I=1.0 -> полная высота
+    h_lo = float(items[1].pos[1][2])   # I=0.25 -> ниже
+    assert abs(h_hi - zmax) < 1e-3
+    assert h_lo < h_hi and abs(h_lo - 0.25 * zmax) < 1e-2
+
+
+def test_plane_nuclides_backward_compat_3tuple(app):
+    """Задача #67: 3-кортежи (без интенсивности) рисуются на полную высоту, без сбоя."""
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=30, nc=50))
+    v.set_plane("time", 0, 0.5, True)
+    v.set_energy_lines([(10.0, "#ff0000", "A"), (30.0, "#00ff00", "B")])
+    items = [it for it in v._plane_nuclide_items if isinstance(it, gl.GLLinePlotItem)]
+    assert len(items) == 2
+    zmax = v._axis_extent()[4]
+    assert all(abs(float(it.pos[1][2]) - zmax) < 1e-3 for it in items)
+
+
+def test_plane_nuclides_cleared_when_lines_removed(app):
+    """Задача #67: снятие выбора нуклидов убирает маркеры с плоскостей."""
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=30, nc=50))
+    v.set_plane("time", 0, 0.5, True)
+    v.set_energy_lines([(10.0, "#ff0000", "A", 0.5)])
+    assert len(v._plane_nuclide_items) == 1
+    v.set_energy_lines([])
+    assert len(v._plane_nuclide_items) == 0

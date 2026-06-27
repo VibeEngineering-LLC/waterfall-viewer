@@ -234,7 +234,9 @@ class NuclidePanel(QtWidgets.QWidget):
                 continue
             color = self._color(name)
             for ln in nuc.major_lines(min_intensity=min_int, only_used=only_used):
-                lines.append((float(ln.energy), color, name))
+                # Задача #69: 4-й элемент — интенсивность линии (вероятность испускания,
+                # доля), нужен для маркеров нуклидов на плоскостях высотой ∝ интенсивности.
+                lines.append((float(ln.energy), color, name, float(ln.intensity)))
         return lines
 
     def _recompute(self, *args) -> None:

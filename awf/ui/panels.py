@@ -205,7 +205,8 @@ class HeatmapPanel(QtWidgets.QWidget):
         if not active or energies.size == 0:
             return
         emin = float(energies.min()); emax = float(energies.max())
-        for energy, color, label in self._energy_lines:
+        for ln_t in self._energy_lines:
+            energy, color, label = ln_t[0], ln_t[1], ln_t[2]   # 3- или 4-кортеж (Задача #69)
             e = float(energy)
             if e < emin or e > emax:
                 continue   # энергия вне диапазона спектра — столбец не подсвечиваем
@@ -502,7 +503,8 @@ class SlicePanel(QtWidgets.QWidget):
         for item in self._nuclide_lines:
             self._spectrum_plot.removeItem(item)
         self._nuclide_lines = []
-        for energy, color, label in lines:
+        for ln_t in lines:
+            energy, color, label = ln_t[0], ln_t[1], ln_t[2]   # 3- или 4-кортеж (Задача #69)
             ln = pg.InfiniteLine(
                 pos=float(energy), angle=90, movable=False,
                 pen=pg.mkPen(color, width=1, style=QtCore.Qt.DashLine),

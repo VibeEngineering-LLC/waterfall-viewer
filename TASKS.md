@@ -869,6 +869,51 @@ UI-контролы (пресет нуклида `DEFAULT_WINDOWS` + два сп
   `test_toolbar_combo_taller_than_default` (комбобокс выше дефолтного, строка статуса ≥28px).
   **Полный pytest — 273 passed.**
 
+- **#63–#68 — координатная сетка 3D-водопада: рамка в клетку, единицы времени, единицы клеток,
+  убрана вертикальная шкала** (`awf/ui/view3d.py`, `awf/ui/main_window.py`,
+  `tests/test_group4_remarks.py`): пять замечаний со скриншота 3D-водопада «сверху», решённых одной
+  связной правкой координатной сетки (по уточнению через AskUserQuestion).
+  - **#63 — поля в 1 клетку вокруг данных.** Прежняя равномерная `GLGridItem` заменена координатной
+    сеткой (`_rebuild_grid`/`_draw_grid_lines`): линии на круглых делениях шкал (`_GRID_RGBA`) плюс
+    яркая рамка поля `_GRID_BORDER_RGBA` (width 1.8), отнесённая на одну клетку (`cellx`/`celly` =
+    медиана шага делений) за край данных со всех 4 сторон. Сетка живёт в отдельном списке
+    `_grid_items` (не в `_axis_items`), снимается вместе с осями (`set_axis_labels_visible`).
+  - **#68 — размер клеток привязан к шкалам.** Линии сетки стоят ровно на «круглых» делениях
+    `_time_ticks()`/`_energy_ticks()` (через `_nice_ticks`), т.е. клетка = один интервал шкалы t/E,
+    а не косметический равномерный шаг.
+  - **#64 — единицы оси времени (с/мин/ч) + значения клеток.** `_TIME_UNIT_SCALE` + `set_time_unit`;
+    круглые деления считаются уже в выбранной единице (`_time_ticks`), мировые X — обратной
+    интерполяцией. В тулбаре «Вид» добавлен комбобокс «Время» (с/мин/ч) → `_on_time_unit_changed` →
+    `view3d.set_time_unit`; дефолт «с», сбрасывается кнопкой «Сброс».
+  - **#66 — размерность каждой клетки.** Подпись каждого деления несёт единицу: время — `f"{tv:g} {unit}"`
+    (например «30 с», «5 мин»), энергия — `f"{en:g} кэВ"`; зубцы шкалы энергий (IV-R2) сохранены.
+  - **#65 — убрана вертикальная шкала.** Из `_rebuild_axis_labels` полностью удалён блок оси счёта
+    (Z): нет ни заголовка «N, отсч./отсч/с», ни числовых делений высоты.
+  Тесты: `test_grid_built_with_border`, `test_grid_cleared_when_axes_hidden`,
+  `test_grid_border_extends_one_cell_beyond_data`, `test_vertical_count_scale_removed`,
+  `test_axis_cell_labels_carry_units`, `test_time_unit_switch_changes_labels`,
+  `test_mainwindow_time_unit_fans_out`. **Полный pytest — 280 passed.**
+
+- **#67/#69 — маркеры выбранных линий нуклидов на гранях секущих плоскостей Времени**
+  (`awf/ui/view3d.py`, `awf/ui/nuclide_panel.py`, `awf/ui/panels.py`, `tests/test_group4_remarks.py`):
+  два замечания решены одной правкой (подсветка нуклидов перенесена с рельефа на грани плоскостей).
+  - **#67 — подсветка изотопов на секущих плоскостях.** На каждой ВИДИМОЙ плоскости Времени
+    (`("time", 0/1)`) для каждой выбранной гамма-линии в диапазоне энергий рисуется цветной
+    вертикальный отрезок на позиции энергии (`px = i - nt/2`, `py = энергия→мировой Y`), цвет =
+    цвет нуклида. Реализация: `_rebuild_plane_nuclides` + `_draw_plane_nuclide_lines` +
+    `_add_plane_nuclide_line`, элементы в `_plane_nuclide_items`. Перестроение — из `set_spectrogram`,
+    `set_energy_lines` и `set_plane(axis="time")` (видимость/позиция плоскости меняет маркеры).
+  - **#69 — высота ∝ интенсивности, для нескольких линий семейства.** 4-й элемент кортежа линии —
+    интенсивность (`GammaLine.intensity`, вероятность испускания) добавлен в `NuclidePanel._collect_lines`;
+    `_collect_lines` уже эмитит все major-линии нуклида, поэтому «несколько линий семейства» —
+    каждая линия = свой маркер своей высоты. Высота `h = (I / I_max) · zmax` (`_max_line_intensity`
+    нормирует по ярчайшей среди выбранных; пол 0.04·zmax, чтобы слабая линия была видна). Кортежи без
+    интенсивности (3-элементные) → полная высота `zmax` (обратная совместимость; все распаковки
+    `_energy_lines` в `view3d.py`/`panels.py` сделаны толерантными к 3-/4-кортежу).
+  Тесты: `test_plane_nuclides_drawn_on_visible_time_plane`, `test_plane_nuclides_absent_without_visible_plane`,
+  `test_plane_nuclide_height_scales_with_intensity`, `test_plane_nuclides_backward_compat_3tuple`,
+  `test_plane_nuclides_cleared_when_lines_removed`. **Полный pytest — 285 passed.**
+
 **Задача 26 — Вкладка «Аналитика»** (`awf/ui/analytics_panel.py` + `main_window.py`): `AnalyticsPanel`
 (2D-скаттер проекций, по одному `ScatterPlotItem` на кластер для легенды; каждая точка несёт индекс
 среза). Сигнал `sliceClicked(i)` → `MainWindow._on_analytics_slice` → `SlicePanel.show_time_slice` +

@@ -67,6 +67,12 @@ def _fmt_count(v: float) -> str:
 
 _ENERGY_TICK_RGBA = (0.62, 0.69, 0.45, 0.95)  # оливковые отрезки-зубцы шкалы энергий (IV-R2)
 
+# Задача #68/#63: координатная сетка — линии на делениях шкал, поле обрамлено пустой клеткой.
+_GRID_RGBA = (0.28, 0.28, 0.33, 0.55)         # тонкие линии сетки на делениях шкал
+_GRID_BORDER_RGBA = (0.46, 0.47, 0.54, 0.9)   # рамка поля (на 1 клетку шире данных) — ярче сетки
+# Задача #64: единицы оси времени и их множитель к секундам (выбор сек/мин/часы в тулбаре).
+_TIME_UNIT_SCALE = {"с": 1.0, "мин": 60.0, "ч": 3600.0}
+
 
 class Waterfall3DView(gl.GLViewWidget):
     """3D-поверхность спектрограммы. Наследует GLViewWidget => вращение ЛКМ, зум колесом,
@@ -114,9 +120,14 @@ class Waterfall3DView(gl.GLViewWidget):
         self._light = 0.0             # интенсивность рельефного затенения 0..1 (Задача #46)
         self._max_time = 400          # параметры LOD-прорежки последнего рендера
         self._max_chan = 512
-        self._grid = gl.GLGridItem()  # опорная сетка под поверхностью
+        # Задача #68: прежняя равномерная GLGridItem заменена координатной сеткой на делениях
+        # шкал (_rebuild_grid). Объект оставлен скрытым, чтобы не плодить ссылок; не рисуется.
+        self._grid = gl.GLGridItem()
         self._grid.setColor(pg.mkColor(60, 60, 70))
+        self._grid.setVisible(False)
         self.addItem(self._grid)
+        self._grid_items = []         # линии координатной сетки/рамки (Задача #63/#68)
+        self._time_unit = "с"         # единицы оси времени: с | мин | ч (Задача #64)
 
         # --- геометрия последнего рендера (для позиционирования плоскостей) ---
         self._nt = 0
@@ -137,6 +148,7 @@ class Waterfall3DView(gl.GLViewWidget):
         # --- лучи энергий нуклидов (Задача 15) ---
         self._energy_lines = []        # list[(energy_keV, color_str, label)]
         self._ray_items = []           # текущие GLLinePlotItem лучей
+        self._plane_nuclide_items = [] # маркеры нуклидов на гранях плоскостей Времени (Задача #67)
 
         # --- подсветка выбранных пиков (Задача 18) ---
         self._highlight_on = False     # режим подсветки: база приглушена, выбранные столбцы ярки
@@ -235,15 +247,15 @@ class Waterfall3DView(gl.GLViewWidget):
         self._t_centers = np.asarray(t_centers, dtype=np.float64)
         self._ch_centers = np.asarray(ch_centers, dtype=np.float64)
         self._rebuild_surface()
-        # 6) сетку — под поверхностью, размер по большей стороне; камера — отдалить под размер
+        # 6) координатная сетка на делениях шкал (Задача #63/#68); камера — отдалить под размер
         span = float(max(nt, nc, 10))
-        self._grid.setSize(x=span * 1.2, y=span * 1.2)
-        self._grid.setSpacing(x=max(1.0, span / 10.0), y=max(1.0, span / 10.0))
         self.setCameraPosition(distance=span * 1.6)
-        # 7) переразместить активные секущие плоскости/подписи/лучи
+        self._rebuild_grid()
+        # 7) переразместить активные секущие плоскости/подписи/лучи/маркеры нуклидов
         self._refresh_all_planes()
         self._rebuild_axis_labels()
         self._rebuild_energy_rays()
+        self._rebuild_plane_nuclides()
 
     def _clip_windows(self):
         """Окна обрезки поверхности по осям; активны ТОЛЬКО когда видимы ОБЕ плоскости оси
@@ -400,13 +412,82 @@ class Waterfall3DView(gl.GLViewWidget):
         self.addItem(item)
         self._axis_items.append(item)
 
-    def set_axis_labels_visible(self, visible: bool) -> None:
-        """Показать/скрыть подписи делений осей (Задача 14)."""
-        self._axis_labels_visible = bool(visible)
+    def _time_ticks(self):
+        """Деления оси времени в текущих единицах (Задача #64): (disp_values, world_x, unit).
+        Круглые деления считаем уже в выбранной единице (с/мин/ч) -> ровные значения клеток."""
+        tc = self._t_centers
+        if tc is None or len(tc) < 2 or tc[-1] <= tc[0] or self._nt == 0:
+            return (np.array([]), np.array([]), self._time_unit)
+        scale = _TIME_UNIT_SCALE.get(self._time_unit, 1.0)
+        idx = np.arange(self._nt, dtype=float)
+        dv = self._nice_ticks(float(tc[0]) / scale, float(tc[-1]) / scale)
+        wx = np.interp(dv * scale, tc, idx) - self._nt / 2.0
+        return (dv, wx, self._time_unit)
+
+    def _energy_ticks(self):
+        """Деления оси энергии (кэВ): (values, world_y) в центрированных мировых координатах."""
+        cc = self._ch_centers
+        if cc is None or len(cc) < 2 or cc[-1] <= cc[0] or self._nc == 0:
+            return (np.array([]), np.array([]))
+        idx = np.arange(self._nc, dtype=float)
+        ev = self._nice_ticks(float(cc[0]), float(cc[-1]))
+        wy = np.interp(ev, cc, idx) - self._nc / 2.0
+        return (ev, wy)
+
+    def _add_grid_line(self, p0, p1, color, width=1.0) -> None:
+        """Линия координатной сетки/рамки (Задача #63/#68); хранится в _grid_items."""
+        pts = np.array([p0, p1], dtype=np.float32)
+        item = gl.GLLinePlotItem(pos=pts, color=color, width=width,
+                                 mode="line_strip", antialias=True)
+        self.addItem(item)
+        self._grid_items.append(item)
+
+    def set_time_unit(self, unit: str) -> None:
+        """Единицы оси времени: 'с' | 'мин' | 'ч' (Задача #64). Перестроить сетку и подписи."""
+        if unit not in _TIME_UNIT_SCALE:
+            return
+        self._time_unit = unit
+        self._rebuild_grid()
         self._rebuild_axis_labels()
 
+    def _rebuild_grid(self) -> None:
+        """Координатная сетка (Задача #63/#68): линии на круглых делениях шкал t/E; поле
+        обрамлено одной пустой клеткой со всех сторон, рамка поля ярче линий сетки."""
+        for it in self._grid_items:
+            self.removeItem(it)
+        self._grid_items = []
+        if not self._axis_labels_visible or self._z_surface is None:
+            return
+        if self._nt == 0 or self._nc == 0:
+            return
+        xmin, xmax, ymin, ymax, _zmax = self._axis_extent()
+        _dv, wx, _u = self._time_ticks()
+        _ev, wy = self._energy_ticks()
+        cellx = float(np.median(np.diff(wx))) if wx.size >= 2 else (xmax - xmin) / 5.0
+        celly = float(np.median(np.diff(wy))) if wy.size >= 2 else (ymax - ymin) / 5.0
+        gx0, gx1 = xmin - cellx, xmax + cellx
+        gy0, gy1 = ymin - celly, ymax + celly
+        self._draw_grid_lines(wx, wy, gx0, gx1, gy0, gy1)
+
+    def _draw_grid_lines(self, wx, wy, gx0, gx1, gy0, gy1) -> None:
+        """Линии сетки на делениях шкал + яркая рамка поля на 1 клетку шире данных (Задача #63)."""
+        for x in np.asarray(wx, float):
+            self._add_grid_line((x, gy0, 0.0), (x, gy1, 0.0), _GRID_RGBA)
+        for y in np.asarray(wy, float):
+            self._add_grid_line((gx0, y, 0.0), (gx1, y, 0.0), _GRID_RGBA)
+        corners = [(gx0, gy0), (gx1, gy0), (gx1, gy1), (gx0, gy1), (gx0, gy0)]
+        for (x0, y0), (x1, y1) in zip(corners[:-1], corners[1:]):
+            self._add_grid_line((x0, y0, 0.0), (x1, y1, 0.0), _GRID_BORDER_RGBA, width=1.8)
+
+    def set_axis_labels_visible(self, visible: bool) -> None:
+        """Показать/скрыть подписи делений осей и координатную сетку (Задача 14/#63)."""
+        self._axis_labels_visible = bool(visible)
+        self._rebuild_axis_labels()
+        self._rebuild_grid()
+
     def _rebuild_axis_labels(self) -> None:
-        """Перестроить подписи делений трёх осей под текущую геометрию/Z-шкалу."""
+        """Подписи делений осей времени и энергии (Задача #64/#66): значение + единица на каждой
+        клетке. Вертикальную шкалу счёта (Z) не строим (Задача #65). Зубцы шкалы энергий (IV-R2)."""
         self._clear_axis_items()
         if not self._axis_labels_visible or self._z_surface is None:
             return
@@ -414,43 +495,18 @@ class Waterfall3DView(gl.GLViewWidget):
         if nt == 0 or nc == 0:
             return
         xmin, xmax, ymin, ymax, zmax = self._axis_extent()
-        span = float(max(nt, nc, 10))
-        pad = 0.05 * span
+        pad = 0.05 * float(max(nt, nc, 10))
         font = QtGui.QFont("Helvetica", 10)
-        title_font = QtGui.QFont("Helvetica", 11, QtGui.QFont.Bold)
-        # ось времени (X) — деления в секундах вдоль переднего ребра Y=ymin, Z=0
-        tc = self._t_centers
-        if tc is not None and len(tc) >= 2 and tc[-1] > tc[0]:
-            idx = np.arange(nt, dtype=float)
-            for tv in self._nice_ticks(float(tc[0]), float(tc[-1])):
-                wx = float(np.interp(tv, tc, idx)) - nt / 2.0
-                self._add_text((wx, ymin - pad, 0.0), f"{tv:.0f}", font)
-            self._add_text((xmax + pad, ymin - pad, 0.0), "t, с", title_font)
-        # ось энергии (Y) — деления в кэВ на ДАЛЬНЕМ по времени ребре X=xmax, с вертикальными
-        # отрезками-зубцами вверх по Z (как шкала частот в iZotope Insight) — Замечание IV-R2
-        cc = self._ch_centers
-        if cc is not None and len(cc) >= 2 and cc[-1] > cc[0]:
-            idx = np.arange(nc, dtype=float)
-            tooth = 0.10 * zmax if zmax > 0 else 1.0
-            for ev in self._nice_ticks(float(cc[0]), float(cc[-1])):
-                wy = float(np.interp(ev, cc, idx)) - nc / 2.0
-                self._add_text((xmax + pad, wy, 0.0), f"{ev:.0f}", font)
-                self._add_line((xmax, wy, 0.0), (xmax, wy, tooth), _ENERGY_TICK_RGBA)
-            self._add_text((xmax + pad, ymax + pad, 0.0), "E, кэВ", title_font)
-        # ось счёта (Z) — деления реальных отсчётов вдоль вертикали угла (xmin,ymin);
-        # высоту берём эмпирически из монотонной пары (counts->height), учитывает Z-шкалу/контраст
-        if self._z_counts is not None and self._z_counts.size and zmax > 0:
-            cflat = np.asarray(self._z_counts, dtype=float).ravel()
-            hflat = np.asarray(self._z_surface, dtype=float).ravel()
-            order = np.argsort(cflat)
-            cs = cflat[order]; hs = hflat[order]
-            cmax = float(cs[-1])
-            if cmax > 0:
-                ztitle = "N, отсч/с" if self._unit == "cps" else "N, отсч."
-                for cv in self._nice_ticks(0.0, cmax):
-                    wz = float(np.interp(cv, cs, hs))
-                    self._add_text((xmin - pad, ymin - pad, wz), _fmt_count(cv), font)
-                self._add_text((xmin - pad, ymin - pad, zmax + pad), ztitle, title_font)
+        # ось времени (X): значение в выбранной единице + единица на каждом делении (Задача #64/#66)
+        dv, wx, unit = self._time_ticks()
+        for tv, x in zip(dv, wx):
+            self._add_text((float(x), ymin - pad, 0.0), f"{tv:g} {unit}", font)
+        # ось энергии (Y): значение в кэВ + единица; вертикальные зубцы вверх по Z (IV-R2/#66)
+        ev, wy = self._energy_ticks()
+        tooth = 0.10 * zmax if zmax > 0 else 1.0
+        for en, y in zip(ev, wy):
+            self._add_text((xmax + pad, float(y), 0.0), f"{en:g} кэВ", font)
+            self._add_line((xmax, float(y), 0.0), (xmax, float(y), tooth), _ENERGY_TICK_RGBA)
 
     # ---------- вертикальные лучи энергий (Задача 15) ----------
     def set_energy_lines(self, lines) -> None:
@@ -462,6 +518,7 @@ class Waterfall3DView(gl.GLViewWidget):
             self.set_spectrogram(self._sg, self._max_time, self._max_chan)
         else:
             self._rebuild_energy_rays()
+            self._rebuild_plane_nuclides()   # Задача #67/#69: маркеры на плоскостях Времени
 
     def _clear_ray_items(self) -> None:
         for it in self._ray_items:
@@ -482,7 +539,8 @@ class Waterfall3DView(gl.GLViewWidget):
         emin = float(cc[0]); emax = float(cc[-1])
         idx = np.arange(nc, dtype=float)
         stub = 0.05 * zmax if zmax > 0 else 1.0
-        for energy, color, _label in self._energy_lines:
+        for ln in self._energy_lines:
+            energy, color = ln[0], ln[1]   # 3- или 4-кортеж (Задача #69 добавил интенсивность)
             e = float(energy)
             if e < emin or e > emax:
                 continue   # энергия вне диапазона спектра — луч не рисуем
@@ -502,6 +560,71 @@ class Waterfall3DView(gl.GLViewWidget):
             self.addItem(ray)
             self._ray_items.append(ray)
 
+    def _clear_plane_nuclides(self) -> None:
+        for it in self._plane_nuclide_items:
+            self.removeItem(it)
+        self._plane_nuclide_items = []
+
+    def _rebuild_plane_nuclides(self) -> None:
+        """Маркеры выбранных гамма-линий нуклидов на гранях видимых плоскостей Времени
+        (Задача #67): цветной вертикальный отрезок на позиции энергии каждой линии. Высота
+        ∝ интенсивности (Задача #69) — ярчайшая линия = полная высота zmax, остальные ниже,
+        так на грани читается соотношение линий семейства."""
+        self._clear_plane_nuclides()
+        if self._z_surface is None or not self._energy_lines:
+            return
+        cc, nc = self._ch_centers, self._nc
+        if cc is None or len(cc) < 2 or nc == 0:
+            return
+        _xn, _xx, _yn, _yx, zmax = self._axis_extent()
+        if zmax <= 0:
+            return
+        emin, emax = float(cc[0]), float(cc[-1])
+        idx = np.arange(nc, dtype=float)
+        imax = self._max_line_intensity()
+        for slot in (0, 1):
+            entry = self._planes.get(("time", slot))
+            if entry is None or not entry["visible"]:
+                continue
+            i = self._frac_to_index(self._t_centers, entry["frac"])
+            px = float(i) - self._nt / 2.0
+            self._draw_plane_nuclide_lines(px, cc, idx, emin, emax, zmax, imax)
+
+    def _max_line_intensity(self) -> float:
+        """Максимальная интенсивность среди выбранных линий (нормировка высот #69).
+        Линии без интенсивности (3-кортежи) игнорируются; нет данных -> 0.0."""
+        vals = [float(ln[3]) for ln in self._energy_lines
+                if len(ln) > 3 and ln[3] is not None and float(ln[3]) > 0]
+        return max(vals) if vals else 0.0
+
+    def _draw_plane_nuclide_lines(self, px, cc, idx, emin, emax, zmax, imax) -> None:
+        """Вертикальные маркеры выбранных линий на грани плоскости Времени (x=px): py —
+        энергия->мировой Y; высота h ∝ интенсивности (доля imax), полная при её отсутствии."""
+        nc = self._nc
+        for ln in self._energy_lines:
+            e = float(ln[0])
+            if e < emin or e > emax:
+                continue
+            py = float(np.interp(e, cc, idx)) - nc / 2.0
+            self._add_plane_nuclide_line(px, py, ln, zmax, imax)
+
+    def _add_plane_nuclide_line(self, px, py, ln, zmax, imax) -> None:
+        """Один маркер на грани: высота ∝ интенсивности (#69) либо полная (#67, 3-кортеж)."""
+        inten = float(ln[3]) if len(ln) > 3 and ln[3] is not None else None
+        if inten is not None and imax > 0:
+            h = max(0.04, inten / imax) * zmax    # доля высоты по интенсивности (#69)
+        else:
+            h = zmax                              # нет интенсивности -> полная высота (#67)
+        try:
+            rgba = pg.mkColor(ln[1]).getRgbF()
+        except Exception:
+            rgba = (1.0, 1.0, 1.0, 1.0)
+        pos = np.array([[px, py, 0.0], [px, py, h]], dtype=np.float32)
+        item = gl.GLLinePlotItem(pos=pos, color=rgba, width=3.0,
+                                 mode="line_strip", antialias=True)
+        self.addItem(item)
+        self._plane_nuclide_items.append(item)
+
     # ---------- подсветка выбранных пиков (Задача 18) ----------
     def _highlight_mask(self, centers, nc: int):
         """Булева маска (nc,) подсвечиваемых столбцов-каналов из выбранных энергий нуклидов.
@@ -512,7 +635,8 @@ class Waterfall3DView(gl.GLViewWidget):
         emin = float(centers[0]); emax = float(centers[-1])
         idx = np.arange(nc, dtype=float)
         hw = self._hl_halfwidth
-        for energy, _color, _label in self._energy_lines:
+        for ln in self._energy_lines:
+            energy = ln[0]   # 3- или 4-кортеж (Задача #69)
             e = float(energy)
             if e < emin or e > emax:
                 continue
@@ -594,6 +718,8 @@ class Waterfall3DView(gl.GLViewWidget):
         self._apply_plane(axis, 0)
         self._apply_plane(axis, 1)
         self._maybe_reclip()
+        if axis == "time":
+            self._rebuild_plane_nuclides()   # Задача #67: маркеры зависят от видимых плоскостей Времени
 
     def _refresh_all_planes(self) -> None:
         for axis in PLANE_AXES:
