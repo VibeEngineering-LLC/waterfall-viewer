@@ -163,11 +163,13 @@ class KnobRow(QtWidgets.QWidget):
 
         self._chk = QtWidgets.QToolButton(self)         # индивидуальный вкл/выкл
         self._chk.setCheckable(True)
-        self._chk.setChecked(True)
-        self._chk.setText("вкл")
+        self._chk.setChecked(False)                     # Задача #60: по умолчанию выкл
+        self._chk.setText("выкл")
         self._chk.setObjectName("knobToggle")
         self._chk.setToolTip("Включить/выключить эту регулировку")
         self._chk.toggled.connect(self._on_toggle)
+        self.knob.setEnabled(False)                     # #60: ручка/значение погашены под «выкл»
+        self._readout.setEnabled(False)
 
         self._reset = QtWidgets.QToolButton(self)       # сброс к дефолту
         self._reset.setText("⟲")
@@ -269,8 +271,8 @@ class AdjustPanel(QtWidgets.QWidget):
 
         self._global = QtWidgets.QToolButton(self)      # общий выключатель всех регулировок
         self._global.setCheckable(True)
-        self._global.setChecked(True)
-        self._global.setText("Регулировки: ВКЛ")
+        self._global.setChecked(False)                  # Задача #60: по умолчанию выкл
+        self._global.setText("Регулировки: ВЫКЛ")
         self._global.setObjectName("knobGlobal")
         self._global.setToolTip("Выключить все регулировки — отображение как без них (bypass)")
         self._global.toggled.connect(self._on_global)
@@ -308,17 +310,17 @@ class AdjustPanel(QtWidgets.QWidget):
         return {k: r.effective_value() for k, r in self.rows.items()}
 
     def reset_all(self):
-        """Сброс всей панели к умолчанию: значения = дефолты, все ряды и общий — ВКЛ.
-        Сигналы рядов глушим, чтобы пересчёт отображения сработал один раз в конце."""
+        """Сброс всей панели к умолчанию (#60): значения = дефолты, все ряды и общий — ВЫКЛ
+        (как стартовое состояние). Сигналы глушим — пересчёт отображения один раз в конце."""
         for r in self.rows.values():
             r.blockSignals(True)
-            r.set_on(True)
+            r.set_on(False)
             r.reset()
             r.blockSignals(False)
         self._global.blockSignals(True)
-        self._global.setChecked(True)
-        self._global.setText("Регулировки: ВКЛ")
+        self._global.setChecked(False)
+        self._global.setText("Регулировки: ВЫКЛ")
         self._global.blockSignals(False)
         for r in self.rows.values():
-            r.set_global_enabled(True)
+            r.set_global_enabled(False)
         self.changed.emit()

@@ -117,3 +117,13 @@ def test_section_controls_default_all_off(app):
     sc._rows[("energy", 0)]["check"].setChecked(True)  # вкл слот → движок оживает
     assert sc._rows[("energy", 0)]["slider"].isEnabled() is True
     assert sc._rows[("energy", 0)]["check"].text() == "вкл"
+
+
+def test_section_default_slider_positions(app):
+    """Задача #60: по умолчанию слот #1 — в минимуме (frac 0), слот #2 — в максимуме (frac 1)."""
+    sc = SectionControls()
+    for axis in PLANE_AXES:
+        assert sc._rows[(axis, 0)]["slider"].value() == 0
+        assert sc._rows[(axis, 1)]["slider"].value() == sc._SLIDER_MAX
+        assert sc._frac(axis, 0) == pytest.approx(0.0)
+        assert sc._frac(axis, 1) == pytest.approx(1.0)

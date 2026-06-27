@@ -715,7 +715,7 @@ class SectionControls(QtWidgets.QWidget):
         title.setObjectName("knobTitle")
         title.setFixedWidth(28)
         slider = Knob(0, self._SLIDER_MAX,
-                      int(self._SLIDER_MAX * (0.33 if slot == 0 else 0.66)))
+                      0 if slot == 0 else self._SLIDER_MAX)   # #60: #1 — мин, #2 — макс
         slider.setEnabled(False)                 # по умолчанию слот выкл (#59)
         vlabel = QtWidgets.QLabel("—")
         vlabel.setObjectName("knobValue")
