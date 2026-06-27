@@ -113,9 +113,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._nuclides.linesChanged.connect(self._heatmap.set_energy_lines)
 
         # Задача #55: панель регулировок отображения (рукоятки) в отдельном доке.
-        # 5 ручек (усиление/гамма/отсечка/сглаживание/освещение) с индивидуальными вкл/выкл
-        # и сбросом + общий выключатель (bypass к дефолтам). Старые имена _*_slider оставлены
-        # алиасами на сами ручки (Knob имеет QSlider-совместимый API) — внешний код/тесты целы.
+        # 6 ручек (усиление/гамма/отсечка/сглаживание/освещение + «Окно t» — ширина выборки по
+        # времени, #56) с индивидуальными вкл/выкл и сбросом + общий выключатель (bypass к
+        # дефолтам). Старые имена _*_slider оставлены алиасами на сами ручки (Knob имеет
+        # QSlider-совместимый API) — внешний код/тесты целы.
         self._adjust = AdjustPanel()
         adock = QtWidgets.QDockWidget("Регулировки отображения", self)
         adock.setObjectName("dock_adjust")          # Задача #40: имя нужно saveState/restoreState
@@ -297,8 +298,19 @@ class MainWindow(QtWidgets.QMainWindow):
             self._slices.set_smoothing(r)
         if v["light"] != last["light"]:
             self._view3d.set_light_intensity(v["light"] / 100.0)
+        if v["tbin"] != last["tbin"]:                       # Задача #56: ширина выборки по t
+            self._view3d.set_time_bins(self._tbin_to_bins(v["tbin"]))
         self._adj_last = v
         self._sections.emit_all()  # 3D-поверхность могла пересоздаться — переразместить плоскости
+
+    @staticmethod
+    def _tbin_to_bins(value: int) -> int:
+        """Задача #56: значение ручки «Окно t» (v/100 = относит. ширина выборки по времени)
+        -> число временны́х бинов max_time = round(400/ширина), клип [16..1600]. Шире выборка
+        -> меньше бинов («сжатие» водопада); у́же -> больше («растяжение»). Дефолт 100
+        (ширина ×1.00) -> 400 = стандартный вид (bypass)."""
+        w = max(1, int(value)) / 100.0
+        return max(16, min(1600, int(round(400.0 / w))))
 
     @QtCore.Slot()
     def _on_z_scale_changed(self) -> None:

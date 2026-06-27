@@ -61,7 +61,7 @@ def test_knobrow_bypass_preserves_position(app):
 
 # ---------- AdjustPanel: глобальный bypass и сброс ----------
 
-_DEFAULTS = {"gain": 100, "gamma": 100, "clip": 100, "smooth": 0, "light": 0}
+_DEFAULTS = {"gain": 100, "gamma": 100, "clip": 100, "smooth": 0, "light": 0, "tbin": 100}
 
 
 def test_adjustpanel_global_bypass(app):
@@ -124,4 +124,32 @@ def test_mainwindow_global_off_reverts_all(app):
     w._adjust._global.setChecked(False)          # общий выкл → всё к дефолтам
     assert w._view3d._gain == pytest.approx(1.0)
     assert w._view3d._light == pytest.approx(0.0)
+    w.close()
+
+
+def test_mainwindow_tbin_changes_time_bins(app):
+    """Задача #56: ручка «Окно t» меняет число временны́х бинов (max_time) 3D-водопада;
+    bypass ряда → стандартная ширина (max_time=400), позиция ручки сохраняется."""
+    w = MainWindow()
+    w._view3d.set_spectrogram(_make_sg(ns=120, nc=30))   # ns>бинов — LOD реально режет
+    assert w._view3d._max_time == 400                    # дефолт — стандартная ширина
+    w._adjust.rows["tbin"].setValue(200)                 # ширина ×2 → меньше бинов («сжатие»)
+    assert w._view3d._max_time == 200
+    w._adjust.rows["tbin"].setValue(50)                  # ширина ×0.5 → больше бинов («растяжение»)
+    assert w._view3d._max_time == 800
+    w._adjust.rows["tbin"].set_on(False)                 # bypass ряда → стандартный max_time
+    assert w._view3d._max_time == 400
+    assert w._adjust.rows["tbin"].value() == 50          # позиция ручки сохранена
+    w.close()
+
+
+def test_mainwindow_tbin_persists_across_load(app):
+    """Задача #56: ширина выборки переживает загрузку нового файла — аргументный
+    set_spectrogram(sg) не сбрасывает max_time (None-дефолт сохраняет текущее)."""
+    w = MainWindow()
+    w._view3d.set_spectrogram(_make_sg(ns=120))
+    w._adjust.rows["tbin"].setValue(200)                 # max_time=200
+    assert w._view3d._max_time == 200
+    w._view3d.set_spectrogram(_make_sg(ns=140))          # новый файл, аргументный вызов как в _on_loaded
+    assert w._view3d._max_time == 200                    # ширина выборки сохранилась
     w.close()

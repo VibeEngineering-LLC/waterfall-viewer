@@ -168,12 +168,19 @@ class Waterfall3DView(gl.GLViewWidget):
                     "mesh": mesh, "border": border, "line": line,
                     "frac": 0.5, "visible": False}
 
-    def set_spectrogram(self, sg, max_time: int = 400, max_chan: int = 512) -> None:
+    def set_spectrogram(self, sg, max_time: int | None = None,
+                        max_chan: int | None = None) -> None:
         """Прорядить через sg.downsample(method='max') и построить цветную поверхность.
         Геометрия в индексном пространстве (X=индекс времени, Y=индекс канала), высота Z и цвет —
         по counts. Реальные единицы (с / кэВ) подписываем делениями осей (Задача 14)."""
         self._sg = sg
-        self._max_time, self._max_chan = max_time, max_chan
+        # Задача #56: None -> сохранить текущие max_time/max_chan (ширина выборки по времени из
+        # рукоятки переживает загрузку файла, как _gain/_smooth/_light); число -> установить новое.
+        if max_time is not None:
+            self._max_time = int(max_time)
+        if max_chan is not None:
+            self._max_chan = int(max_chan)
+        max_time, max_chan = self._max_time, self._max_chan
         # 1) LOD-прорежка; t_centers/ch_centers — реальные с/кэВ для центров бинов. В режиме cps
         #    (Задача #44) прорежаем матрицу скорости (counts/live_time по срезу), а не сами отсчёты.
         src = sg.counts_in_unit(self._unit)
@@ -298,6 +305,14 @@ class Waterfall3DView(gl.GLViewWidget):
     def set_smoothing(self, radius: int) -> None:
         """Радиус скользящего среднего по энергии (Замечание IV-R4); ре-рендер из той же sg."""
         self._smooth = max(0, int(radius))
+        if self._sg is not None:
+            self.set_spectrogram(self._sg, self._max_time, self._max_chan)
+
+    def set_time_bins(self, max_time: int) -> None:
+        """Задача #56: ширина выборки по времени = число временны́х бинов LOD-прорежки.
+        Больше бинов (у́же выборка) — детальнее/«растянуто» по времени; меньше (шире выборка) —
+        грубее/«сжато». Ре-рендер из той же sg; max_chan не трогаем."""
+        self._max_time = max(1, int(max_time))
         if self._sg is not None:
             self.set_spectrogram(self._sg, self._max_time, self._max_chan)
 
