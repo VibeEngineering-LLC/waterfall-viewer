@@ -13,12 +13,24 @@ DEFAULT_CLIP = (0.0, 100.0)   # перцентили (нижний, верхни
 
 def _base_transform(a: np.ndarray, mode: str) -> np.ndarray:
     """Базовая Z-шкала контраста: linear -> как есть; sqrt -> √(max(x,0));
-    log -> log10(1+max(x,0)). Любой неизвестный режим трактуется как linear."""
+    log -> истинный log10(max(x,floor)/floor) с авто-порогом по данным (Задача #54).
+    Любой неизвестный режим трактуется как linear."""
     nn = np.maximum(a, 0.0)
     if mode == "sqrt":
         return np.sqrt(nn)
     if mode == "log":
-        return np.log10(1.0 + nn)
+        # Задача #54: истинный log10 с авто-порогом floor = 1-й перцентиль НЕНУЛЕВЫХ значений.
+        # Масштаб-инвариантно: floor масштабируется вместе с данными, поэтому отношение x/floor
+        # (а значит и форма рельефа) одинаково для counts и cps. Прежний log10(1+x) был
+        # калиброван под целые counts (x≥1); для cps<1 он вырождался в линейный (≈0.4343·x),
+        # теряя логарифмический контраст и делая форму зависимой от единиц.
+        pos = nn[nn > 0.0]
+        if pos.size == 0:
+            return nn
+        floor = float(np.percentile(pos, 1.0))
+        if not (floor > 0.0):
+            floor = float(pos.min())
+        return np.log10(np.maximum(nn, floor) / floor)
     return nn
 
 
