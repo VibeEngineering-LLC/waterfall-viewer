@@ -73,6 +73,19 @@ def test_plane_markers_cleared_on_empty_and_replaced(app):
     assert len(v._plane_nuclide_items) == 1
 
 
+def test_plane_marker_depth_tested_not_additive(app):
+    # Задача #95: маркеры изотопов рисуются с depth-тестом (glOptions='opaque'), чтобы рельеф
+    # перекрывал их сзади. Дефолтный 'additive' у GLLinePlotItem (depth-тест выкл) просвечивал.
+    from OpenGL.GL import GL_DEPTH_TEST
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(), max_time=400, max_chan=512)
+    v.set_plane("time", 0, 0.5, True)
+    v.set_energy_lines([(30.0, "#ff0000", "A")])
+    item = v._plane_nuclide_items[0]
+    opts = item._GLGraphicsItem__glOpts
+    assert opts.get(GL_DEPTH_TEST) is True   # перекрывается рельефом, не «additive»-поверх
+
+
 def test_plane_markers_rebuilt_on_zscale_change(app):
     v = Waterfall3DView()
     v.set_spectrogram(_make_sg(), max_time=400, max_chan=512)

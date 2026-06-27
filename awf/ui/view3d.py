@@ -708,8 +708,12 @@ class Waterfall3DView(gl.GLViewWidget):
         except Exception:
             rgba = (1.0, 1.0, 1.0, 1.0)
         pos = np.array([[px, py, 0.0], [px, py, h]], dtype=np.float32)
+        # Задача #95: glOptions='opaque' => depth-тест ВКЛ, рельеф перекрывает маркеры, оказавшиеся
+        # позади массива. Дефолт GLLinePlotItem — 'additive' (depth-тест ВЫКЛ) => маркеры просвечивали
+        # сквозь рельеф. 'opaque' даёт корректное перекрытие при любом порядке отрисовки (blend не нужен,
+        # потому antialias=False — сглаживание линии без blend всё равно не применяется).
         item = gl.GLLinePlotItem(pos=pos, color=rgba, width=3.0,
-                                 mode="line_strip", antialias=True)
+                                 mode="line_strip", antialias=False, glOptions="opaque")
         self.addItem(item)
         self._plane_nuclide_items.append(item)
 
