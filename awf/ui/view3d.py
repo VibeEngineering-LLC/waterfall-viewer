@@ -106,7 +106,7 @@ class Waterfall3DView(gl.GLViewWidget):
         self._clip = DEFAULT_CLIP
         self._cmap_name = "insight"   # палитра рельефа/цвета (Задача 17)
         self._smooth = 0              # радиус усреднения спектра по энергии (Замечание IV-R4)
-        self._unit = "counts"         # единицы рельефа/цвета: counts | cps (Задача #44)
+        self._unit = "cps"            # единицы рельефа/цвета: counts | cps (Задача #44; дефолт cps — #53)
         self._light = 0.0             # интенсивность рельефного затенения 0..1 (Задача #46)
         self._max_time = 400          # параметры LOD-прорежки последнего рендера
         self._max_chan = 512

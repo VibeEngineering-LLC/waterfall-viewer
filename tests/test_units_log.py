@@ -162,6 +162,33 @@ def test_view3d_profile_matches_window_spectrum(app):
     assert prof[70] > prof[20]                                   # устойчивый пик выше транзиента
 
 
+def _profile_cps_check(sg, counts, live):
+    v = Waterfall3DView()
+    v.set_spectrogram(sg, max_time=400, max_chan=512)   # nc<512, ns<400 -> без прорежки
+    v.set_plane("time", 0, 0.0, True)
+    prof = v._planes[("time", 0)]["line"].pos[:, 2]
+    assert int(np.argmax(counts.sum(axis=0))) == 30                    # по counts выше пик B
+    assert int(np.argmax((counts / live[:, None]).sum(axis=0))) == 10  # по cps выше пик A
+    assert int(np.argmax(prof)) == 10                                  # профиль идёт за cps
+
+
+def test_view3d_profile_is_cps_not_counts(app):
+    # Задача #53: голубая линия = сумма CPS на срезе (counts/live_time), не сумма counts.
+    # Дефолт-единицы рельефа теперь cps -> два пика с разным live_time меняют местами «кто выше».
+    ns, nc = 20, 50
+    counts = np.zeros((ns, nc), dtype=np.int64)
+    live = np.empty(ns, dtype=np.float64)
+    live[: ns // 2] = 0.5            # «быстрые» срезы -> высокий cps
+    live[ns // 2:] = 4.0            # «медленные» срезы -> низкий cps
+    counts[: ns // 2, 10] = 100     # пик A: counts-Σ=1000, cps-Σ=2000
+    counts[ns // 2:, 30] = 200      # пик B: counts-Σ=2000, cps-Σ=500
+    cal = Calibration(coeffs=[0.0, 1.0])
+    t = np.arange(ns, dtype=np.float64)
+    sg = Spectrogram(counts=counts, calibration=cal, time_offsets_s=t,
+                     real_time_s=live.copy(), live_time_s=live.copy())
+    _profile_cps_check(sg, counts, live)
+
+
 # ---------- #43: лог/лин шкала спектра ----------
 
 def test_spectrum_log_toggle(app):
@@ -239,6 +266,7 @@ def test_heatmap_cps_halves_small_map(app):
     sg = _make_sg(ns=20, nc=30, t_step=2.0)         # мельче cap -> без прорежения
     h = HeatmapPanel()
     h.set_spectrogram(sg)
+    h.set_unit_mode("counts")                       # Задача #53: дефолт cps — берём counts-базу
     cnt_max = float(h._disp_counts.max())
     h.set_unit_mode("cps")
     assert h._unit == "cps"
@@ -267,7 +295,12 @@ def test_mainwindow_unit_combo_fans_out(app):
     w._slices.set_spectrogram(sg)
     assert w._unit_combo.itemData(0) == "counts"
     assert w._unit_combo.itemData(1) == "cps"
-    w._unit_combo.setCurrentIndex(1)                # -> cps веером на все панели
+    assert w._unit_combo.currentIndex() == 1        # Задача #53: дефолт — cps
+    w._unit_combo.setCurrentIndex(0)                # -> counts веером на все панели
+    assert w._view3d._unit == "counts"
+    assert w._heatmap._unit == "counts"
+    assert w._slices._unit == "counts"
+    w._unit_combo.setCurrentIndex(1)                # -> cps веером обратно
     assert w._view3d._unit == "cps"
     assert w._heatmap._unit == "cps"
     assert w._slices._unit == "cps"
@@ -337,7 +370,7 @@ def test_mainwindow_light_slider(app):
 def _assert_display_defaults(w):
     assert w._z_combo.currentIndex() == 2
     assert w._cmap_combo.currentIndex() == 0
-    assert w._unit_combo.currentIndex() == 0
+    assert w._unit_combo.currentIndex() == 1     # Задача #53: дефолт — cps
     assert w._axes_check.isChecked() is True
     assert w._hl_check.isChecked() is False
     assert w._gain_slider.value() == 100
@@ -345,7 +378,7 @@ def _assert_display_defaults(w):
     assert w._clip_slider.value() == 100
     assert w._smooth_slider.value() == 0
     assert w._light_slider.value() == 0
-    assert w._view3d._unit == "counts"
+    assert w._view3d._unit == "cps"              # Задача #53: дефолт — cps
     assert w._view3d._light == pytest.approx(0.0)
     assert w._view3d._gain == pytest.approx(1.0)
 
@@ -358,7 +391,7 @@ def test_display_reset_restores_defaults(app):
     w._slices.set_spectrogram(sg)
     w._z_combo.setCurrentIndex(0)          # увести все контролы с умолчаний
     w._cmap_combo.setCurrentIndex(1)
-    w._unit_combo.setCurrentIndex(1)
+    w._unit_combo.setCurrentIndex(0)       # Задача #53: дефолт cps -> уводим в counts
     w._axes_check.setChecked(False)
     w._hl_check.setChecked(True)
     w._gain_slider.setValue(250)

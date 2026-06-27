@@ -716,11 +716,27 @@ UI-контролы (пресет нуклида `DEFAULT_WINDOWS` + два сп
   устойчивая полка (бо́льший интеграл) может быть выше короткого транзиента-башни — **так и показывает
   окно** (физично: окно интегрирует counts). Тест #50 (транзиент=argmax) заменён на #52
   (`argmax(profile) == argmax(sg.sum_spectrum) == канал устойчивого пика`, `prof[пик] > prof[башня]`).
-- Тесты: `tests/test_units_log.py` (30) — модель единиц (6), #41 2D-цвет (1), #47/#52 проекция 3D (3:
+- **#53 — все графики в cps; рельеф = cps/канал/момент; голубая = сумма cps на срезе**
+  (`awf/ui/view3d.py`, `awf/ui/panels.py`, `awf/ui/main_window.py`): дефолтные единицы отображения
+  переключены counts→cps. Машинерия cps уже была из #44 — сменён только дефолт: `_unit_combo`
+  стартует в index 1 (cps) и кнопка «Сброс» возвращает туда же (`main_window.py`); панели
+  `Waterfall3DView`/`HeatmapPanel`/`SlicePanel` дефолтят `_unit="cps"`; `SlicePanel.__init__`
+  зовёт `_apply_unit_labels()`, чтобы подписи осей Y сразу были «отсч/с». Рельеф (оранжевый):
+  `_z_counts` (max-LOD) уже строится из `src = sg.counts_in_unit(self._unit)` → при cps это
+  **мгновенная скорость счёта в канале в каждый момент** (max сохраняет узкие пики). Голубая линия:
+  `_z_counts_sum` (sum-LOD) из того же cps-`src` → `_section_projection` суммирует cps по окну =
+  **сумма cps на срезе** (уточняет #52: была сумма counts → стала сумма cps). Связь со стартовым
+  порядком: `setCurrentIndex(1)` стоит ДО `currentIndexChanged.connect`, поэтому преждевременный
+  веер-сигнал не шлётся; `_on_loaded` единицы не переприменяет — панели берут собственный дефолт cps.
+  Тест #53: `test_view3d_profile_is_cps_not_counts` — два пика с разным live_time меняют местами
+  «кто выше» по counts vs cps, профиль идёт за cps (`argmax(prof)==argmax(Σcps)≠argmax(Σcounts)`).
+  5 тестов `test_slice_analysis.py` + heatmap/sections/fan-out, сверявших сырые counts, получили явный
+  `set_unit_mode("counts")` (семантику counts-ветки проверяют прежним образом).
+- Тесты: `tests/test_units_log.py` (31) — модель единиц (6), #41 2D-цвет (1), #47/#52 проекция 3D (3:
   одиночная/между плоскостями/совпадение с окном), #49 depthValue + #47 depth-off (2) + counts без
   профиля (1), #43 лог (1), #42 маркеры (3), #44 (6), #48 цвет=рамка (1), #46 затенение/ползунок (5),
-  #51 сброс настроек (1).
-  **Полный pytest — 262 passed.**
+  #51 сброс настроек (1), #53 cps-профиль (1).
+  **Полный pytest — 263 passed.**
 
 **Задача 26 — Вкладка «Аналитика»** (`awf/ui/analytics_panel.py` + `main_window.py`): `AnalyticsPanel`
 (2D-скаттер проекций, по одному `ScatterPlotItem` на кластер для легенды; каждая точка несёт индекс

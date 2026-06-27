@@ -168,7 +168,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._unit_combo = QtWidgets.QComboBox()
         self._unit_combo.addItem("отсчёты", "counts")
         self._unit_combo.addItem("отсч/с (cps)", "cps")
-        self._unit_combo.setCurrentIndex(0)
+        self._unit_combo.setCurrentIndex(1)   # Задача #53: дефолт — cps (connect ниже, сигнал не шлём)
         self._unit_combo.currentIndexChanged.connect(self._on_unit_changed)
         tb.addWidget(self._unit_combo)
         self._axes_check = QtWidgets.QCheckBox("Оси")  # подписи делений 3D (Задача 14)
@@ -211,7 +211,7 @@ class MainWindow(QtWidgets.QMainWindow):
         изменении, и штатный обработчик применяет дефолт на все панели (2D/3D/срезы)."""
         self._z_combo.setCurrentIndex(2)      # log
         self._cmap_combo.setCurrentIndex(0)   # iZotope Insight
-        self._unit_combo.setCurrentIndex(0)   # отсчёты
+        self._unit_combo.setCurrentIndex(1)   # cps (Задача #53 — дефолт)
         self._axes_check.setChecked(True)     # оси видимы
         self._hl_check.setChecked(False)      # подсветка выкл
         self._gain_slider.setValue(100)       # усиление 1.0

@@ -32,6 +32,7 @@ def test_point_spectrum_matches_slice(app):
     sg = _make_sg()
     s = SlicePanel()
     s.set_spectrogram(sg)
+    s.set_unit_mode("counts")          # Задача #53: дефолт cps — тест сверяет сырые counts
     s.show_time_slice(5)
     x, y = s._spectrum_curve.getData()
     assert np.allclose(y, sg.energy_spectrum(5).astype(np.float64))
@@ -43,6 +44,7 @@ def test_energy_window_profile_matches_band(app):
     sg = _make_sg()
     s = SlicePanel()
     s.set_spectrogram(sg)
+    s.set_unit_mode("counts")          # Задача #53: дефолт cps — тест сверяет сырые counts
     s.show_energy_window(646.7, 676.7)            # окно Cs-137
     x, y = s._ewin_curve.getData()
     expected = sg.energy_band_time_series(646.7, 676.7).astype(np.float64)
@@ -69,6 +71,7 @@ def test_energy_window_reversed_args_sorted(app):
     sg = _make_sg()
     s = SlicePanel()
     s.set_spectrogram(sg)
+    s.set_unit_mode("counts")          # Задача #53: дефолт cps — тест сверяет сырые counts
     s.show_energy_window(676.7, 646.7)
     _, y = s._ewin_curve.getData()
     expected = sg.energy_band_time_series(646.7, 676.7).astype(np.float64)
@@ -81,6 +84,7 @@ def test_preset_combobox_sets_window(app):
     sg = _make_sg()
     s = SlicePanel()
     s.set_spectrogram(sg)
+    s.set_unit_mode("counts")          # Задача #53: дефолт cps — тест сверяет сырые counts
     s._ewin_preset.setCurrentIndex(1)             # 0 = «вручную», 1 = Cs-137 662
     w = DEFAULT_WINDOWS[0]
     assert abs(s._ewin_lo.value() - w.e_lo) < 1.0
@@ -115,6 +119,7 @@ def test_roi_band_curve_independent_of_window(app):
     sg = _make_sg()
     s = SlicePanel()
     s.set_spectrogram(sg)
+    s.set_unit_mode("counts")          # Задача #53: дефолт cps — тест сверяет сырые counts
     s.show_roi(0, sg.n_slices, 0, sg.n_channels)
     s.show_energy_window(646.7, 676.7)
     _, y_roi = s._series_curve.getData()

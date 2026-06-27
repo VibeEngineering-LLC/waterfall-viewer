@@ -45,6 +45,7 @@ def test_set_spectrogram_records_geometry(app):
 def test_plane_value_real_units(app):
     v = Waterfall3DView()
     v.set_spectrogram(_make_sg(ns=30, nc=40), max_time=400, max_chan=512)
+    v.set_unit_mode("counts")        # Задача #53: дефолт cps — для проверки counts-оси берём counts
     tval, tunit = v.plane_value("time", 0.5)
     assert tunit == "с" and 26.0 <= tval <= 32.0
     eval_, eunit = v.plane_value("energy", 0.25)

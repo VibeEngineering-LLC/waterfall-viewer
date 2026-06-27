@@ -22,7 +22,7 @@ class HeatmapPanel(QtWidgets.QWidget):
         super().__init__(parent)
         self._sg = None
         self._disp_counts = None  # последняя дисплейная (возможно прорежённая) матрица counts
-        self._unit = "counts"     # единицы карты: counts | cps (Задача #44)
+        self._unit = "cps"        # единицы карты: counts | cps (Задача #44; дефолт cps — #53)
         self._z_mode = "log"      # текущая Z-шкала контраста (linear/sqrt/log)
         self._gain = DEFAULT_GAIN    # регулировка контраста (Задача 16)
         self._gamma = DEFAULT_GAMMA
@@ -318,7 +318,7 @@ class SlicePanel(QtWidgets.QWidget):
         self._energies = None
         self._times = None
         self._live = None         # live_time_s по срезам — делитель cps (Задача #44)
-        self._unit = "counts"     # единицы графиков: counts | cps (Задача #44)
+        self._unit = "cps"        # единицы графиков: counts | cps (Задача #44; дефолт cps — #53)
         self._spec_log = False    # лог-шкала Y графика спектра (Задача #43)
         self._smooth = 0          # радиус усреднения спектра по энергии (Замечание IV-R4)
         self._raw_spec = None     # (energies, spec_raw, lt_total) последнего спектра (Задача #44)
@@ -374,6 +374,7 @@ class SlicePanel(QtWidgets.QWidget):
         self._ewin_preset.currentIndexChanged.connect(self._on_ewin_preset)
         self._ewin_lo.editingFinished.connect(self._on_ewin_spin)
         self._ewin_hi.editingFinished.connect(self._on_ewin_spin)
+        self._apply_unit_labels()    # Задача #53: дефолт cps — подписи осей Y сразу в отсч/с
 
     def set_spectrogram(self, sg) -> None:
         self._sg = sg
