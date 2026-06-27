@@ -914,6 +914,68 @@ UI-контролы (пресет нуклида `DEFAULT_WINDOWS` + два сп
   `test_plane_nuclide_height_scales_with_intensity`, `test_plane_nuclides_backward_compat_3tuple`,
   `test_plane_nuclides_cleared_when_lines_removed`. **Полный pytest — 285 passed.**
 
+- **#70 — убавить окружающее поле вокруг данных 3D** (`awf/ui/view3d.py`): отступ рамки координатной
+  сетки от края данных уменьшен с целой клетки (#63) до **полклетки** — в `_rebuild_grid` введены
+  `mx, my = 0.5*cellx, 0.5*celly`, поле `gx0/gx1/gy0/gy1` строится с этим половинным отступом.
+  Рамка по-прежнему ярче линий сетки и обводит поле, но прижата к данным вдвое плотнее. Тест
+  `test_grid_border_extends_one_cell_beyond_data` переименован в `…_half_cell_…` и усилен проверкой
+  «отступ < 0.75 клетки» (т.е. ≈половина, не целая). **Полный pytest — 285 passed.**
+
+- **#71 — шкала времени по 15 минут для больших водопадов** (`awf/ui/view3d.py`): добавлены
+  helper'ы `_step_ticks(lo,hi,step)` (деления фиксированным шагом, кратные ему) и `_pick_ticks`
+  (предпочтительный шаг, иначе откат на `_nice_ticks`), константы `_TIME_STEP_15MIN_S=900`,
+  `_PREF_STEP_MIN_TICKS=3`/`_PREF_STEP_MAX_TICKS=40`. `_time_ticks` теперь для длинных записей
+  (на диапазоне выходит 3..40 делений по 900 с) строит деления ровно по 15 мин (в секундах),
+  значения подписей пересчитываются в выбранную единицу (с/мин/ч); короткая запись (<45 мин) —
+  прежние авто-деления `_nice_ticks` в выбранной единице (#64 не сломан). Тесты
+  `test_time_ticks_15min_step_large_waterfall`, `test_time_ticks_fallback_short_waterfall`.
+  **Полный pytest — 287 passed.**
+
+- **#72 — шкала энергии по 200 кэВ** (`awf/ui/view3d.py`): `_energy_ticks` переведён на
+  `_pick_ticks(..., _ENERGY_STEP_KEV=200)` — для широкого спектра (3..40 делений по 200 кэВ)
+  деления идут ровно по 200 кэВ; узкий диапазон (десятки кэВ) — откат на `_nice_ticks` (как было).
+  Тесты `test_energy_ticks_200kev_step_wide_spectrum` (калибровка 3 кэВ/канал, 0..~3069 кэВ),
+  `test_energy_ticks_fallback_narrow_spectrum`. **Полный pytest — 289 passed.**
+
+- **#73 — уменьшить шрифт подписей делений 3D** (`awf/ui/view3d.py`): в `_rebuild_axis_labels`
+  шрифт подписей делений `QFont("Helvetica", 10)` → `7` (нижние подписи энергии «1000 кэВ» и т.п.
+  были слишком крупными). Тест `test_axis_label_font_reduced` (все GLTextItem осей ≤8 pt).
+  **Полный pytest — 290 passed.**
+- **#74 — перебор комбобоксов тулбара кнопкой/колесом вместо выпадающего списка**
+  (`awf/ui/cyclebutton.py` NEW + `awf/ui/main_window.py`): новый виджет `CycleButton(QPushButton)` —
+  кнопка показывает текущее значение, клик листает по кругу вперёд, колесо мыши — вперёд/назад.
+  4 контрола тулбара («Z-шкала», «Палитра», «Единицы», «Время») переведены с `QComboBox` на
+  `CycleButton`. API совместим с используемой частью QComboBox (`addItem(label,data)`, `count`,
+  `currentIndex`/`setCurrentIndex`, `currentData`/`currentText`, `itemData(i)`/`itemText(i)`, сигнал
+  `currentIndexChanged(int)` эмитится только при реальной смене индекса) — проводка и прежние тесты
+  тулбара не тронуты. Наследник `QPushButton` → QSS-стиль `QToolBar QPushButton` из #62 применяется.
+  Тесты `test_cyclebutton_click_cycles`, `test_cyclebutton_wheel_scrolls`. **Полный pytest — 292 passed.**
+- **#75 — каркас верхних выпадающих меню** (`awf/ui/main_window.py`): к меню «Файл» добавлены пять
+  выпадающих меню с правильными названиями — **Изотопы / Анализ / Сервис / Помощь / О программе**
+  (`_build_stub_menus`, вызывается из `_build_menu`). Пока это каркас: в каждом меню один
+  disabled-пункт-заглушка «— наполняется позже —»; реальные действия будут подключены в следующих
+  задачах. Меню сохранены в `self._menus` (ключи `isotopes/analysis/service/help/about`) — будущая
+  сессия легко довесит действия. Тест `test_top_menus_skeleton_present`. **Полный pytest — 293 passed.**
+- **#76 — отключение подложки (фиолетовый прямоугольник = плоское дно рельефа)**
+  (`awf/ui/view3d.py` + `awf/ui/main_window.py`): «подложка» — не отдельный объект, а ячейки дна
+  единственной `GLSurfacePlotItem` с нормированной высотой `zn≈0` (в палитре — фиолетовый минимум),
+  лежащие плашмя при `z≈0`. При выключении подложки такие ячейки (высота `≤ _FLOOR_FRAC·height_scale`,
+  т.е. `zn ≤ 0.02`) делаются прозрачными (`alpha=0`), поверхность переводится в `translucent` —
+  остаётся только рельеф-«всплески», сплошной фиолетовый прямоугольник базы исчезает (виден фон).
+  Чекбокс «Подложка» в тулбаре (дефолт вкл, сбрасывается в вкл кнопкой «Сброс») → `_on_floor_toggled`
+  → `view3d.set_floor_visible()` (alpha-only ре-рендер, без ре-LOD). Тесты `test_floor_visible_by_default`,
+  `test_floor_hidden_zeroes_base_cells`, `test_floor_toolbar_checkbox_drives_view`.
+  **Полный pytest — 296 passed.**
+- **#77 — подписи делений осей: гасить за массивом, зажигать со стороны взгляда**
+  (`awf/ui/view3d.py`): подписи единиц («15 мин» по времени, «200 кэВ» по энергии) и зубцы оси энергии
+  раньше жёстко стояли на `y=ymin` / `x=xmax` — при повороте уезжали за рельеф. Теперь край подписи
+  выбирается по знаку XY-направления камеры на зрителя (`_viewer_sides()`: камера→центр сцены, центр в
+  (0,0)): время — на `ymax`/`ymin`, энергия (+зубцы) — на `xmax`/`xmin`, всегда на ближней к зрителю
+  стороне. Перевешивание при вращении мышью — через override `mouseMoveEvent` → `_maybe_reorient_labels()`,
+  перестройка только при смене квадранта (по сигнатуре `_label_side_sig`, не каждый кадр). Дефолт камеры
+  (azimuth=−60) даёт прежнее размещение (время `ymin`, энергия `xmax`) — поведение по умолчанию не
+  изменилось. Тест `test_axis_labels_follow_viewer_side`. **Полный pytest — 297 passed.**
+
 **Задача 26 — Вкладка «Аналитика»** (`awf/ui/analytics_panel.py` + `main_window.py`): `AnalyticsPanel`
 (2D-скаттер проекций, по одному `ScatterPlotItem` на кластер для легенды; каждая точка несёт индекс
 среза). Сигнал `sliceClicked(i)` → `MainWindow._on_analytics_slice` → `SlicePanel.show_time_slice` +

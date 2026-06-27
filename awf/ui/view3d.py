@@ -72,6 +72,17 @@ _GRID_RGBA = (0.28, 0.28, 0.33, 0.55)         # тонкие линии сетк
 _GRID_BORDER_RGBA = (0.46, 0.47, 0.54, 0.9)   # рамка поля (на 1 клетку шире данных) — ярче сетки
 # Задача #64: единицы оси времени и их множитель к секундам (выбор сек/мин/часы в тулбаре).
 _TIME_UNIT_SCALE = {"с": 1.0, "мин": 60.0, "ч": 3600.0}
+# Задача #71/#72: предпочтительные «человеческие» шаги делений осей. Время — 15 минут (для длинных
+# водопадов), энергия — 200 кэВ. Применяются, если на диапазоне выходит разумное число делений;
+# иначе (короткая запись / узкий диапазон) — откат на авто-деления `_nice_ticks`.
+_TIME_STEP_15MIN_S = 900.0     # 15 мин в секундах (#71)
+_ENERGY_STEP_KEV = 200.0       # 200 кэВ (#72)
+_PREF_STEP_MIN_TICKS = 3       # меньше — диапазон мал, идём на _nice_ticks
+_PREF_STEP_MAX_TICKS = 40      # больше — деления слишком частые, идём на _nice_ticks
+# Задача #76: «подложка» = плоское дно рельефа (ячейки с нормированной высотой zn≈0, в палитре —
+# фиолетовый минимум). При отключении подложки такие ячейки делаем прозрачными (alpha=0): остаётся
+# только рельеф-«всплески», сплошной фиолетовый прямоугольник базы исчезает (виден фон).
+_FLOOR_FRAC = 0.02             # доля высоты рельефа, ниже которой ячейка считается «дном»
 
 
 class Waterfall3DView(gl.GLViewWidget):
@@ -128,6 +139,7 @@ class Waterfall3DView(gl.GLViewWidget):
         self.addItem(self._grid)
         self._grid_items = []         # линии координатной сетки/рамки (Задача #63/#68)
         self._time_unit = "с"         # единицы оси времени: с | мин | ч (Задача #64)
+        self._floor_visible = True    # Задача #76: видна ли «подложка» (плоское дно рельефа)
 
         # --- геометрия последнего рендера (для позиционирования плоскостей) ---
         self._nt = 0
@@ -144,6 +156,7 @@ class Waterfall3DView(gl.GLViewWidget):
         # --- подписи делений осей (Задача 14) ---
         self._axis_items = []          # текущие GLTextItem/GLLinePlotItem (удаляются при перестроении)
         self._axis_labels_visible = True
+        self._label_side_sig = None    # Задача #77: (sx,sy) — на каком крае оси стоят подписи (по взгляду)
 
         # --- лучи энергий нуклидов (Задача 15) ---
         self._energy_lines = []        # list[(energy_keV, color_str, label)]
@@ -301,13 +314,21 @@ class Waterfall3DView(gl.GLViewWidget):
         if counts_active:
             outside = (zsub < z_lo) | (zsub > z_hi)
             csub[..., 3] = np.where(outside, 0.0, csub[..., 3])
+        # Задача #76: отключённая подложка -> ячейки «дна» (высота ниже _FLOOR_FRAC от рельефа)
+        # становятся прозрачными; остаётся только рельеф, фиолетовый прямоугольник базы исчезает.
+        if not self._floor_visible:
+            floor = zsub <= _FLOOR_FRAC * float(self._height_scale)
+            csub[..., 3] = np.where(floor, 0.0, csub[..., 3])
         colors_flat = csub.reshape(-1, 4)
         if self._surface is not None:
             self.removeItem(self._surface)
             self._surface = None
         surf = gl.GLSurfacePlotItem(x=xs, y=ys, z=zsub, colors=colors_flat,
                                     shader=None, computeNormals=False, smooth=False)
-        surf.setGLOptions("translucent" if counts_active else "opaque")
+        # translucent нужен, когда alpha значимы: обрезка по счёту (IV-R3) или скрытое дно (#76);
+        # иначе opaque (быстрее, без сортировки прозрачности).
+        translucent = counts_active or not self._floor_visible
+        surf.setGLOptions("translucent" if translucent else "opaque")
         surf.translate(-nt / 2.0, -nc / 2.0, 0.0)
         self.addItem(surf)
         self._surface = surf
@@ -318,6 +339,16 @@ class Waterfall3DView(gl.GLViewWidget):
             return
         i0, i1, j0, j1, z_lo, z_hi, ca = self._clip_windows()
         if (i0, i1, j0, j1, z_lo, z_hi, ca) != self._clip_sig:
+            self._rebuild_surface()
+
+    def set_floor_visible(self, visible: bool) -> None:
+        """Задача #76: показать/скрыть «подложку» (плоское дно рельефа, фиолетовый прямоугольник).
+        Меняет только alpha ячеек дна — достаточно пересобрать поверхность, без ре-LOD."""
+        visible = bool(visible)
+        if visible == self._floor_visible:
+            return
+        self._floor_visible = visible
+        if self._z_surface is not None:
             self._rebuild_surface()
 
     def set_smoothing(self, radius: int) -> None:
@@ -393,6 +424,27 @@ class Waterfall3DView(gl.GLViewWidget):
         ticks = np.arange(start, hi + 0.5 * step, step)
         return ticks[(ticks >= lo - 1e-9) & (ticks <= hi + 1e-9)]
 
+    @staticmethod
+    def _step_ticks(lo: float, hi: float, step: float):
+        """Деления фиксированным шагом `step`, кратные ему, в пределах [lo, hi] (Задача #71/#72)."""
+        lo = float(lo); hi = float(hi)
+        if step <= 0 or not (hi > lo):
+            return np.array([], dtype=float)
+        first = np.ceil(lo / step - 1e-9) * step
+        n = int(np.floor((hi - first) / step + 1e-9)) + 1
+        if n < 1:
+            return np.array([], dtype=float)
+        return first + np.arange(n) * step
+
+    @classmethod
+    def _pick_ticks(cls, lo: float, hi: float, pref_step: float):
+        """Деления с предпочтительным шагом `pref_step` (#71/#72); если их число вне разумного
+        диапазона (узкий/огромный диапазон) — откат на адаптивные `_nice_ticks`."""
+        t = cls._step_ticks(lo, hi, pref_step)
+        if _PREF_STEP_MIN_TICKS <= t.size <= _PREF_STEP_MAX_TICKS:
+            return t
+        return cls._nice_ticks(lo, hi)
+
     def _clear_axis_items(self) -> None:
         for it in self._axis_items:
             self.removeItem(it)
@@ -413,24 +465,31 @@ class Waterfall3DView(gl.GLViewWidget):
         self._axis_items.append(item)
 
     def _time_ticks(self):
-        """Деления оси времени в текущих единицах (Задача #64): (disp_values, world_x, unit).
-        Круглые деления считаем уже в выбранной единице (с/мин/ч) -> ровные значения клеток."""
+        """Деления оси времени (Задача #64/#71): (disp_values, world_x, unit). Для длинных
+        водопадов — фиксированный шаг 15 минут (#71); для коротких записей — авто-деления
+        `_nice_ticks` в выбранной единице (с/мин/ч). Значения подписей — в выбранной единице."""
         tc = self._t_centers
         if tc is None or len(tc) < 2 or tc[-1] <= tc[0] or self._nt == 0:
             return (np.array([]), np.array([]), self._time_unit)
         scale = _TIME_UNIT_SCALE.get(self._time_unit, 1.0)
         idx = np.arange(self._nt, dtype=float)
-        dv = self._nice_ticks(float(tc[0]) / scale, float(tc[-1]) / scale)
+        sv = self._step_ticks(float(tc[0]), float(tc[-1]), _TIME_STEP_15MIN_S)   # 15-мин деления (#71)
+        if _PREF_STEP_MIN_TICKS <= sv.size <= _PREF_STEP_MAX_TICKS:
+            dv = sv / scale
+        else:                       # короткая запись -> авто-деления в выбранной единице (#64)
+            dv = self._nice_ticks(float(tc[0]) / scale, float(tc[-1]) / scale)
         wx = np.interp(dv * scale, tc, idx) - self._nt / 2.0
         return (dv, wx, self._time_unit)
 
     def _energy_ticks(self):
-        """Деления оси энергии (кэВ): (values, world_y) в центрированных мировых координатах."""
+        """Деления оси энергии (Задача #66/#72): (values, world_y) в центрированных мировых
+        координатах. Для широкого спектра — фиксированный шаг 200 кэВ (#72); для узкого
+        диапазона — авто-деления `_nice_ticks` (внутри `_pick_ticks`)."""
         cc = self._ch_centers
         if cc is None or len(cc) < 2 or cc[-1] <= cc[0] or self._nc == 0:
             return (np.array([]), np.array([]))
         idx = np.arange(self._nc, dtype=float)
-        ev = self._nice_ticks(float(cc[0]), float(cc[-1]))
+        ev = self._pick_ticks(float(cc[0]), float(cc[-1]), _ENERGY_STEP_KEV)   # 200-кэВ деления (#72)
         wy = np.interp(ev, cc, idx) - self._nc / 2.0
         return (ev, wy)
 
@@ -452,7 +511,7 @@ class Waterfall3DView(gl.GLViewWidget):
 
     def _rebuild_grid(self) -> None:
         """Координатная сетка (Задача #63/#68): линии на круглых делениях шкал t/E; поле
-        обрамлено одной пустой клеткой со всех сторон, рамка поля ярче линий сетки."""
+        обрамлено отступом в полклетки со всех сторон (#70), рамка поля ярче линий сетки."""
         for it in self._grid_items:
             self.removeItem(it)
         self._grid_items = []
@@ -465,12 +524,13 @@ class Waterfall3DView(gl.GLViewWidget):
         _ev, wy = self._energy_ticks()
         cellx = float(np.median(np.diff(wx))) if wx.size >= 2 else (xmax - xmin) / 5.0
         celly = float(np.median(np.diff(wy))) if wy.size >= 2 else (ymax - ymin) / 5.0
-        gx0, gx1 = xmin - cellx, xmax + cellx
-        gy0, gy1 = ymin - celly, ymax + celly
+        mx, my = 0.5 * cellx, 0.5 * celly   # Задача #70: отступ поля = полклетки (было 1 клетка, #63)
+        gx0, gx1 = xmin - mx, xmax + mx
+        gy0, gy1 = ymin - my, ymax + my
         self._draw_grid_lines(wx, wy, gx0, gx1, gy0, gy1)
 
     def _draw_grid_lines(self, wx, wy, gx0, gx1, gy0, gy1) -> None:
-        """Линии сетки на делениях шкал + яркая рамка поля на 1 клетку шире данных (Задача #63)."""
+        """Линии сетки на делениях шкал + яркая рамка поля на полклетки шире данных (#63/#70)."""
         for x in np.asarray(wx, float):
             self._add_grid_line((x, gy0, 0.0), (x, gy1, 0.0), _GRID_RGBA)
         for y in np.asarray(wy, float):
@@ -496,17 +556,50 @@ class Waterfall3DView(gl.GLViewWidget):
             return
         xmin, xmax, ymin, ymax, zmax = self._axis_extent()
         pad = 0.05 * float(max(nt, nc, 10))
-        font = QtGui.QFont("Helvetica", 10)
+        font = QtGui.QFont("Helvetica", 7)   # Задача #73: подписи делений были крупны (10) — уменьшено
+        # Задача #77: подписи держим на ближнем к зрителю крае оси (по знаку XY-направления камеры),
+        # чтобы они не уходили за рельеф; при пересечении квадранта край меняется (_maybe_reorient_labels).
+        sx, sy = self._viewer_sides()
+        self._label_side_sig = (sx, sy)
+        y_time = (ymax if sy > 0 else ymin) + sy * pad     # край подписи времени (вынос наружу)
+        x_en = xmax if sx > 0 else xmin                     # край оси энергии (зубцы и подписи)
+        x_en_lab = x_en + sx * pad
         # ось времени (X): значение в выбранной единице + единица на каждом делении (Задача #64/#66)
         dv, wx, unit = self._time_ticks()
         for tv, x in zip(dv, wx):
-            self._add_text((float(x), ymin - pad, 0.0), f"{tv:g} {unit}", font)
+            self._add_text((float(x), y_time, 0.0), f"{tv:g} {unit}", font)
         # ось энергии (Y): значение в кэВ + единица; вертикальные зубцы вверх по Z (IV-R2/#66)
         ev, wy = self._energy_ticks()
         tooth = 0.10 * zmax if zmax > 0 else 1.0
         for en, y in zip(ev, wy):
-            self._add_text((xmax + pad, float(y), 0.0), f"{en:g} кэВ", font)
-            self._add_line((xmax, float(y), 0.0), (xmax, float(y), tooth), _ENERGY_TICK_RGBA)
+            self._add_text((x_en_lab, float(y), 0.0), f"{en:g} кэВ", font)
+            self._add_line((x_en, float(y), 0.0), (x_en, float(y), tooth), _ENERGY_TICK_RGBA)
+
+    def _viewer_sides(self):
+        """Задача #77: знаки X/Y-направления «на зрителя» (камера → центр сцены, центр в 0,0).
+        +1 — ближний край оси у +X/+Y (xmax/ymax), -1 — у -X/-Y (xmin/ymin)."""
+        try:
+            cam = self.cameraPosition()
+            cx, cy = float(cam.x()), float(cam.y())
+        except Exception:
+            cx, cy = 1.0, -1.0    # дефолт камеры (azimuth=-60): energy→xmax, time→ymin
+        sx = 1 if cx >= 0 else -1
+        sy = 1 if cy >= 0 else -1
+        return sx, sy
+
+    def _maybe_reorient_labels(self) -> None:
+        """Задача #77: если поворот камеры сменил ближний край (квадрант) — перевесить подписи
+        осей на сторону взгляда. Перестраиваем только при смене стороны (редко, не каждый кадр)."""
+        if not self._axis_labels_visible or self._z_surface is None:
+            return
+        if self._viewer_sides() != self._label_side_sig:
+            self._rebuild_axis_labels()
+
+    def mouseMoveEvent(self, ev):
+        """Вращение камеры мышью (базовое поведение GLViewWidget) + перевешивание подписей осей
+        на ближнюю к зрителю сторону при смене квадранта (Задача #77)."""
+        super().mouseMoveEvent(ev)
+        self._maybe_reorient_labels()
 
     # ---------- вертикальные лучи энергий (Задача 15) ----------
     def set_energy_lines(self, lines) -> None:

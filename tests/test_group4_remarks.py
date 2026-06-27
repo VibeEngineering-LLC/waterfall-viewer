@@ -236,8 +236,8 @@ def test_grid_cleared_when_axes_hidden(app):
     assert len(v._grid_items) == 0
 
 
-def test_grid_border_extends_one_cell_beyond_data(app):
-    """Задача #63: рамка поля отстоит за край данных (поле обрамлено пустой клеткой)."""
+def test_grid_border_extends_half_cell_beyond_data(app):
+    """Задача #63/#70: рамка поля отстоит за край данных на полклетки (было 1 клетка)."""
     v = Waterfall3DView()
     v.set_spectrogram(_make_sg(ns=30, nc=50))
     xmin, xmax, ymin, ymax, _z = v._axis_extent()
@@ -247,6 +247,10 @@ def test_grid_border_extends_one_cell_beyond_data(app):
         xs.extend(p[:, 0].tolist()); ys.extend(p[:, 1].tolist())
     assert min(xs) < xmin - 1e-6 and max(xs) > xmax + 1e-6
     assert min(ys) < ymin - 1e-6 and max(ys) > ymax + 1e-6
+    # #70: отступ — именно полклетки, не целая. Поле рамки шире данных меньше чем на клетку.
+    _dv, wx, _u = v._time_ticks()
+    cellx = float(np.median(np.diff(wx)))
+    assert (xmin - min(xs)) < 0.75 * cellx     # < клетки (≈0.5), не ≈1.0
 
 
 # ---------- #65: вертикальная шкала счёта (Z) убрана ----------
@@ -279,6 +283,26 @@ def test_time_unit_switch_changes_labels(app):
     assert any(t.endswith(" мин") for t in texts)
 
 
+# ---------- #71: шаг оси времени 15 минут для длинных водопадов ----------
+def test_time_ticks_15min_step_large_waterfall(app):
+    """Задача #71: для длинного водопада деления оси времени идут ровно по 15 минут."""
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=120, nc=50, t_step=60.0))   # ~2 ч записи
+    v.set_time_unit("мин")
+    dv, _wx, unit = v._time_ticks()
+    assert unit == "мин" and len(dv) >= 3
+    assert np.allclose(np.diff(dv), 15.0)
+
+
+def test_time_ticks_fallback_short_waterfall(app):
+    """Задача #71: короткая запись (< 45 мин) -> авто-деления, шаг 15 мин не навязывается."""
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=30, nc=50, t_step=2.0))     # 0..58 с
+    dv, _wx, _u = v._time_ticks()
+    assert len(dv) >= 2
+    assert not np.allclose(np.diff(dv), 900.0)               # не 15-мин сетка
+
+
 def test_mainwindow_time_unit_fans_out(app):
     """Задача #64: комбобокс «Время» в тулбаре прокидывает единицу во view3d."""
     from awf.ui.main_window import MainWindow
@@ -287,6 +311,78 @@ def test_mainwindow_time_unit_fans_out(app):
     w._tunit_combo.setCurrentIndex(1)   # «мин»
     assert w._view3d._time_unit == "мин"
     w.close()
+
+
+# ---------- #74: переключатель-перебор (клик/колесо) вместо выпадающего списка ----------
+def test_cyclebutton_click_cycles(app):
+    """Задача #74: клик переключает на следующее значение по кругу + эмитит currentIndexChanged."""
+    from awf.ui.cyclebutton import CycleButton
+    b = CycleButton()
+    for k in ("a", "b", "c"):
+        b.addItem(k.upper(), k)
+    seen = []
+    b.currentIndexChanged.connect(lambda i: seen.append(i))
+    assert b.currentIndex() == 0 and b.currentData() == "a"
+    b.click()                       # a -> b
+    assert b.currentData() == "b" and b.currentText() == "B"
+    b.click(); b.click()            # b -> c -> по кругу к a
+    assert b.currentIndex() == 0 and b.currentData() == "a"
+    assert seen == [1, 2, 0]
+    b.deleteLater()
+
+
+def test_cyclebutton_wheel_scrolls(app):
+    """Задача #74: колесо мыши листает вперёд (вверх) и назад (вниз, по кругу)."""
+    from PySide6 import QtCore
+    from awf.ui.cyclebutton import CycleButton
+
+    class _Wheel:                       # лёгкая замена QWheelEvent (без версионной возни)
+        def __init__(self, y): self._y = y
+        def angleDelta(self): return QtCore.QPoint(0, self._y)
+        def accept(self): pass
+
+    b = CycleButton()
+    for k in ("a", "b", "c"):
+        b.addItem(k, k)
+    b.wheelEvent(_Wheel(120))           # вверх -> вперёд: a -> b
+    assert b.currentIndex() == 1
+    b.wheelEvent(_Wheel(-120)); b.wheelEvent(_Wheel(-120))   # назад: b -> a -> по кругу к c
+    assert b.currentIndex() == 2
+    b.deleteLater()
+
+
+# ---------- #73: шрифт подписей делений осей 3D уменьшен ----------
+def test_axis_label_font_reduced(app):
+    """Задача #73: подписи делений осей 3D мельче прежних (≤8 pt вместо 10)."""
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=30, nc=50))
+    fonts = [it.font for it in v._axis_items if isinstance(it, gl.GLTextItem)]
+    assert fonts
+    assert all(f.pointSize() <= 8 for f in fonts)
+
+
+# ---------- #72: шаг оси энергии 200 кэВ для широкого спектра ----------
+def test_energy_ticks_200kev_step_wide_spectrum(app):
+    """Задача #72: для широкого спектра деления оси энергии идут ровно по 200 кэВ."""
+    counts = np.random.RandomState(1).poisson(50, size=(20, 1024)).astype(np.int64)
+    cal = Calibration(coeffs=[0.0, 3.0])     # 3 кэВ/канал -> 0..~3069 кэВ
+    t = np.arange(20, dtype=np.float64) * 2.0
+    sg = Spectrogram(counts=counts, calibration=cal, time_offsets_s=t,
+                     real_time_s=np.full(20, 2.0), live_time_s=np.full(20, 2.0))
+    v = Waterfall3DView()
+    v.set_spectrogram(sg)
+    ev, _wy = v._energy_ticks()
+    assert len(ev) >= 3
+    assert np.allclose(np.diff(ev), 200.0)
+
+
+def test_energy_ticks_fallback_narrow_spectrum(app):
+    """Задача #72: узкий спектр (десятки кэВ) -> авто-деления, шаг 200 кэВ не навязывается."""
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=30, nc=50))   # 0..49 кэВ
+    ev, _wy = v._energy_ticks()
+    assert len(ev) >= 2
+    assert not np.allclose(np.diff(ev), 200.0)
 
 
 # ---------- #67/#69: маркеры нуклидов на секущих плоскостях Времени ----------
@@ -344,3 +440,90 @@ def test_plane_nuclides_cleared_when_lines_removed(app):
     assert len(v._plane_nuclide_items) == 1
     v.set_energy_lines([])
     assert len(v._plane_nuclide_items) == 0
+
+
+# ---------- #75: каркас верхних выпадающих меню ----------
+def test_top_menus_skeleton_present(app):
+    """Задача #75: в строке меню есть Изотопы/Анализ/Сервис/Помощь/О программе (каркас)."""
+    from awf.ui.main_window import MainWindow
+    w = MainWindow()
+    titles = [m.title() for m in w.menuBar().findChildren(QtWidgets.QMenu)]
+    for expected in ("Изотопы", "Анализ", "Сервис", "Помощь", "О программе"):
+        assert expected in titles
+    assert set(w._menus) == {"isotopes", "analysis", "service", "help", "about"}
+    # каждый пункт пока неактивен — это каркас, наполнение позже
+    for m in w._menus.values():
+        acts = m.actions()
+        assert acts and all(not a.isEnabled() for a in acts)
+    w.close()
+
+
+# ---------- #76: отключение подложки (плоское дно рельефа) ----------
+def _floor_sg(n=10):
+    """Спектр с явным «дном»: почти всё — нули (база); один столбец — рельеф с разбросом высот
+    (10..10^5), чтобы log-шкала дала ненулевой контраст (равные пики дали бы zn=0 у всех)."""
+    counts = np.zeros((n, n), dtype=np.int64)
+    for k in range(5):
+        counts[k, 0] = 10 ** (k + 1)
+    cal = Calibration(coeffs=[0.0, 1.0])
+    t = np.arange(n, dtype=np.float64) * 2.0
+    return Spectrogram(counts=counts, calibration=cal, time_offsets_s=t,
+                       real_time_s=np.full(n, 2.0), live_time_s=np.full(n, 2.0))
+
+
+def test_floor_visible_by_default(app):
+    """Задача #76: по умолчанию подложка видима — ни одна ячейка не прозрачна."""
+    v = Waterfall3DView()
+    v.set_spectrogram(_floor_sg())
+    assert v._floor_visible is True
+    alpha = np.asarray(v._surface._colors)[:, 3]
+    assert np.all(alpha > 0.0)
+
+
+def test_floor_hidden_zeroes_base_cells(app):
+    """Задача #76: выключенная подложка делает ячейки дна (zn≈0) прозрачными, рельеф остаётся."""
+    v = Waterfall3DView()
+    v.set_spectrogram(_floor_sg())
+    v.set_floor_visible(False)
+    alpha = np.asarray(v._surface._colors)[:, 3]
+    assert np.any(alpha == 0.0)        # дно (нули) стало прозрачным
+    assert np.any(alpha > 0.0)         # рельеф (угол 5×5) остался видимым
+    v.set_floor_visible(True)          # вернули — снова всё видимо
+    assert np.all(np.asarray(v._surface._colors)[:, 3] > 0.0)
+
+
+def test_floor_toolbar_checkbox_drives_view(app):
+    """Задача #76: чекбокс «Подложка» тулбара управляет _floor_visible вьюера."""
+    from awf.ui.main_window import MainWindow
+    w = MainWindow()
+    w._view3d.set_spectrogram(_floor_sg())
+    assert w._floor_check.isChecked() and w._view3d._floor_visible is True
+    w._floor_check.setChecked(False)
+    assert w._view3d._floor_visible is False
+    w._floor_check.setChecked(True)
+    assert w._view3d._floor_visible is True
+    w.close()
+
+
+# ---------- #77: подписи осей на ближней к зрителю стороне ----------
+def test_axis_labels_follow_viewer_side(app):
+    """Задача #77: подписи делений висят на ближнем к зрителю крае; поворот камеры в другой
+    квадрант переносит их на сторону взгляда (не за рельеф)."""
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=40, nc=60))
+    def split():
+        texts = [it for it in v._axis_items if isinstance(it, gl.GLTextItem)]
+        en = [it for it in texts if "кэВ" in it.text]
+        tm = [it for it in texts if "кэВ" not in it.text]
+        return tm, en
+    tm0, en0 = split()    # дефолт azimuth=-60: время y<0, энергия x>0
+    assert tm0 and en0
+    assert all(it.pos[1] < 0 for it in tm0)
+    assert all(it.pos[0] > 0 for it in en0)
+    # поворот в противоположный квадрант: cos(120)<0 -> энергия x<0, sin(120)>0 -> время y>0
+    v.setCameraPosition(azimuth=120, elevation=35)
+    v._maybe_reorient_labels()
+    tm1, en1 = split()
+    assert tm1 and en1
+    assert all(it.pos[1] > 0 for it in tm1)
+    assert all(it.pos[0] < 0 for it in en1)

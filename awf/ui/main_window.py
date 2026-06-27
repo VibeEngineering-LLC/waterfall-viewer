@@ -14,6 +14,7 @@ from awf.ui.zscale import Z_MODES
 from awf.ui.colormaps import COLORMAPS
 from awf.ui.nuclide_panel import NuclidePanel
 from awf.ui.knobs import AdjustPanel
+from awf.ui.cyclebutton import CycleButton   # Задача #74: переключатель-перебор вместо QComboBox
 from awf.ui.style import APP_QSS
 
 # Задача #40: организация/приложение для QSettings (запоминание расположения окон между
@@ -176,33 +177,54 @@ class MainWindow(QtWidgets.QMainWindow):
         act_quit.setShortcut(QtGui.QKeySequence.Quit)
         act_quit.triggered.connect(self.close)
         menu.addAction(act_quit)
+        self._build_stub_menus()   # Задача #75: каркас верхних меню (наполнение позже)
+
+    def _build_stub_menus(self) -> None:
+        """Задача #75: каркас выпадающих меню верхней панели (Изотопы/Анализ/Сервис/
+        Помощь/О программе). Пока — по одному disabled-пункту-заглушке в каждом;
+        реальные действия подключатся в следующих задачах («наполню потом»)."""
+        bar = self.menuBar()
+        self._menus = {}
+        spec = [
+            ("isotopes", "Изотопы"),
+            ("analysis", "Анализ"),
+            ("service", "Сервис"),
+            ("help", "Помощь"),
+            ("about", "О программе"),
+        ]
+        for key, title in spec:
+            m = bar.addMenu(title)
+            stub = QtGui.QAction("— наполняется позже —", self)
+            stub.setEnabled(False)   # каркас: действие будет подключено позже
+            m.addAction(stub)
+            self._menus[key] = m
 
     def _build_toolbar(self) -> None:
         tb = self.addToolBar("Вид")
         tb.setObjectName("toolbar_view")   # Задача #40: имя нужно saveState/restoreState
         tb.addWidget(QtWidgets.QLabel(" Z-шкала: "))
-        self._z_combo = QtWidgets.QComboBox()
+        self._z_combo = CycleButton()   # Задача #74: клик = следующее значение, колесо = листать
         for key, label in Z_MODES:
             self._z_combo.addItem(label, key)
         self._z_combo.setCurrentIndex(2)  # по умолчанию log (как было до переключателя)
         self._z_combo.currentIndexChanged.connect(self._on_z_scale_changed)
         tb.addWidget(self._z_combo)
         tb.addWidget(QtWidgets.QLabel("  Палитра: "))
-        self._cmap_combo = QtWidgets.QComboBox()
+        self._cmap_combo = CycleButton()   # Задача #74: клик = следующее значение, колесо = листать
         for key, label in COLORMAPS:
             self._cmap_combo.addItem(label, key)
         self._cmap_combo.setCurrentIndex(0)  # iZotope Insight по умолчанию (Задача 17)
         self._cmap_combo.currentIndexChanged.connect(self._on_colormap_changed)
         tb.addWidget(self._cmap_combo)
         tb.addWidget(QtWidgets.QLabel("  Единицы: "))  # Задача #44: счёт / скорость счёта
-        self._unit_combo = QtWidgets.QComboBox()
+        self._unit_combo = CycleButton()   # Задача #74: клик = следующее значение, колесо = листать
         self._unit_combo.addItem("отсчёты", "counts")
         self._unit_combo.addItem("отсч/с (cps)", "cps")
         self._unit_combo.setCurrentIndex(1)   # Задача #53: дефолт — cps (connect ниже, сигнал не шлём)
         self._unit_combo.currentIndexChanged.connect(self._on_unit_changed)
         tb.addWidget(self._unit_combo)
         tb.addWidget(QtWidgets.QLabel("  Время: "))  # Задача #64: единицы оси времени 3D-сетки
-        self._tunit_combo = QtWidgets.QComboBox()
+        self._tunit_combo = CycleButton()   # Задача #74: клик = следующее значение, колесо = листать
         for unit in ("с", "мин", "ч"):
             self._tunit_combo.addItem(unit, unit)
         self._tunit_combo.setCurrentIndex(0)          # дефолт — секунды
@@ -216,6 +238,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self._hl_check.setChecked(False)
         self._hl_check.toggled.connect(self._on_highlight_toggled)
         tb.addWidget(self._hl_check)
+        self._floor_check = QtWidgets.QCheckBox("Подложка")  # Задача #76: дно рельефа (фиолет. прямоугольник)
+        self._floor_check.setChecked(True)
+        self._floor_check.setToolTip("Показать/скрыть подложку (плоское дно рельефа)")
+        self._floor_check.toggled.connect(self._on_floor_toggled)
+        tb.addWidget(self._floor_check)
         # Изолинии (Задача 20) ВРЕМЕННО отключены в UI: вернём после реализации поиска,
         # идентификации пиков и подгонки их чистыми гауссианами. Механизм контуров в
         # HeatmapPanel (set_contours_enabled / set_contour_levels) сохранён и покрыт тестами;
@@ -239,6 +266,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._tunit_combo.setCurrentIndex(0)  # Задача #64: единицы времени — секунды (дефолт)
         self._axes_check.setChecked(True)     # оси видимы
         self._hl_check.setChecked(False)      # подсветка выкл
+        self._floor_check.setChecked(True)    # Задача #76: подложка видима (дефолт)
         # Задача #55: регулировки (усиление/гамма/отсечка/сглаживание/освещение) живут на
         # панели-рукоятках; сброс к дефолтам + включение всех рядов/общего — одним вызовом.
         self._adjust.reset_all()
@@ -247,6 +275,11 @@ class MainWindow(QtWidgets.QMainWindow):
     def _on_axes_toggled(self, on: bool) -> None:
         """Переключатель подписей делений осей 3D (Задача 14)."""
         self._view3d.set_axis_labels_visible(on)
+
+    @QtCore.Slot(bool)
+    def _on_floor_toggled(self, on: bool) -> None:
+        """Задача #76: показать/скрыть подложку (плоское дно рельефа, фиолетовый прямоугольник)."""
+        self._view3d.set_floor_visible(on)
 
     @QtCore.Slot(int)
     def _on_time_unit_changed(self, _idx: int) -> None:
