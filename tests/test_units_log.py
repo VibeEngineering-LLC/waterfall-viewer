@@ -80,113 +80,9 @@ def test_spectrum_curve_is_cyan(app):
     assert pen.width() == 2
 
 
-def test_view3d_time_plane_profile_is_projection(app):
-    # Задача #47: на плоскости Времени — проекция-сумма рельефа (не срез по одному индексу).
-    # Одна плоскость видима -> окно суммирования = вся ось времени.
-    v = Waterfall3DView()
-    v.set_spectrogram(_make_sg(ns=20, nc=30), max_time=400, max_chan=512)
-    v.set_plane("time", 0, 0.0, True)
-    line = v._planes[("time", 0)]["line"]
-    assert line.visible() is True
-    assert line.pos.shape == (v._nc, 3)                # точка на каждый канал
-    # Задача #52: проекция = Z-шкала(Σ sum-LOD counts) = спектр окна, нормированная в высоту
-    s = apply_z_scale(v._z_counts_sum.sum(axis=0), v._z_mode, gain=v._gain,
-                      gamma=v._gamma, clip=v._clip).astype(np.float64)
-    s = s / s.max() * v._height_scale
-    assert np.allclose(line.pos[:, 2], s)              # высота = нормированная проекция суммы
-
-
-def test_view3d_time_projection_between_planes(app):
-    # Задача #47: обе плоскости Времени видимы -> профиль = сумма рельефа в окне МЕЖДУ ними;
-    # обе плоскости показывают одну и ту же проекцию.
-    v = Waterfall3DView()
-    v.set_spectrogram(_make_sg(ns=24, nc=20), max_time=400, max_chan=512)
-    v.set_plane("time", 0, 0.2, True)
-    v.set_plane("time", 1, 0.8, True)
-    i0, i1 = v._clip_windows()[0:2]
-    s = apply_z_scale(v._z_counts_sum[i0:i1 + 1, :].sum(axis=0), v._z_mode, gain=v._gain,
-                      gamma=v._gamma, clip=v._clip).astype(np.float64)
-    s = s / s.max() * v._height_scale
-    assert np.allclose(v._planes[("time", 0)]["line"].pos[:, 2], s)
-    assert np.allclose(v._planes[("time", 1)]["line"].pos[:, 2], s)
-
-
-def test_view3d_profile_always_on_top(app):
-    # Профиль рисуется поверх непрозрачного рельефа: depth-тест выключен (иначе тонет).
-    from awf.ui.view3d import _PROFILE_GL
-    from OpenGL.GL import GL_DEPTH_TEST
-    assert _PROFILE_GL[GL_DEPTH_TEST] is False
-    v = Waterfall3DView()
-    v.set_spectrogram(_make_sg(ns=15, nc=25))
-    line = v._planes[("energy", 1)]["line"]
-    opts = getattr(line, "_GLGraphicsItem__glOpts", {})
-    assert opts.get(GL_DEPTH_TEST) is False
-
-
-def test_view3d_counts_plane_has_no_profile(app):
-    # Горизонтальная плоскость уровня Отсчётов 1D-профиля не имеет — кривая скрыта.
-    v = Waterfall3DView()
-    v.set_spectrogram(_make_sg(ns=15, nc=25))
-    v.set_plane("counts", 0, 0.5, True)
-    assert v._planes[("counts", 0)]["line"].visible() is False
-
-
-def test_view3d_profile_depth_value_above_surface(app):
-    # Задача #49: профиль имеет больший depthValue, чем поверхность -> рисуется ПОСЛЕ неё
-    # (поверхность пересоздаётся каждый рендер и иначе перекрыла бы линию снаружи плоскостей).
-    v = Waterfall3DView()
-    v.set_spectrogram(_make_sg(ns=15, nc=25))
-    line = v._planes[("time", 0)]["line"]
-    assert line.depthValue() == 10
-    assert line.depthValue() > v._surface.depthValue()
-
-
-def test_view3d_profile_matches_window_spectrum(app):
-    # Задача #52: профиль на плоскости = спектр верхнего-правого окна (sg.sum_spectrum по окну).
-    # Устойчивый пик (бо́льший ИНТЕГРАЛ) выше короткого транзиента-башни — как в окне; старый
-    # max-метод (#50) сажал максимум на башню. Без прорежки каналов профиль поканально = sum_spectrum.
-    ns, nc = 40, 100
-    counts = np.random.RandomState(3).poisson(5, size=(ns, nc)).astype(np.int64)
-    counts[:, 70] += 30                         # устойчивый пик: интеграл 30*40=1200
-    counts[ns // 2:ns // 2 + 2, 20] += 400      # транзиент-башня: интеграл 800, но высота 405
-    cal = Calibration(coeffs=[0.0, 1.0])
-    t = np.arange(ns, dtype=np.float64)
-    sg = Spectrogram(counts=counts, calibration=cal, time_offsets_s=t,
-                     real_time_s=np.full(ns, 1.0), live_time_s=np.full(ns, 1.0))
-    v = Waterfall3DView()
-    v.set_spectrogram(sg, max_time=400, max_chan=512)
-    v.set_plane("time", 0, 0.0, True)
-    prof = v._planes[("time", 0)]["line"].pos[:, 2]
-    win = np.asarray(sg.sum_spectrum(0, ns), dtype=np.float64)   # спектр окна (полное разрешение)
-    assert int(np.argmax(prof)) == int(np.argmax(win)) == 70     # плоскость = окно (sum), не max
-    assert prof[70] > prof[20]                                   # устойчивый пик выше транзиента
-
-
-def _profile_cps_check(sg, counts, live):
-    v = Waterfall3DView()
-    v.set_spectrogram(sg, max_time=400, max_chan=512)   # nc<512, ns<400 -> без прорежки
-    v.set_plane("time", 0, 0.0, True)
-    prof = v._planes[("time", 0)]["line"].pos[:, 2]
-    assert int(np.argmax(counts.sum(axis=0))) == 30                    # по counts выше пик B
-    assert int(np.argmax((counts / live[:, None]).sum(axis=0))) == 10  # по cps выше пик A
-    assert int(np.argmax(prof)) == 10                                  # профиль идёт за cps
-
-
-def test_view3d_profile_is_cps_not_counts(app):
-    # Задача #53: голубая линия = сумма CPS на срезе (counts/live_time), не сумма counts.
-    # Дефолт-единицы рельефа теперь cps -> два пика с разным live_time меняют местами «кто выше».
-    ns, nc = 20, 50
-    counts = np.zeros((ns, nc), dtype=np.int64)
-    live = np.empty(ns, dtype=np.float64)
-    live[: ns // 2] = 0.5            # «быстрые» срезы -> высокий cps
-    live[ns // 2:] = 4.0            # «медленные» срезы -> низкий cps
-    counts[: ns // 2, 10] = 100     # пик A: counts-Σ=1000, cps-Σ=2000
-    counts[ns // 2:, 30] = 200      # пик B: counts-Σ=2000, cps-Σ=500
-    cal = Calibration(coeffs=[0.0, 1.0])
-    t = np.arange(ns, dtype=np.float64)
-    sg = Spectrogram(counts=counts, calibration=cal, time_offsets_s=t,
-                     real_time_s=live.copy(), live_time_s=live.copy())
-    _profile_cps_check(sg, counts, live)
+# Задача #61: профиль/проекция на секущей плоскости убраны (оператор: «все отображения на
+# плоскостях убирай»). Прежние тесты профиля (#41/#47/#48/#49/#50/#52/#53 на плоскости)
+# удалены вместе с фичей; cps-логика сечения по-прежнему покрыта тестами окна спектра/рядов.
 
 
 # ---------- #43: лог/лин шкала спектра ----------
@@ -307,19 +203,20 @@ def test_mainwindow_unit_combo_fans_out(app):
     w.close()
 
 
-# ---------- #45/#46: контраст профиля и затенение рельефа ----------
+# ---------- #46/#61: грань плоскости и затенение рельефа ----------
 
-def test_view3d_profile_matches_frame(app):
-    # Задача #48: профиль красится цветом рамки/оси (time=бирюза, energy=пурпур), не белым.
-    from awf.ui.view3d import _AXIS_RGB
+def test_view3d_section_border_is_dim(app):
+    # Задача #61: грань плоскости (border) — цвет оси (time=бирюза, energy=пурпур), но
+    # приглушённая, полупрозрачная (alpha < 1); профиль/линия на плоскости не строится.
+    from awf.ui.view3d import _AXIS_RGB, _BORDER_ALPHA
+    assert _BORDER_ALPHA < 1.0
     v = Waterfall3DView()
     v.set_spectrogram(_make_sg(ns=15, nc=25))
     v.set_plane("time", 0, 0.3, True)
-    col = np.asarray(v._planes[("time", 0)]["line"].color, dtype=float).ravel()
+    col = np.asarray(v._planes[("time", 0)]["border"].color, dtype=float).ravel()
     assert np.allclose(col[:3], _AXIS_RGB["time"])
-    v.set_plane("energy", 0, 0.4, True)
-    cole = np.asarray(v._planes[("energy", 0)]["line"].color, dtype=float).ravel()
-    assert np.allclose(cole[:3], _AXIS_RGB["energy"])
+    assert col[3] == pytest.approx(_BORDER_ALPHA)
+    assert v._planes[("time", 0)]["line"].visible() is False
 
 
 def test_surface_shading_none_when_zero():

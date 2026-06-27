@@ -18,6 +18,9 @@ _AXIS_RGB = {
 }
 _AXIS_LABEL = {"time": "Время (с)", "energy": "Энергия (кэВ)", "counts": "Отсчёты (выс.)"}
 _PLANE_ALPHA = 0.20
+# Задача #61: грани секущих плоскостей (контур-рамка border) приглушены — полупрозрачные,
+# «не такие яркие». Цвет оси сохраняется, понижается только alpha (rgb×alpha-блендинг).
+_BORDER_ALPHA = 0.30
 _TICK_COLOR = (205, 205, 215)       # цвет подписей делений осей (Задача 14)
 
 # Задача #41: кривую сечения (профиль поверхности на секущей плоскости) рисуем ПОВЕРХ
@@ -156,6 +159,8 @@ class Waterfall3DView(gl.GLViewWidget):
                 border = gl.GLLinePlotItem(mode="line_strip", antialias=True, width=2.0)
                 border.setVisible(False)
                 self.addItem(border)
+                # Задача #61: профиль/проекция на плоскости убраны — элемент остаётся
+                # держателем (всегда скрыт), GL-настройки ниже сохранены на случай возврата.
                 line = gl.GLLinePlotItem(mode="line_strip", antialias=True, width=2.5)
                 line.setGLOptions(_PROFILE_GL)   # Задача #41: профиль всегда поверх рельефа
                 # Задача #49: поверхность пересоздаётся каждый рендер (removeItem+addItem) и
@@ -596,7 +601,9 @@ class Waterfall3DView(gl.GLViewWidget):
                 self._apply_plane(axis, slot)
 
     def _section_projection(self, axis: str):
-        """Профиль на секущей плоскости (Задача #47): проекция-сумма рельефа в объёме между
+        """Задача #61: больше НЕ вызывается — профиль/проекция на плоскости убраны; метод
+        сохранён на случай возврата фичи.
+        Профиль на секущей плоскости (Задача #47): проекция-сумма рельефа в объёме между
         парой плоскостей оси, вписанная в высоту плоскости [0, zmax]. Окно суммирования — как у
         обрезки (IV-R3): обе плоскости оси видимы -> между ними, иначе вся ось. time -> сумма по
         времени (кривая по энергии, nc); energy -> сумма по энергии (кривая по времени, nt).
@@ -622,10 +629,10 @@ class Waterfall3DView(gl.GLViewWidget):
     def _apply_plane(self, axis: str, slot: int) -> None:
         entry = self._planes[(axis, slot)]
         mesh, border, line = entry["mesh"], entry["border"], entry["line"]
+        line.setVisible(False)          # Задача #61: профиль/проекция на плоскости убраны
         if not entry["visible"] or self._z_surface is None:
             mesh.setVisible(False)
             border.setVisible(False)
-            line.setVisible(False)
             return
         frac = entry["frac"]
         xmin, xmax, ymin, ymax, zmax = self._axis_extent()
@@ -637,41 +644,26 @@ class Waterfall3DView(gl.GLViewWidget):
             px = float(i) - nt / 2.0
             verts = np.array([[px, ymin, 0.0], [px, ymax, 0.0],
                               [px, ymax, zmax], [px, ymin, zmax]], dtype=np.float32)
-            prof = np.column_stack([                       # Задача #47: проекция суммы по времени
-                np.full(nc, px, dtype=np.float32),
-                np.arange(nc, dtype=np.float32) - nc / 2.0,
-                self._section_projection("time")])
         elif axis == "energy":
             j = self._frac_to_index(self._ch_centers, frac)
             py = float(j) - nc / 2.0
             verts = np.array([[xmin, py, 0.0], [xmax, py, 0.0],
                               [xmax, py, zmax], [xmin, py, zmax]], dtype=np.float32)
-            prof = np.column_stack([                       # Задача #47: проекция суммы по энергии
-                np.arange(nt, dtype=np.float32) - nt / 2.0,
-                np.full(nt, py, dtype=np.float32),
-                self._section_projection("energy")])
-        else:  # counts — горизонтальная плоскость уровня Z; профиль-контур не строим
+        else:  # counts — горизонтальная плоскость уровня Z
             pz = frac * zmax
             verts = np.array([[xmin, ymin, pz], [xmax, ymin, pz],
                               [xmax, ymax, pz], [xmin, ymax, pz]], dtype=np.float32)
-            prof = None
 
         faces = np.array([[0, 1, 2], [0, 2, 3]], dtype=np.int32)
         mesh.setMeshData(vertexes=verts, faces=faces,
                          color=(r, g, b, _PLANE_ALPHA))
         mesh.setVisible(True)
-        # Задача #37: видимый контур сечения — замкнутый прямоугольник по 4 углам
-        # quad'а (без диагонали и без заливки). Цвет оси, непрозрачный.
+        # Задача #37: видимый контур сечения — прямоугольник по 4 углам quad'а (без заливки).
+        # Задача #61: грань приглушена — полупрозрачный дим-контур (_BORDER_ALPHA), «не такая
+        # яркая»; профиль/проекция на плоскости убраны (line скрыт в начале метода).
         loop = np.vstack([verts, verts[0:1]]).astype(np.float32)
-        border.setData(pos=loop, color=(r, g, b, 1.0), width=2.0)
+        border.setData(pos=loop, color=(r, g, b, _BORDER_ALPHA), width=1.5)
         border.setVisible(True)
-        if prof is not None:
-            # Задачи #47/#48: на плоскости — проекция суммы между плоскостями (высота prof.z из
-            # _section_projection), цвет = цвет рамки/оси (r,g,b); поверх рельефа (см. _PROFILE_GL).
-            line.setData(pos=prof, color=(r, g, b, 1.0), width=3.0)
-            line.setVisible(True)
-        else:
-            line.setVisible(False)
 
 
 class SectionControls(QtWidgets.QWidget):

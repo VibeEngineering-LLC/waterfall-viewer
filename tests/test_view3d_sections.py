@@ -54,16 +54,17 @@ def test_plane_value_real_units(app):
     assert "отсч" in cunit and cval == pytest.approx(float(v._sg.counts.max()))
 
 
-def test_set_plane_visibility_and_profile(app):
+def test_set_plane_visibility_no_profile(app):
+    """Задача #61: при включении плоскости видны mesh-держатель и дим-контур (border);
+    профиль-линия на плоскости убрана — скрыта на всех осях."""
     v = Waterfall3DView()
     v.set_spectrogram(_make_sg(), max_time=400, max_chan=512)
-    # время/энергия: и плоскость, и профиль-линия видны
     v.set_plane("time", 0, 0.5, True)
     assert v._planes[("time", 0)]["mesh"].visible() is True
-    assert v._planes[("time", 0)]["line"].visible() is True
+    assert v._planes[("time", 0)]["border"].visible() is True
+    assert v._planes[("time", 0)]["line"].visible() is False
     v.set_plane("energy", 1, 0.7, True)
-    assert v._planes[("energy", 1)]["line"].visible() is True
-    # отсчёты: горизонтальная плоскость есть, профиль-контур не строится
+    assert v._planes[("energy", 1)]["line"].visible() is False
     v.set_plane("counts", 0, 0.5, True)
     assert v._planes[("counts", 0)]["mesh"].visible() is True
     assert v._planes[("counts", 0)]["line"].visible() is False
