@@ -85,7 +85,7 @@ def test_preset_combobox_sets_window(app):
     s = SlicePanel()
     s.set_spectrogram(sg)
     s.set_unit_mode("counts")          # Задача #53: дефолт cps — тест сверяет сырые counts
-    s._ewin_preset.setCurrentIndex(1)             # 0 = «вручную», 1 = Cs-137 662
+    s._ewin_preset.setCurrentIndex(0)             # Задача #94: пресеты с 0; 0 = Cs-137 662
     w = DEFAULT_WINDOWS[0]
     assert abs(s._ewin_lo.value() - w.e_lo) < 1.0
     assert abs(s._ewin_hi.value() - w.e_hi) < 1.0
@@ -96,15 +96,25 @@ def test_preset_combobox_sets_window(app):
 
 
 def test_manual_spin_edit_resets_preset(app):
-    # ручная правка границ сбрасывает пресет в «вручную» (idx 0) и обновляет профиль
+    # Задача #94: ручная правка границ снимает активный пресет (пустой выбор idx == -1)
     sg = _make_sg()
     s = SlicePanel()
     s.set_spectrogram(sg)
-    s._ewin_preset.setCurrentIndex(2)             # K-40
+    s._ewin_preset.setCurrentIndex(1)             # K-40 (DEFAULT_WINDOWS[1] после сдвига #94)
     s._ewin_lo.setValue(600.0); s._ewin_hi.setValue(620.0)
     s._on_ewin_spin()
-    assert s._ewin_preset.currentIndex() == 0     # сброшен в «вручную»
+    assert s._ewin_preset.currentIndex() == -1    # активного пресета нет (ручное)
     assert s._ewin_active == (600.0, 620.0)
+
+
+def test_ewin_preset_has_no_manual_item(app):
+    # Задача #94: пункт «— вручную —» убран; комбо содержит только пресеты, старт — пустой выбор
+    s = SlicePanel()
+    items = [s._ewin_preset.itemText(i) for i in range(s._ewin_preset.count())]
+    assert "— вручную —" not in items
+    assert s._ewin_preset.count() == len(DEFAULT_WINDOWS)
+    assert items[0].startswith(DEFAULT_WINDOWS[0].name)   # индекс 0 = первый пресет
+    assert s._ewin_preset.currentIndex() == -1            # активного пресета нет на старте
 
 
 def test_preset_ignored_before_load(app):

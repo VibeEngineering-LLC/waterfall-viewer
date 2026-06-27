@@ -1,12 +1,15 @@
 {
   "_provenance": {
-    "source": "LSRM SpectraLine gamma nuclide library (УДС-ГЦ 2024)",
+    "source": "LSRM SpectraLine (УДС-ГЦ 2024) + IAEA LiveChart ENSDF (decay_rads, rad_types=g)",
     "library_version": "2.0",
     "database_version": "26",
     "note": "Энергии и интенсивности гамма-линий — физические константы. Извлечено парсером awf/io/nuclide_lib.py.",
-    "nuclide_count": 21,
-    "line_count": 124,
-    "categorized": true
+    "nuclide_count": 83,
+    "line_count": 871,
+    "categorized": true,
+    "iaea_added": 62,
+    "iaea_endpoint": "https://www-nds.iaea.org/relnsd/v1/data?fields=decay_rads&rad_types=g",
+    "iaea_fetch_date": "2026-06-27"
   },
   "nuclides": [
     {
@@ -1231,6 +1234,6726 @@
           "used": true
         }
       ]
+    },
+    {
+      "name": "F-18",
+      "half_life_value": 109.77,
+      "half_life_unit": "minute",
+      "gamma_constant": null,
+      "atomic_mass": 18,
+      "category": "medical",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 511.0,
+          "intensity": 193.46,
+          "d_energy": null,
+          "d_intensity": 0.08,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Ga-67",
+      "half_life_value": 3.2617,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 67,
+      "category": "medical",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 1.035,
+          "intensity": 1.847994740150832,
+          "d_energy": null,
+          "d_intensity": 0.08374004563863426,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 8.616,
+          "intensity": 17.176652561133213,
+          "d_energy": null,
+          "d_intensity": 0.5139281887189318,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 8.639,
+          "intensity": 33.4046140823283,
+          "d_energy": null,
+          "d_intensity": 0.986187534600799,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 9.61,
+          "intensity": 7.167365483378496,
+          "d_energy": null,
+          "d_intensity": 0.219813747837904,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 9.61,
+          "intensity": 7.167365483378496,
+          "d_energy": null,
+          "d_intensity": 0.219813747837904,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 91.265,
+          "intensity": 3.11,
+          "d_energy": null,
+          "d_intensity": 0.04,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 93.31,
+          "intensity": 38.81,
+          "d_energy": null,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 184.576,
+          "intensity": 21.41,
+          "d_energy": null,
+          "d_intensity": 0.01,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 208.95,
+          "intensity": 2.46,
+          "d_energy": null,
+          "d_intensity": 0.01,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 300.217,
+          "intensity": 16.64,
+          "d_energy": null,
+          "d_intensity": 0.12,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 393.527,
+          "intensity": 4.56,
+          "d_energy": null,
+          "d_intensity": 0.24,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 887.688,
+          "intensity": 0.148,
+          "d_energy": null,
+          "d_intensity": 0.003,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "I-123",
+      "half_life_value": 13.223,
+      "half_life_unit": "hour",
+      "gamma_constant": null,
+      "atomic_mass": 123,
+      "category": "medical",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 4.135,
+          "intensity": 8.961888674986705,
+          "d_energy": null,
+          "d_intensity": 0.3669665084608639,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 27.202,
+          "intensity": 24.627375932819575,
+          "d_energy": null,
+          "d_intensity": 0.20821848628873443,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 27.473,
+          "intensity": 45.861035256647256,
+          "d_energy": null,
+          "d_intensity": 0.3236674894174711,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 31.093,
+          "intensity": 13.124629396493987,
+          "d_energy": null,
+          "d_intensity": 0.16964136630970753,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 31.359,
+          "intensity": 15.972673975533183,
+          "d_energy": null,
+          "d_intensity": 0.19574643780753762,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 31.698,
+          "intensity": 2.848044579039195,
+          "d_energy": null,
+          "d_intensity": 0.075243164192871,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 159.0,
+          "intensity": 83.6,
+          "d_energy": null,
+          "d_intensity": 0.19,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 346.36,
+          "intensity": 0.12,
+          "d_energy": null,
+          "d_intensity": 0.003,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 440.02,
+          "intensity": 0.388,
+          "d_energy": null,
+          "d_intensity": 0.01,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 505.33,
+          "intensity": 0.288,
+          "d_energy": null,
+          "d_intensity": 0.008,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 528.97,
+          "intensity": 1.27,
+          "d_energy": null,
+          "d_intensity": 0.1,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 538.54,
+          "intensity": 0.31,
+          "d_energy": null,
+          "d_intensity": 0.04,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "I-125",
+      "half_life_value": 59.407,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 125,
+      "category": "medical",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 4.135,
+          "intensity": 14.76624243368,
+          "d_energy": null,
+          "d_intensity": 0.6196547619594477,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 27.202,
+          "intensity": 39.4309504370747,
+          "d_energy": null,
+          "d_intensity": 0.5471146856413175,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 27.473,
+          "intensity": 73.42821310442216,
+          "d_energy": null,
+          "d_intensity": 0.9597750526711823,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 31.093,
+          "intensity": 21.0138754794603,
+          "d_energy": null,
+          "d_intensity": 0.35668318386880804,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 31.359,
+          "intensity": 25.573886458503186,
+          "d_energy": null,
+          "d_intensity": 0.42117556229394726,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 31.698,
+          "intensity": 4.560010979042885,
+          "d_energy": null,
+          "d_intensity": 0.1305004709032384,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 35.4925,
+          "intensity": 6.68,
+          "d_energy": null,
+          "d_intensity": 0.13,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "In-111",
+      "half_life_value": 2.8047,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 111,
+      "category": "medical",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 3.388,
+          "intensity": 6.7631966971776,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 22.983,
+          "intensity": 23.56763885408537,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 23.173,
+          "intensity": 44.32506837330331,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 26.184,
+          "intensity": 12.355094183258297,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 26.381,
+          "intensity": 14.603721324611305,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 26.641,
+          "intensity": 2.24862714135301,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 171.28,
+          "intensity": 90.65,
+          "d_energy": null,
+          "d_intensity": 0.9403415602854104,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 245.35,
+          "intensity": 94.09,
+          "d_energy": null,
+          "d_intensity": 0.957962843747084,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Lu-177",
+      "half_life_value": 6.6443,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 177,
+      "category": "medical",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 9.114,
+          "intensity": 3.0365354846606,
+          "d_energy": null,
+          "d_intensity": 0.1228241103116262,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 54.608,
+          "intensity": 1.5716035926459486,
+          "d_energy": null,
+          "d_intensity": 0.03300571254622204,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 55.786,
+          "intensity": 2.7504438093208763,
+          "d_energy": null,
+          "d_intensity": 0.05649547515129684,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 63.333,
+          "intensity": 0.9073911672637534,
+          "d_energy": null,
+          "d_intensity": 0.02333042927321979,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 64.057,
+          "intensity": 1.1496646089231755,
+          "d_energy": null,
+          "d_intensity": 0.029209402078556573,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 64.935,
+          "intensity": 0.24227344165942216,
+          "d_energy": null,
+          "d_intensity": 0.007706309595173322,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 71.6418,
+          "intensity": 0.164,
+          "d_energy": null,
+          "d_intensity": 0.005,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 112.9498,
+          "intensity": 6.23,
+          "d_energy": null,
+          "d_intensity": 0.04,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 208.3662,
+          "intensity": 10.41,
+          "d_energy": null,
+          "d_intensity": 0.04,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 249.6742,
+          "intensity": 0.1997,
+          "d_energy": null,
+          "d_intensity": 0.0013,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 321.3159,
+          "intensity": 0.2186,
+          "d_energy": null,
+          "d_intensity": 0.0032,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Mo-99",
+      "half_life_value": 65.924,
+      "half_life_unit": "hour",
+      "gamma_constant": null,
+      "atomic_mass": 99,
+      "category": "medical",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 2.586,
+          "intensity": 0.19656159279459645,
+          "d_energy": null,
+          "d_intensity": 0.007017049820493944,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 18.25,
+          "intensity": 0.931189981806759,
+          "d_energy": null,
+          "d_intensity": 0.028065825418381696,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 18.367,
+          "intensity": 1.770659786664307,
+          "d_energy": null,
+          "d_intensity": 0.05269924481225436,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 20.695,
+          "intensity": 0.47060716606270636,
+          "d_energy": null,
+          "d_intensity": 0.01467813181775376,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 20.82,
+          "intensity": 0.544963098300614,
+          "d_energy": null,
+          "d_intensity": 0.016833616240324728,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 40.58323,
+          "intensity": 1.03822,
+          "d_energy": null,
+          "d_intensity": 0.03340127925693865,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 181.068,
+          "intensity": 6.0512,
+          "d_energy": null,
+          "d_intensity": 0.11658117172168068,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 366.421,
+          "intensity": 1.20048,
+          "d_energy": null,
+          "d_intensity": 0.02414049576955701,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 739.5,
+          "intensity": 12.2,
+          "d_energy": null,
+          "d_intensity": 0.16,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 777.921,
+          "intensity": 4.3066,
+          "d_energy": null,
+          "d_intensity": 0.08313236674123983,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 822.972,
+          "intensity": 0.1342,
+          "d_energy": null,
+          "d_intensity": 0.003008521231435803,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Sm-153",
+      "half_life_value": 46.284,
+      "half_life_unit": "hour",
+      "gamma_constant": null,
+      "atomic_mass": 153,
+      "category": "medical",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 6.603,
+          "intensity": 10.745360592231657,
+          "d_energy": null,
+          "d_intensity": 0.4612899452944941,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 40.901,
+          "intensity": 16.646127592882905,
+          "d_energy": null,
+          "d_intensity": 0.2229878089844019,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 41.541,
+          "intensity": 30.036318283801705,
+          "d_energy": null,
+          "d_intensity": 0.37885984975610465,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 47.146,
+          "intensity": 9.462657947976611,
+          "d_energy": null,
+          "d_intensity": 0.15728161600514903,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 47.645,
+          "intensity": 11.904023698554576,
+          "d_energy": null,
+          "d_intensity": 0.1921201192475577,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 48.248,
+          "intensity": 2.441365750577966,
+          "d_energy": null,
+          "d_intensity": 0.06233117024569857,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 69.673,
+          "intensity": 4.668228,
+          "d_energy": null,
+          "d_intensity": 0.041042153208621986,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 75.42213,
+          "intensity": 0.192324,
+          "d_energy": null,
+          "d_intensity": 0.026247251513253727,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 83.36717,
+          "intensity": 0.190867,
+          "d_energy": null,
+          "d_intensity": 0.004778731815032101,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 89.48595,
+          "intensity": 0.157356,
+          "d_energy": null,
+          "d_intensity": 0.008784592193152736,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 97.431,
+          "intensity": 0.763468,
+          "d_energy": null,
+          "d_intensity": 0.012386896302141227,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 103.18012,
+          "intensity": 29.14,
+          "d_energy": null,
+          "d_intensity": 0.16,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Tc-99m",
+      "half_life_value": 6.0072,
+      "half_life_unit": "hour",
+      "gamma_constant": null,
+      "atomic_mass": 99,
+      "category": "medical",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 2.586,
+          "intensity": 0.44999264064,
+          "d_energy": null,
+          "d_intensity": 0.022303578735653494,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 18.25,
+          "intensity": 2.117512717062367,
+          "d_energy": null,
+          "d_intensity": 0.10365712284513368,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 18.367,
+          "intensity": 4.026455061917412,
+          "d_energy": null,
+          "d_intensity": 0.19617266407891779,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 20.695,
+          "intensity": 1.0701539732471688,
+          "d_energy": null,
+          "d_intensity": 0.053085742393340775,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 20.82,
+          "intensity": 1.2392383010202213,
+          "d_energy": null,
+          "d_intensity": 0.0612399755660652,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 21.003,
+          "intensity": 0.16908432777305268,
+          "d_energy": null,
+          "d_intensity": 0.009948954107848962,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 140.511,
+          "intensity": 89.0,
+          "d_energy": null,
+          "d_intensity": 4.0,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Tl-201",
+      "half_life_value": 3.042,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 201,
+      "category": "medical",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 11.777,
+          "intensity": 42.2,
+          "d_energy": null,
+          "d_intensity": 1.7,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 30.6,
+          "intensity": 0.258,
+          "d_energy": null,
+          "d_intensity": 0.006,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 32.19,
+          "intensity": 0.263,
+          "d_energy": null,
+          "d_intensity": 0.006,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 68.894,
+          "intensity": 27.0,
+          "d_energy": null,
+          "d_intensity": 0.3,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 70.82,
+          "intensity": 45.8,
+          "d_energy": null,
+          "d_intensity": 0.4,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 80.316,
+          "intensity": 15.5,
+          "d_energy": null,
+          "d_intensity": 0.3,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 81.285,
+          "intensity": 20.1,
+          "d_energy": null,
+          "d_intensity": 0.3,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 82.477,
+          "intensity": 4.55,
+          "d_energy": null,
+          "d_intensity": 0.11,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 135.34,
+          "intensity": 2.605,
+          "d_energy": null,
+          "d_intensity": 0.032,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 165.88,
+          "intensity": 0.147,
+          "d_energy": null,
+          "d_intensity": 0.0025,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 167.43,
+          "intensity": 10.0,
+          "d_energy": null,
+          "d_intensity": 0.1,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Ac-228",
+      "half_life_value": 6.15,
+      "half_life_unit": "hour",
+      "gamma_constant": null,
+      "atomic_mass": 228,
+      "category": "natural",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 15.784,
+          "intensity": 33.4,
+          "d_energy": null,
+          "d_intensity": 2.1,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 89.954,
+          "intensity": 2.01,
+          "d_energy": null,
+          "d_intensity": 0.19,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 93.347,
+          "intensity": 3.2,
+          "d_energy": null,
+          "d_intensity": 0.3,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 99.509,
+          "intensity": 1.26,
+          "d_energy": null,
+          "d_intensity": 0.07,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 105.566,
+          "intensity": 1.16,
+          "d_energy": null,
+          "d_intensity": 0.11,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 106.894,
+          "intensity": 1.54,
+          "d_energy": null,
+          "d_intensity": 0.15,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 129.065,
+          "intensity": 2.42,
+          "d_energy": null,
+          "d_intensity": 0.09,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 153.977,
+          "intensity": 0.722,
+          "d_energy": null,
+          "d_intensity": 0.021,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 209.253,
+          "intensity": 3.89,
+          "d_energy": null,
+          "d_intensity": 0.07,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 214.85,
+          "intensity": 0.76,
+          "d_energy": null,
+          "d_intensity": 0.11,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 270.245,
+          "intensity": 3.46,
+          "d_energy": null,
+          "d_intensity": 0.06,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 328.0,
+          "intensity": 2.95,
+          "d_energy": null,
+          "d_intensity": 0.12,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 338.32,
+          "intensity": 11.27,
+          "d_energy": null,
+          "d_intensity": 0.19,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 409.462,
+          "intensity": 1.92,
+          "d_energy": null,
+          "d_intensity": 0.04,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 463.004,
+          "intensity": 4.4,
+          "d_energy": null,
+          "d_intensity": 0.07,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 562.5,
+          "intensity": 0.87,
+          "d_energy": null,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 674.75,
+          "intensity": 2.1,
+          "d_energy": null,
+          "d_intensity": 0.7,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 755.315,
+          "intensity": 1.0,
+          "d_energy": null,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 772.291,
+          "intensity": 1.49,
+          "d_energy": null,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 794.947,
+          "intensity": 4.25,
+          "d_energy": null,
+          "d_intensity": 0.07,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 835.71,
+          "intensity": 1.61,
+          "d_energy": null,
+          "d_intensity": 0.06,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 840.377,
+          "intensity": 0.91,
+          "d_energy": null,
+          "d_intensity": 0.04,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 904.2,
+          "intensity": 0.77,
+          "d_energy": null,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 911.204,
+          "intensity": 25.8,
+          "d_energy": null,
+          "d_intensity": 0.4,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 964.766,
+          "intensity": 4.99,
+          "d_energy": null,
+          "d_intensity": 0.09,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 968.971,
+          "intensity": 15.8,
+          "d_energy": null,
+          "d_intensity": 0.3,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1459.138,
+          "intensity": 0.83,
+          "d_energy": null,
+          "d_intensity": 0.08,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1495.91,
+          "intensity": 0.86,
+          "d_energy": null,
+          "d_intensity": 0.04,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1588.2,
+          "intensity": 3.22,
+          "d_energy": null,
+          "d_intensity": 0.08,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1630.627,
+          "intensity": 1.51,
+          "d_energy": null,
+          "d_intensity": 0.04,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Be-7",
+      "half_life_value": 53.22,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 7,
+      "category": "natural",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 477.6035,
+          "intensity": 10.44,
+          "d_energy": null,
+          "d_intensity": 0.04,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Bi-212",
+      "half_life_value": 60.55,
+      "half_life_unit": "minute",
+      "gamma_constant": null,
+      "atomic_mass": 212,
+      "category": "natural",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 12.148,
+          "intensity": 6.998779634612,
+          "d_energy": null,
+          "d_intensity": 0.6613177757538622,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 39.857,
+          "intensity": 1.06,
+          "d_energy": null,
+          "d_intensity": 0.09,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 288.2,
+          "intensity": 0.337,
+          "d_energy": null,
+          "d_intensity": 0.003,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 328.03,
+          "intensity": 0.125,
+          "d_energy": null,
+          "d_intensity": 0.006,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 452.98,
+          "intensity": 0.363,
+          "d_energy": null,
+          "d_intensity": 0.003,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 727.33,
+          "intensity": 6.67,
+          "d_energy": null,
+          "d_intensity": 0.09,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 785.37,
+          "intensity": 1.102,
+          "d_energy": null,
+          "d_intensity": 0.013,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 893.408,
+          "intensity": 0.378,
+          "d_energy": null,
+          "d_intensity": 0.019,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 952.12,
+          "intensity": 0.17,
+          "d_energy": null,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1078.62,
+          "intensity": 0.564,
+          "d_energy": null,
+          "d_intensity": 0.019,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1512.7,
+          "intensity": 0.29,
+          "d_energy": null,
+          "d_intensity": 0.04,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1620.5,
+          "intensity": 1.47,
+          "d_energy": null,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Bi-214",
+      "half_life_value": 19.71,
+      "half_life_unit": "minute",
+      "gamma_constant": null,
+      "atomic_mass": 214,
+      "category": "natural",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 13.292,
+          "intensity": 0.6081949263906414,
+          "d_energy": null,
+          "d_intensity": 0.02669082815753011,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 76.862,
+          "intensity": 0.4120000589273293,
+          "d_energy": null,
+          "d_intensity": 0.010034670654013497,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 79.29,
+          "intensity": 0.6860950190296908,
+          "d_energy": null,
+          "d_intensity": 0.01646459650923169,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 388.89,
+          "intensity": 0.386,
+          "d_energy": null,
+          "d_intensity": 0.005,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 609.321,
+          "intensity": 45.44,
+          "d_energy": null,
+          "d_intensity": 0.19,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 665.446,
+          "intensity": 1.54,
+          "d_energy": null,
+          "d_intensity": 0.011,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 703.1,
+          "intensity": 0.482,
+          "d_energy": null,
+          "d_intensity": 0.018,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 719.86,
+          "intensity": 0.409,
+          "d_energy": null,
+          "d_intensity": 0.014,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 768.36,
+          "intensity": 4.89,
+          "d_energy": null,
+          "d_intensity": 0.02,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 806.179,
+          "intensity": 1.262,
+          "d_energy": null,
+          "d_intensity": 0.008,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 934.056,
+          "intensity": 3.094,
+          "d_energy": null,
+          "d_intensity": 0.019,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1120.294,
+          "intensity": 14.9,
+          "d_energy": null,
+          "d_intensity": 0.08,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1155.21,
+          "intensity": 1.634,
+          "d_energy": null,
+          "d_intensity": 0.01,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1207.68,
+          "intensity": 0.454,
+          "d_energy": null,
+          "d_intensity": 0.018,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1238.122,
+          "intensity": 5.83,
+          "d_energy": null,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1280.976,
+          "intensity": 1.435,
+          "d_energy": null,
+          "d_intensity": 0.009,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1377.669,
+          "intensity": 3.985,
+          "d_energy": null,
+          "d_intensity": 0.022,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1385.31,
+          "intensity": 0.801,
+          "d_energy": null,
+          "d_intensity": 0.008,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1401.515,
+          "intensity": 1.333,
+          "d_energy": null,
+          "d_intensity": 0.008,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1407.988,
+          "intensity": 2.388,
+          "d_energy": null,
+          "d_intensity": 0.013,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1509.211,
+          "intensity": 2.127,
+          "d_energy": null,
+          "d_intensity": 0.016,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1538.53,
+          "intensity": 0.436,
+          "d_energy": null,
+          "d_intensity": 0.023,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1583.203,
+          "intensity": 0.708,
+          "d_energy": null,
+          "d_intensity": 0.007,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1661.274,
+          "intensity": 1.046,
+          "d_energy": null,
+          "d_intensity": 0.008,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1729.595,
+          "intensity": 2.87,
+          "d_energy": null,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1764.491,
+          "intensity": 15.29,
+          "d_energy": null,
+          "d_intensity": 0.08,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1847.433,
+          "intensity": 2.027,
+          "d_energy": null,
+          "d_intensity": 0.016,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 2118.513,
+          "intensity": 1.156,
+          "d_energy": null,
+          "d_intensity": 0.01,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 2204.1,
+          "intensity": 4.92,
+          "d_energy": null,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 2447.69,
+          "intensity": 1.545,
+          "d_energy": null,
+          "d_intensity": 0.011,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "La-138",
+      "half_life_value": 103000000000.0,
+      "half_life_unit": "year",
+      "gamma_constant": null,
+      "atomic_mass": 138,
+      "category": "natural",
+      "lifetime": "long",
+      "lines": [
+        {
+          "energy": 4.966,
+          "intensity": 6.0639500581,
+          "d_energy": null,
+          "d_intensity": 0.28093980028483656,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 31.816,
+          "intensity": 10.644552743003649,
+          "d_energy": null,
+          "d_intensity": 0.1287989857597103,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 32.193,
+          "intensity": 19.61045088983723,
+          "d_energy": null,
+          "d_intensity": 0.21942407941186495,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 36.482,
+          "intensity": 5.768266267698976,
+          "d_energy": null,
+          "d_intensity": 0.08928936715239458,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 36.827,
+          "intensity": 7.221869367159118,
+          "d_energy": null,
+          "d_intensity": 0.10800576848037909,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 37.255,
+          "intensity": 1.4536030994601419,
+          "d_energy": null,
+          "d_intensity": 0.03658023807648555,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 788.742,
+          "intensity": 34.5,
+          "d_energy": null,
+          "d_intensity": 0.4,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1435.795,
+          "intensity": 65.5,
+          "d_energy": null,
+          "d_intensity": 0.4,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Pa-231",
+      "half_life_value": 32570.0,
+      "half_life_unit": "year",
+      "gamma_constant": null,
+      "atomic_mass": 231,
+      "category": "natural",
+      "lifetime": "long",
+      "lines": [
+        {
+          "energy": 15.349,
+          "intensity": 45.0,
+          "d_energy": null,
+          "d_intensity": 4.0,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 16.5,
+          "intensity": 0.220966,
+          "d_energy": null,
+          "d_intensity": 0.009003885216949403,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 19.6,
+          "intensity": 0.34629,
+          "d_energy": null,
+          "d_intensity": 0.09910233347404086,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 25.48,
+          "intensity": 0.118728,
+          "d_energy": null,
+          "d_intensity": 0.013334466618504093,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 27.36,
+          "intensity": 10.45466,
+          "d_energy": null,
+          "d_intensity": 0.4463772562530488,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 38.2,
+          "intensity": 0.145112,
+          "d_energy": null,
+          "d_intensity": 0.005488003735421469,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 46.34,
+          "intensity": 0.186337,
+          "d_energy": null,
+          "d_intensity": 0.010353735412883603,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 87.674,
+          "intensity": 0.7109591202907636,
+          "d_energy": null,
+          "d_intensity": 0.018223046000485084,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 90.886,
+          "intensity": 1.1556552670526066,
+          "d_energy": null,
+          "d_intensity": 0.029246687204694727,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 102.818,
+          "intensity": 0.40749046265335387,
+          "d_energy": null,
+          "d_intensity": 0.011817822331897652,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 104.107,
+          "intensity": 0.5431847867169207,
+          "d_energy": null,
+          "d_intensity": 0.015620843410139314,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 105.738,
+          "intensity": 0.13569432406356685,
+          "d_energy": null,
+          "d_intensity": 0.004431486455398358,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 255.78,
+          "intensity": 0.1058658,
+          "d_energy": null,
+          "d_intensity": 0.0019958927626503383,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 260.19,
+          "intensity": 0.1815549,
+          "d_energy": null,
+          "d_intensity": 0.003665023189558287,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 283.682,
+          "intensity": 1.649,
+          "d_energy": null,
+          "d_intensity": 0.027,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 300.066,
+          "intensity": 2.409189,
+          "d_energy": null,
+          "d_intensity": 0.04936686067596359,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 302.667,
+          "intensity": 2.27562,
+          "d_energy": null,
+          "d_intensity": 0.3318980982169075,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 302.667,
+          "intensity": 0.174794,
+          "d_energy": null,
+          "d_intensity": 0.042969418427528196,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 330.055,
+          "intensity": 1.357127,
+          "d_energy": null,
+          "d_intensity": 0.027671157203846754,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 340.71,
+          "intensity": 0.1767728,
+          "d_energy": null,
+          "d_intensity": 0.003601805248760682,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 357.11,
+          "intensity": 0.1675384,
+          "d_energy": null,
+          "d_intensity": 0.003382424526874177,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Pb-210",
+      "half_life_value": 22.2,
+      "half_life_unit": "year",
+      "gamma_constant": null,
+      "atomic_mass": 210,
+      "category": "natural",
+      "lifetime": "long",
+      "lines": [
+        {
+          "energy": 12.904,
+          "intensity": 22.66627,
+          "d_energy": null,
+          "d_intensity": 1.0027411830539374,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 46.539,
+          "intensity": 4.25,
+          "d_energy": null,
+          "d_intensity": 0.04,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Pb-212",
+      "half_life_value": 10.622,
+      "half_life_unit": "hour",
+      "gamma_constant": null,
+      "atomic_mass": 212,
+      "category": "natural",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 12.904,
+          "intensity": 13.675041642107743,
+          "d_energy": null,
+          "d_intensity": 0.5935201393942592,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 74.815,
+          "intensity": 10.027299973093202,
+          "d_energy": null,
+          "d_intensity": 0.17755540608529785,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 77.108,
+          "intensity": 16.776476448206797,
+          "d_energy": null,
+          "d_intensity": 0.2886577667150119,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 87.388,
+          "intensity": 5.746598313908116,
+          "d_energy": null,
+          "d_intensity": 0.13007389815555664,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 88.458,
+          "intensity": 7.505057397964,
+          "d_energy": null,
+          "d_intensity": 0.167428922776184,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 89.784,
+          "intensity": 1.7584590840558836,
+          "d_energy": null,
+          "d_intensity": 0.049090047800709934,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 115.183,
+          "intensity": 0.596448,
+          "d_energy": null,
+          "d_intensity": 0.009213062900034928,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 238.632,
+          "intensity": 43.6,
+          "d_energy": null,
+          "d_intensity": 0.5307178534777213,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 300.087,
+          "intensity": 3.30052,
+          "d_energy": null,
+          "d_intensity": 0.04299242724015475,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Pb-214",
+      "half_life_value": 27.06,
+      "half_life_unit": "minute",
+      "gamma_constant": null,
+      "atomic_mass": 214,
+      "category": "natural",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 12.904,
+          "intensity": 11.137483074964429,
+          "d_energy": null,
+          "d_intensity": 0.5069241425257713,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 53.2256,
+          "intensity": 1.073529,
+          "d_energy": null,
+          "d_intensity": 0.010959942967004891,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 74.815,
+          "intensity": 5.2212476874370175,
+          "d_energy": null,
+          "d_intensity": 0.16991268659939543,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 77.108,
+          "intensity": 8.735565814684653,
+          "d_energy": null,
+          "d_intensity": 0.28191962795057635,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 87.388,
+          "intensity": 2.9922724200567132,
+          "d_energy": null,
+          "d_intensity": 0.10612290276360802,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 88.458,
+          "intensity": 3.9079077805940674,
+          "d_energy": null,
+          "d_intensity": 0.13778661222356645,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 89.784,
+          "intensity": 0.9156353605373543,
+          "d_energy": null,
+          "d_intensity": 0.03575440655903356,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 241.995,
+          "intensity": 7.26291,
+          "d_energy": null,
+          "d_intensity": 0.03792461824461783,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 258.86,
+          "intensity": 0.5313105,
+          "d_energy": null,
+          "d_intensity": 0.00465461872337574,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 274.8,
+          "intensity": 0.3358755,
+          "d_energy": null,
+          "d_intensity": 0.008300617917360129,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 295.224,
+          "intensity": 18.47088,
+          "d_energy": null,
+          "d_intensity": 0.11249527437185973,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 351.932,
+          "intensity": 35.7237,
+          "d_energy": null,
+          "d_intensity": 0.2352736185805795,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 462.01,
+          "intensity": 0.2122515,
+          "d_energy": null,
+          "d_intensity": 0.00642456771230563,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 480.43,
+          "intensity": 0.3367845,
+          "d_energy": null,
+          "d_intensity": 0.004758067613012661,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 487.11,
+          "intensity": 0.432684,
+          "d_energy": null,
+          "d_intensity": 0.00574611811921753,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 533.66,
+          "intensity": 0.1804365,
+          "d_energy": null,
+          "d_intensity": 0.00912124270535545,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 580.13,
+          "intensity": 0.3685995,
+          "d_energy": null,
+          "d_intensity": 0.0056674940502836,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 785.96,
+          "intensity": 1.058985,
+          "d_energy": null,
+          "d_intensity": 0.07739172148233944,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 839.06,
+          "intensity": 0.580851,
+          "d_energy": null,
+          "d_intensity": 0.010731813336524261,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Ra-228",
+      "half_life_value": 5.75,
+      "half_life_unit": "year",
+      "gamma_constant": null,
+      "atomic_mass": 228,
+      "category": "natural",
+      "lifetime": "long",
+      "lines": [
+        {
+          "energy": 12.75,
+          "intensity": 0.304,
+          "d_energy": null,
+          "d_intensity": 0.0640000072199996,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 13.52,
+          "intensity": 1.6,
+          "d_energy": null,
+          "d_intensity": 0.00016,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 15.349,
+          "intensity": 1.042608,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 15.5,
+          "intensity": 0.16,
+          "d_energy": null,
+          "d_intensity": 0.03200000399999975,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 16.2,
+          "intensity": 0.72,
+          "d_energy": null,
+          "d_intensity": 0.08000003239999344,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Th-230",
+      "half_life_value": 75584.0,
+      "half_life_unit": "year",
+      "gamma_constant": null,
+      "atomic_mass": 230,
+      "category": "natural",
+      "lifetime": "long",
+      "lines": [
+        {
+          "energy": 14.92,
+          "intensity": 7.731809660327399,
+          "d_energy": null,
+          "d_intensity": 0.7094056020171331,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 67.672,
+          "intensity": 0.37673,
+          "d_energy": null,
+          "d_intensity": 0.03083388558064001,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Th-234",
+      "half_life_value": 24.1,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 234,
+      "category": "natural",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 16.228,
+          "intensity": 7.2,
+          "d_energy": null,
+          "d_intensity": 0.5,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 63.29,
+          "intensity": 3.665,
+          "d_energy": null,
+          "d_intensity": 0.3885759127892515,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 92.38,
+          "intensity": 2.13,
+          "d_energy": null,
+          "d_intensity": 0.20282051178320204,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 92.8,
+          "intensity": 2.1,
+          "d_energy": null,
+          "d_intensity": 0.20080836635957178,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 112.81,
+          "intensity": 0.21,
+          "d_energy": null,
+          "d_intensity": 0.022521989254948152,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Tl-208",
+      "half_life_value": 3.053,
+      "half_life_unit": "minute",
+      "gamma_constant": null,
+      "atomic_mass": 208,
+      "category": "natural",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 12.522,
+          "intensity": 2.77,
+          "d_energy": null,
+          "d_intensity": 0.12,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 72.805,
+          "intensity": 2.05,
+          "d_energy": null,
+          "d_intensity": 0.04,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 74.97,
+          "intensity": 3.45,
+          "d_energy": null,
+          "d_intensity": 0.07,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 84.986,
+          "intensity": 1.18,
+          "d_energy": null,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 86.022,
+          "intensity": 1.53,
+          "d_energy": null,
+          "d_intensity": 0.04,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 87.301,
+          "intensity": 0.356,
+          "d_energy": null,
+          "d_intensity": 0.011,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 211.4,
+          "intensity": 0.18,
+          "d_energy": null,
+          "d_intensity": 0.01,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 233.36,
+          "intensity": 0.31,
+          "d_energy": null,
+          "d_intensity": 0.01,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 252.61,
+          "intensity": 0.78,
+          "d_energy": null,
+          "d_intensity": 0.02,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 277.371,
+          "intensity": 6.6,
+          "d_energy": null,
+          "d_intensity": 0.3,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 510.77,
+          "intensity": 22.6,
+          "d_energy": null,
+          "d_intensity": 0.2,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 583.187,
+          "intensity": 85.0,
+          "d_energy": null,
+          "d_intensity": 0.3,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 722.04,
+          "intensity": 0.24,
+          "d_energy": null,
+          "d_intensity": 0.04,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 763.13,
+          "intensity": 1.79,
+          "d_energy": null,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 860.557,
+          "intensity": 12.5,
+          "d_energy": null,
+          "d_intensity": 0.1,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 927.6,
+          "intensity": 0.125,
+          "d_energy": null,
+          "d_intensity": 0.011,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 982.7,
+          "intensity": 0.205,
+          "d_energy": null,
+          "d_intensity": 0.008,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1093.9,
+          "intensity": 0.43,
+          "d_energy": null,
+          "d_intensity": 0.02,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 2614.511,
+          "intensity": 99.754,
+          "d_energy": null,
+          "d_intensity": 0.004,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "U-234",
+      "half_life_value": 245500.0,
+      "half_life_unit": "year",
+      "gamma_constant": null,
+      "atomic_mass": 234,
+      "category": "natural",
+      "lifetime": "long",
+      "lines": [
+        {
+          "energy": 15.784,
+          "intensity": 9.824816107234241,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 53.2,
+          "intensity": 0.123,
+          "d_energy": null,
+          "d_intensity": 0.002,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "U-235",
+      "half_life_value": 704000000.0,
+      "half_life_unit": "year",
+      "gamma_constant": null,
+      "atomic_mass": 235,
+      "category": "natural",
+      "lifetime": "long",
+      "lines": [
+        {
+          "energy": 15.784,
+          "intensity": 27.7,
+          "d_energy": null,
+          "d_intensity": 1.8,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 19.55,
+          "intensity": 0.583,
+          "d_energy": null,
+          "d_intensity": 0.011,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 72.7,
+          "intensity": 0.309,
+          "d_energy": null,
+          "d_intensity": 0.034,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 89.954,
+          "intensity": 2.9914423277067512,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 93.347,
+          "intensity": 4.838955560832661,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 96.09,
+          "intensity": 0.127,
+          "d_energy": null,
+          "d_intensity": 0.007,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 105.566,
+          "intensity": 1.7218675985269913,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 106.894,
+          "intensity": 2.3021369792305872,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 108.58,
+          "intensity": 0.580269380703596,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 109.176,
+          "intensity": 1.64,
+          "d_energy": null,
+          "d_intensity": 0.07,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 140.759,
+          "intensity": 0.211,
+          "d_energy": null,
+          "d_intensity": 0.014,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 143.765,
+          "intensity": 10.93,
+          "d_energy": null,
+          "d_intensity": 0.14,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 163.357,
+          "intensity": 5.07,
+          "d_energy": null,
+          "d_intensity": 0.07,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 182.504,
+          "intensity": 0.411,
+          "d_energy": null,
+          "d_intensity": 0.015,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 185.713,
+          "intensity": 57.2,
+          "d_energy": null,
+          "d_intensity": 0.9,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 194.942,
+          "intensity": 0.637,
+          "d_energy": null,
+          "d_intensity": 0.015,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 199.6,
+          "intensity": 0.1,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 202.11,
+          "intensity": 1.07,
+          "d_energy": null,
+          "d_intensity": 0.04,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 205.311,
+          "intensity": 5.03,
+          "d_energy": null,
+          "d_intensity": 0.07,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 221.392,
+          "intensity": 0.115,
+          "d_energy": null,
+          "d_intensity": 0.006,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 279.5,
+          "intensity": 0.26,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "U-238",
+      "half_life_value": 4468000000.0,
+      "half_life_unit": "year",
+      "gamma_constant": null,
+      "atomic_mass": 238,
+      "category": "natural",
+      "lifetime": "long",
+      "lines": [
+        {
+          "energy": 15.784,
+          "intensity": 7.3226196218728,
+          "d_energy": null,
+          "d_intensity": 0.9589568838248274,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Ag-110m",
+      "half_life_value": 249.83,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 110,
+      "category": "technogenic",
+      "lifetime": "long",
+      "lines": [
+        {
+          "energy": 21.99,
+          "intensity": 0.19650873347097003,
+          "d_energy": null,
+          "d_intensity": 0.01268464692649748,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 22.163,
+          "intensity": 0.3704217407558342,
+          "d_energy": null,
+          "d_intensity": 0.023846933152807916,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 22.983,
+          "intensity": 0.15356836158684178,
+          "d_energy": null,
+          "d_intensity": 0.0015636189934454044,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 23.173,
+          "intensity": 0.2888252051661497,
+          "d_energy": null,
+          "d_intensity": 0.002608451401464109,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 25.03,
+          "intensity": 0.10261731326507317,
+          "d_energy": null,
+          "d_intensity": 0.006675610215298283,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 25.211,
+          "intensity": 0.1204727257731959,
+          "d_energy": null,
+          "d_intensity": 0.007812943478642793,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 446.812,
+          "intensity": 3.7,
+          "d_energy": null,
+          "d_intensity": 0.05,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 620.3553,
+          "intensity": 2.73,
+          "d_energy": null,
+          "d_intensity": 0.08,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 626.256,
+          "intensity": 0.217,
+          "d_energy": null,
+          "d_intensity": 0.016,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 657.76,
+          "intensity": 95.61,
+          "d_energy": null,
+          "d_intensity": 0.09,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 676.59,
+          "intensity": 0.143,
+          "d_energy": null,
+          "d_intensity": 0.01,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 677.6217,
+          "intensity": 10.7,
+          "d_energy": null,
+          "d_intensity": 0.05,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 687.0091,
+          "intensity": 6.53,
+          "d_energy": null,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 706.676,
+          "intensity": 16.69,
+          "d_energy": null,
+          "d_intensity": 0.07,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 708.133,
+          "intensity": 0.23,
+          "d_energy": null,
+          "d_intensity": 0.05,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 744.2755,
+          "intensity": 4.77,
+          "d_energy": null,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 763.9424,
+          "intensity": 22.6,
+          "d_energy": null,
+          "d_intensity": 0.07,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 818.0244,
+          "intensity": 7.43,
+          "d_energy": null,
+          "d_intensity": 0.04,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 884.6781,
+          "intensity": 75.0,
+          "d_energy": null,
+          "d_intensity": 1.1,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 937.485,
+          "intensity": 35.0,
+          "d_energy": null,
+          "d_intensity": 0.3,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 997.246,
+          "intensity": 0.13,
+          "d_energy": null,
+          "d_intensity": 0.004,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1334.348,
+          "intensity": 0.143,
+          "d_energy": null,
+          "d_intensity": 0.005,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1384.2931,
+          "intensity": 25.1,
+          "d_energy": null,
+          "d_intensity": 0.5,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1475.7792,
+          "intensity": 4.08,
+          "d_energy": null,
+          "d_intensity": 0.05,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1505.028,
+          "intensity": 13.33,
+          "d_energy": null,
+          "d_intensity": 0.15,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1562.294,
+          "intensity": 1.22,
+          "d_energy": null,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Am-243",
+      "half_life_value": 7364.0,
+      "half_life_unit": "year",
+      "gamma_constant": null,
+      "atomic_mass": 243,
+      "category": "technogenic",
+      "lifetime": "long",
+      "lines": [
+        {
+          "energy": 17.136,
+          "intensity": 18.96184623110475,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 43.53,
+          "intensity": 5.90016,
+          "d_energy": null,
+          "d_intensity": 0.14581278956250718,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 74.66,
+          "intensity": 67.2,
+          "d_energy": null,
+          "d_intensity": 1.2,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 86.71,
+          "intensity": 0.34608,
+          "d_energy": null,
+          "d_intensity": 0.010700939024216519,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 117.6,
+          "intensity": 0.56448,
+          "d_energy": null,
+          "d_intensity": 0.08126755810284939,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 141.89,
+          "intensity": 0.114912,
+          "d_energy": null,
+          "d_intensity": 0.008320985518554879,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Au-198",
+      "half_life_value": 2.6941,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 198,
+      "category": "technogenic",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 11.777,
+          "intensity": 1.1924050708503529,
+          "d_energy": null,
+          "d_intensity": 0.049443924741080884,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 68.894,
+          "intensity": 0.8074709248017369,
+          "d_energy": null,
+          "d_intensity": 0.014500325307967729,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 70.82,
+          "intensity": 1.3688267923406288,
+          "d_energy": null,
+          "d_intensity": 0.023886655018281657,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 80.316,
+          "intensity": 0.46454614843874176,
+          "d_energy": null,
+          "d_intensity": 0.010664743135542795,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 81.285,
+          "intensity": 0.6006581699312931,
+          "d_energy": null,
+          "d_intensity": 0.01359248274630368,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 82.477,
+          "intensity": 0.13611202149255133,
+          "d_energy": null,
+          "d_intensity": 0.003893489953847928,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 411.80205,
+          "intensity": 95.62,
+          "d_energy": null,
+          "d_intensity": 0.06,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 675.8836,
+          "intensity": 0.8051204,
+          "d_energy": null,
+          "d_intensity": 0.004807617709427404,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1087.6842,
+          "intensity": 0.15892044,
+          "d_energy": null,
+          "d_intensity": 0.0018195146734225585,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Cm-242",
+      "half_life_value": 162.88,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 242,
+      "category": "technogenic",
+      "lifetime": "long",
+      "lines": [
+        {
+          "energy": 17.604,
+          "intensity": 9.874846752290713,
+          "d_energy": null,
+          "d_intensity": 0.3883316549914873,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Cm-244",
+      "half_life_value": 18.11,
+      "half_life_unit": "year",
+      "gamma_constant": null,
+      "atomic_mass": 244,
+      "category": "technogenic",
+      "lifetime": "long",
+      "lines": [
+        {
+          "energy": 17.604,
+          "intensity": 9.04319824145732,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Co-58",
+      "half_life_value": 70.86,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 58,
+      "category": "technogenic",
+      "lifetime": "long",
+      "lines": [
+        {
+          "energy": 0.728,
+          "intensity": 0.7052749945467334,
+          "d_energy": null,
+          "d_intensity": 0.07056893857531485,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 6.391,
+          "intensity": 7.9870963935792645,
+          "d_energy": null,
+          "d_intensity": 0.10143143481356878,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 6.404,
+          "intensity": 15.639507330290316,
+          "d_energy": null,
+          "d_intensity": 0.18326386098896438,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 7.082,
+          "intensity": 3.2321193894253586,
+          "d_energy": null,
+          "d_intensity": 0.04999935204452178,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 7.082,
+          "intensity": 3.2321193894253586,
+          "d_energy": null,
+          "d_intensity": 0.04999935204452178,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 511.0,
+          "intensity": 29.80126,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 810.7593,
+          "intensity": 99.45,
+          "d_energy": null,
+          "d_intensity": 0.01,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 863.951,
+          "intensity": 0.686205,
+          "d_energy": null,
+          "d_intensity": 0.009945239363635247,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1674.725,
+          "intensity": 0.51714,
+          "d_energy": null,
+          "d_intensity": 0.00994513594678323,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Cr-51",
+      "half_life_value": 27.704,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 51,
+      "category": "technogenic",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 0.536,
+          "intensity": 0.558363156235386,
+          "d_energy": null,
+          "d_intensity": 0.1099248145206372,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 4.945,
+          "intensity": 6.789548877694662,
+          "d_energy": null,
+          "d_intensity": 0.13754829895466078,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 4.952,
+          "intensity": 13.357365488283813,
+          "d_energy": null,
+          "d_intensity": 0.2625087222588685,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 5.444,
+          "intensity": 2.6875983764215285,
+          "d_energy": null,
+          "d_intensity": 0.06171762237535665,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 5.444,
+          "intensity": 2.6875983764215285,
+          "d_energy": null,
+          "d_intensity": 0.06171762237535665,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 320.0824,
+          "intensity": 9.91,
+          "d_energy": null,
+          "d_intensity": 0.01,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Fe-59",
+      "half_life_value": 44.49,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 59,
+      "category": "technogenic",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 142.651,
+          "intensity": 1.02,
+          "d_energy": null,
+          "d_intensity": 0.05,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 192.343,
+          "intensity": 3.08,
+          "d_energy": null,
+          "d_intensity": 0.12,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 334.8,
+          "intensity": 0.27,
+          "d_energy": null,
+          "d_intensity": 0.012,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1099.245,
+          "intensity": 56.5,
+          "d_energy": null,
+          "d_intensity": 0.9,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1291.59,
+          "intensity": 43.2,
+          "d_energy": null,
+          "d_intensity": 0.9,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Hg-203",
+      "half_life_value": 46.61,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 203,
+      "category": "technogenic",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 12.148,
+          "intensity": 5.38174736592,
+          "d_energy": null,
+          "d_intensity": 0.22870970530693918,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 70.832,
+          "intensity": 3.615202052238344,
+          "d_energy": null,
+          "d_intensity": 0.056457379375809774,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 72.874,
+          "intensity": 6.102636820118744,
+          "d_energy": null,
+          "d_intensity": 0.0917570821551278,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 82.629,
+          "intensity": 2.0754366751294633,
+          "d_energy": null,
+          "d_intensity": 0.04387933473805225,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 83.631,
+          "intensity": 2.6918413676429136,
+          "d_energy": null,
+          "d_intensity": 0.055957417503318056,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 84.866,
+          "intensity": 0.6164046925134506,
+          "d_energy": null,
+          "d_intensity": 0.01665902734496017,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 279.1952,
+          "intensity": 81.56,
+          "d_energy": null,
+          "d_intensity": 0.06,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Ir-192",
+      "half_life_value": 73.829,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 192,
+      "category": "technogenic",
+      "lifetime": "long",
+      "lines": [
+        {
+          "energy": 10.393,
+          "intensity": 1.502676758200464,
+          "d_energy": null,
+          "d_intensity": 0.062219627312248775,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 11.07,
+          "intensity": 3.924516498922746,
+          "d_energy": null,
+          "d_intensity": 0.1572818790253144,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 61.486,
+          "intensity": 1.1984259258336007,
+          "d_energy": null,
+          "d_intensity": 0.02319386205045629,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 63.0,
+          "intensity": 2.0651833979555416,
+          "d_energy": null,
+          "d_intensity": 0.038965920671923504,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 65.122,
+          "intensity": 2.6542601519743005,
+          "d_energy": null,
+          "d_intensity": 0.03330997131572616,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 66.832,
+          "intensity": 4.53719684098171,
+          "d_energy": null,
+          "d_intensity": 0.05353705118756054,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 71.496,
+          "intensity": 0.6909672865209825,
+          "d_energy": null,
+          "d_intensity": 0.016735396744390684,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 72.338,
+          "intensity": 0.8844381267468576,
+          "d_energy": null,
+          "d_intensity": 0.021140873550834757,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 73.364,
+          "intensity": 0.1934708402258751,
+          "d_energy": null,
+          "d_intensity": 0.005821825959672769,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 75.821,
+          "intensity": 1.52664677999766,
+          "d_energy": null,
+          "d_intensity": 0.029228038422196807,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 76.725,
+          "intensity": 1.9632677590769907,
+          "d_energy": null,
+          "d_intensity": 0.03680401689903856,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 77.832,
+          "intensity": 0.4366209790793308,
+          "d_energy": null,
+          "d_intensity": 0.011320017750594763,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 136.39,
+          "intensity": 0.2,
+          "d_energy": null,
+          "d_intensity": 0.02,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 201.3112,
+          "intensity": 0.471,
+          "d_energy": null,
+          "d_intensity": 0.006,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 205.7943,
+          "intensity": 3.31,
+          "d_energy": null,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 283.2668,
+          "intensity": 0.266,
+          "d_energy": null,
+          "d_intensity": 0.003,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 295.9565,
+          "intensity": 28.71,
+          "d_energy": null,
+          "d_intensity": 0.07,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 308.45507,
+          "intensity": 29.7,
+          "d_energy": null,
+          "d_intensity": 0.07,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 316.50618,
+          "intensity": 82.86,
+          "d_energy": null,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 374.4852,
+          "intensity": 0.727,
+          "d_energy": null,
+          "d_intensity": 0.007,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 416.4688,
+          "intensity": 0.67,
+          "d_energy": null,
+          "d_intensity": 0.021,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 468.06885,
+          "intensity": 47.84,
+          "d_energy": null,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 484.5751,
+          "intensity": 3.19,
+          "d_energy": null,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 489.06,
+          "intensity": 0.438,
+          "d_energy": null,
+          "d_intensity": 0.015,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 588.581,
+          "intensity": 4.522,
+          "d_energy": null,
+          "d_intensity": 0.01,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 604.41105,
+          "intensity": 8.216,
+          "d_energy": null,
+          "d_intensity": 0.019,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 612.46215,
+          "intensity": 5.34,
+          "d_energy": null,
+          "d_intensity": 0.07,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 884.5365,
+          "intensity": 0.292,
+          "d_energy": null,
+          "d_intensity": 0.007,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Np-237",
+      "half_life_value": 2144000.0,
+      "half_life_unit": "year",
+      "gamma_constant": null,
+      "atomic_mass": 237,
+      "category": "technogenic",
+      "lifetime": "long",
+      "lines": [
+        {
+          "energy": 16.228,
+          "intensity": 48.4695682943852,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 21.5,
+          "intensity": 0.356,
+          "d_energy": null,
+          "d_intensity": 0.013,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 27.7,
+          "intensity": 0.84,
+          "d_energy": null,
+          "d_intensity": 0.07,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 29.374,
+          "intensity": 14.5,
+          "d_energy": null,
+          "d_intensity": 0.4,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 46.53,
+          "intensity": 0.109,
+          "d_energy": null,
+          "d_intensity": 0.003,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 57.113,
+          "intensity": 0.362,
+          "d_energy": null,
+          "d_intensity": 0.004,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 86.484,
+          "intensity": 12.2,
+          "d_energy": null,
+          "d_intensity": 0.3,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 87.99,
+          "intensity": 0.148,
+          "d_energy": null,
+          "d_intensity": 0.01,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 92.282,
+          "intensity": 1.397406408405659,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 94.65,
+          "intensity": 0.591,
+          "d_energy": null,
+          "d_intensity": 0.02,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 95.865,
+          "intensity": 2.2488033608073046,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 108.373,
+          "intensity": 0.8060329288178023,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 109.74,
+          "intensity": 1.0792780916870373,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 111.482,
+          "intensity": 0.273245162869235,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 117.705,
+          "intensity": 0.17,
+          "d_energy": null,
+          "d_intensity": 0.004,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 143.248,
+          "intensity": 0.416,
+          "d_energy": null,
+          "d_intensity": 0.011,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 151.408,
+          "intensity": 0.244,
+          "d_energy": null,
+          "d_intensity": 0.003,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 194.96,
+          "intensity": 0.182,
+          "d_energy": null,
+          "d_intensity": 0.005,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 212.32,
+          "intensity": 0.152,
+          "d_energy": null,
+          "d_intensity": 0.003,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Np-239",
+      "half_life_value": 2.356,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 239,
+      "category": "technogenic",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 17.604,
+          "intensity": 44.58000618030998,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 44.66,
+          "intensity": 0.13,
+          "d_energy": null,
+          "d_intensity": 0.01,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 49.41,
+          "intensity": 0.12,
+          "d_energy": null,
+          "d_intensity": 0.02,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 61.46,
+          "intensity": 1.3,
+          "d_energy": null,
+          "d_intensity": 0.02,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 67.86,
+          "intensity": 0.1,
+          "d_energy": null,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 99.533,
+          "intensity": 13.114985746685846,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 103.741,
+          "intensity": 20.761414827743938,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 106.123,
+          "intensity": 25.34,
+          "d_energy": null,
+          "d_intensity": 0.17,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 117.13,
+          "intensity": 7.620303915406253,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 118.619,
+          "intensity": 10.264549374052223,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 120.544,
+          "intensity": 2.64424545864597,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 209.753,
+          "intensity": 3.363,
+          "d_energy": null,
+          "d_intensity": 0.02,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 226.38,
+          "intensity": 0.259,
+          "d_energy": null,
+          "d_intensity": 0.016,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 227.83,
+          "intensity": 0.51,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 228.183,
+          "intensity": 10.73,
+          "d_energy": null,
+          "d_intensity": 0.087,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 254.4,
+          "intensity": 0.1092,
+          "d_energy": null,
+          "d_intensity": 0.0022,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 277.599,
+          "intensity": 14.505,
+          "d_energy": null,
+          "d_intensity": 0.079,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 285.46,
+          "intensity": 0.7939,
+          "d_energy": null,
+          "d_intensity": 0.0064,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 315.88,
+          "intensity": 1.6,
+          "d_energy": null,
+          "d_intensity": 0.012,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 334.31,
+          "intensity": 2.056,
+          "d_energy": null,
+          "d_intensity": 0.013,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Pu-238",
+      "half_life_value": 87.7,
+      "half_life_unit": "year",
+      "gamma_constant": null,
+      "atomic_mass": 238,
+      "category": "technogenic",
+      "lifetime": "long",
+      "lines": [
+        {
+          "energy": 16.678,
+          "intensity": 10.2,
+          "d_energy": null,
+          "d_intensity": 0.5,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Pu-239",
+      "half_life_value": 24110.0,
+      "half_life_unit": "year",
+      "gamma_constant": null,
+      "atomic_mass": 239,
+      "category": "technogenic",
+      "lifetime": "long",
+      "lines": [
+        {
+          "energy": 16.678,
+          "intensity": 4.29,
+          "d_energy": null,
+          "d_intensity": 0.2,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Pu-240",
+      "half_life_value": 6561.0,
+      "half_life_unit": "year",
+      "gamma_constant": null,
+      "atomic_mass": 240,
+      "category": "technogenic",
+      "lifetime": "long",
+      "lines": [
+        {
+          "energy": 16.678,
+          "intensity": 9.3,
+          "d_energy": null,
+          "d_intensity": 0.4,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Sb-122",
+      "half_life_value": 2.7238,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 122,
+      "category": "technogenic",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 3.753,
+          "intensity": 0.16454358572375585,
+          "d_energy": null,
+          "d_intensity": 0.010629279039637183,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 25.044,
+          "intensity": 0.5090613299910798,
+          "d_energy": null,
+          "d_intensity": 0.03197674660080362,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 25.271,
+          "intensity": 0.9527631105953205,
+          "d_energy": null,
+          "d_intensity": 0.05968165925243744,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 27.473,
+          "intensity": 0.16969979800475177,
+          "d_energy": null,
+          "d_intensity": 0.0025033050718472655,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 28.579,
+          "intensity": 0.269405573595121,
+          "d_energy": null,
+          "d_intensity": 0.017066145855622536,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 28.81,
+          "intensity": 0.3224784715933599,
+          "d_energy": null,
+          "d_intensity": 0.020364123887064253,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 564.24,
+          "intensity": 70.68,
+          "d_energy": null,
+          "d_intensity": 0.18,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 692.65,
+          "intensity": 3.85206,
+          "d_energy": null,
+          "d_intensity": 0.12760165467579174,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1140.67,
+          "intensity": 0.756276,
+          "d_energy": null,
+          "d_intensity": 0.03539244376982183,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1256.93,
+          "intensity": 0.81282,
+          "d_energy": null,
+          "d_intensity": 0.042458489893070855,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Sb-124",
+      "half_life_value": 60.2,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 124,
+      "category": "technogenic",
+      "lifetime": "long",
+      "lines": [
+        {
+          "energy": 27.202,
+          "intensity": 0.12294919308358099,
+          "d_energy": null,
+          "d_intensity": 0.0017364811637133567,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 27.473,
+          "intensity": 0.22895566682231097,
+          "d_energy": null,
+          "d_intensity": 0.0030529461046069906,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 400.3,
+          "intensity": 0.1388618,
+          "d_energy": null,
+          "d_intensity": 0.006852424815348214,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 444.09,
+          "intensity": 0.18893028,
+          "d_energy": null,
+          "d_intensity": 0.0020014526328644405,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 525.5,
+          "intensity": 0.1378839,
+          "d_energy": null,
+          "d_intensity": 0.003923880553737588,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 602.726,
+          "intensity": 97.79,
+          "d_energy": null,
+          "d_intensity": 0.31462303934867836,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 632.489,
+          "intensity": 0.1046353,
+          "d_energy": null,
+          "d_intensity": 0.0010058337685721235,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 645.852,
+          "intensity": 7.4203052,
+          "d_energy": null,
+          "d_intensity": 0.028801013959928564,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 709.34,
+          "intensity": 1.3534136,
+          "d_energy": null,
+          "d_intensity": 0.01212337981257702,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 713.776,
+          "intensity": 2.2755733,
+          "d_energy": null,
+          "d_intensity": 0.017394700539244703,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 722.782,
+          "intensity": 10.7569,
+          "d_energy": null,
+          "d_intensity": 0.0459967548420538,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 790.706,
+          "intensity": 0.7392924,
+          "d_energy": null,
+          "d_intensity": 0.00516463401317073,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 968.195,
+          "intensity": 1.8824575,
+          "d_energy": null,
+          "d_intensity": 0.009767015214997876,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1045.125,
+          "intensity": 1.8325846,
+          "d_energy": null,
+          "d_intensity": 0.011519912215377338,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1325.504,
+          "intensity": 1.5802864,
+          "d_energy": null,
+          "d_intensity": 0.015093188506409108,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1355.2,
+          "intensity": 1.0375519,
+          "d_energy": null,
+          "d_intensity": 0.012925216862010478,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1368.157,
+          "intensity": 2.6237057,
+          "d_energy": null,
+          "d_intensity": 0.014016184503993947,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1376.09,
+          "intensity": 0.4830826,
+          "d_energy": null,
+          "d_intensity": 0.005008826658010836,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1436.554,
+          "intensity": 1.2165076,
+          "d_energy": null,
+          "d_intensity": 0.008288095829561819,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1445.11,
+          "intensity": 0.3295523,
+          "d_energy": null,
+          "d_intensity": 0.003981242082566696,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1488.887,
+          "intensity": 0.6718173,
+          "d_energy": null,
+          "d_intensity": 0.006058936599767323,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1526.317,
+          "intensity": 0.4087622,
+          "d_energy": null,
+          "d_intensity": 0.004975226066220509,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1579.82,
+          "intensity": 0.381381,
+          "d_energy": null,
+          "d_intensity": 0.048902527429571574,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1690.971,
+          "intensity": 47.565056,
+          "d_energy": null,
+          "d_intensity": 0.1815687233226031,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 2090.93,
+          "intensity": 5.486019,
+          "d_energy": null,
+          "d_intensity": 0.03182741794428194,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Sb-125",
+      "half_life_value": 2.75856,
+      "half_life_unit": "year",
+      "gamma_constant": null,
+      "atomic_mass": 125,
+      "category": "technogenic",
+      "lifetime": "long",
+      "lines": [
+        {
+          "energy": 4.135,
+          "intensity": 4.81807591708633,
+          "d_energy": null,
+          "d_intensity": 0.2095663497365514,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 27.202,
+          "intensity": 13.177578902335476,
+          "d_energy": null,
+          "d_intensity": 0.24542081709526428,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 27.473,
+          "intensity": 24.539253076974816,
+          "d_energy": null,
+          "d_intensity": 0.4425130542232193,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 31.093,
+          "intensity": 7.022706759664512,
+          "d_energy": null,
+          "d_intensity": 0.14771766835306163,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 31.359,
+          "intensity": 8.546634126511712,
+          "d_energy": null,
+          "d_intensity": 0.17630983070637743,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 31.698,
+          "intensity": 1.523927366847199,
+          "d_energy": null,
+          "d_intensity": 0.04754436065094983,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 35.489,
+          "intensity": 4.37488,
+          "d_energy": null,
+          "d_intensity": 0.04522045997112369,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 116.955,
+          "intensity": 0.262552,
+          "d_energy": null,
+          "d_intensity": 0.0037653442073733445,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 172.719,
+          "intensity": 0.191216,
+          "d_energy": null,
+          "d_intensity": 0.007363603737301458,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 176.314,
+          "intensity": 6.84056,
+          "d_energy": null,
+          "d_intensity": 0.0708920933532083,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 204.138,
+          "intensity": 0.31672,
+          "d_energy": null,
+          "d_intensity": 0.006995909947962452,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 208.077,
+          "intensity": 0.247752,
+          "d_energy": null,
+          "d_intensity": 0.00484539544309853,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 227.891,
+          "intensity": 0.131128,
+          "d_energy": null,
+          "d_intensity": 0.0022182012983496336,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 321.04,
+          "intensity": 0.415584,
+          "d_energy": null,
+          "d_intensity": 0.004983757618504335,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 380.452,
+          "intensity": 1.516704,
+          "d_energy": null,
+          "d_intensity": 0.016368499014876105,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 408.065,
+          "intensity": 0.184408,
+          "d_energy": null,
+          "d_intensity": 0.0025782430063902044,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 427.874,
+          "intensity": 29.6,
+          "d_energy": null,
+          "d_intensity": 0.3,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 443.555,
+          "intensity": 0.30636,
+          "d_energy": null,
+          "d_intensity": 0.003577038020485664,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 463.365,
+          "intensity": 10.4932,
+          "d_energy": null,
+          "d_intensity": 0.1103924023653802,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 600.597,
+          "intensity": 17.64752,
+          "d_energy": null,
+          "d_intensity": 0.18502396925803966,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 606.713,
+          "intensity": 4.98168,
+          "d_energy": null,
+          "d_intensity": 0.05352249713905359,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 635.95,
+          "intensity": 11.2184,
+          "d_energy": null,
+          "d_intensity": 0.14426756392204035,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 671.441,
+          "intensity": 1.790504,
+          "d_energy": null,
+          "d_intensity": 0.018998499546016786,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Ta-182",
+      "half_life_value": 114.74,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 182,
+      "category": "technogenic",
+      "lifetime": "long",
+      "lines": [
+        {
+          "energy": 9.74,
+          "intensity": 23.560870297331853,
+          "d_energy": null,
+          "d_intensity": 0.9387240243854703,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 31.7377,
+          "intensity": 0.873952,
+          "d_energy": null,
+          "d_intensity": 0.021236878113319764,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 57.983,
+          "intensity": 10.052568389560236,
+          "d_energy": null,
+          "d_intensity": 0.12552949866363808,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 59.32,
+          "intensity": 17.461470192044878,
+          "d_energy": null,
+          "d_intensity": 0.2044373273209954,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 65.72215,
+          "intensity": 3.01302,
+          "d_energy": null,
+          "d_intensity": 0.03244518848766331,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 67.335,
+          "intensity": 5.787882527370621,
+          "d_energy": null,
+          "d_intensity": 0.1117417378345419,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 67.7497,
+          "intensity": 42.92232,
+          "d_energy": null,
+          "d_intensity": 0.3656231852604536,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 68.117,
+          "intensity": 7.373762339870171,
+          "d_energy": null,
+          "d_intensity": 0.13938646948290964,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 69.068,
+          "intensity": 1.5858798124995501,
+          "d_energy": null,
+          "d_intensity": 0.04212961849164268,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 84.68024,
+          "intensity": 2.653572,
+          "d_energy": null,
+          "d_intensity": 0.018621304358180713,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 100.10595,
+          "intensity": 14.20172,
+          "d_energy": null,
+          "d_intensity": 0.11052663027524182,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 113.6717,
+          "intensity": 1.8708916,
+          "d_energy": null,
+          "d_intensity": 0.009464127302609576,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 152.42991,
+          "intensity": 7.016284,
+          "d_energy": null,
+          "d_intensity": 0.038672455106962114,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 156.3864,
+          "intensity": 2.671192,
+          "d_energy": null,
+          "d_intensity": 0.012187669178312972,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 179.39381,
+          "intensity": 3.11874,
+          "d_energy": null,
+          "d_intensity": 0.015774143907039774,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 198.35187,
+          "intensity": 1.4649268,
+          "d_energy": null,
+          "d_intensity": 0.00654608050057437,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 222.1085,
+          "intensity": 7.566028,
+          "d_energy": null,
+          "d_intensity": 0.030058695913162965,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 229.3207,
+          "intensity": 3.643816,
+          "d_energy": null,
+          "d_intensity": 0.01634390406237139,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 264.074,
+          "intensity": 3.6121,
+          "d_energy": null,
+          "d_intensity": 0.01630758154969645,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 928.0,
+          "intensity": 0.6135284,
+          "d_energy": null,
+          "d_intensity": 0.0051264315854207985,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1001.7,
+          "intensity": 2.086208,
+          "d_energy": null,
+          "d_intensity": 0.011584337702259893,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1113.41,
+          "intensity": 0.4447288,
+          "d_energy": null,
+          "d_intensity": 0.0060752758620493934,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1121.29,
+          "intensity": 35.24,
+          "d_energy": null,
+          "d_intensity": 0.08,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1157.302,
+          "intensity": 0.732992,
+          "d_energy": null,
+          "d_intensity": 0.03527926439142404,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1189.04,
+          "intensity": 16.485272,
+          "d_energy": null,
+          "d_intensity": 0.053881383352694275,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1221.395,
+          "intensity": 27.229948,
+          "d_energy": null,
+          "d_intensity": 0.0991554771054025,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1231.004,
+          "intensity": 11.615104,
+          "d_energy": null,
+          "d_intensity": 0.03860129904549846,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1257.407,
+          "intensity": 1.5093292,
+          "d_energy": null,
+          "d_intensity": 0.005442698448380179,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1273.719,
+          "intensity": 0.6596928,
+          "d_energy": null,
+          "d_intensity": 0.0035073996521639787,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1289.145,
+          "intensity": 1.3718932,
+          "d_energy": null,
+          "d_intensity": 0.007705439076392727,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Ba-137m",
+      "half_life_value": 2.552,
+      "half_life_unit": "minute",
+      "gamma_constant": null,
+      "atomic_mass": 137,
+      "category": "fission",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 4.966,
+          "intensity": 0.9659496,
+          "d_energy": null,
+          "d_intensity": 0.045405673164484635,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 31.816,
+          "intensity": 2.1012532500441274,
+          "d_energy": null,
+          "d_intensity": 0.03161834979367984,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 32.193,
+          "intensity": 3.871137159255946,
+          "d_energy": null,
+          "d_intensity": 0.05545471738276737,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 36.482,
+          "intensity": 1.1386658072683125,
+          "d_energy": null,
+          "d_intensity": 0.02035716548562243,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 36.827,
+          "intensity": 1.4256095906999273,
+          "d_energy": null,
+          "d_intensity": 0.02484314592901493,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 37.255,
+          "intensity": 0.28694378343161475,
+          "d_energy": null,
+          "d_intensity": 0.007663612335085131,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 661.657,
+          "intensity": 89.9,
+          "d_energy": null,
+          "d_intensity": 0.14,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Ba-140",
+      "half_life_value": 12.751,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 140,
+      "category": "fission",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 5.185,
+          "intensity": 13.4,
+          "d_energy": null,
+          "d_intensity": 1.1,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 13.846,
+          "intensity": 1.2195,
+          "d_energy": null,
+          "d_intensity": 0.17108399369900154,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 29.966,
+          "intensity": 14.09742,
+          "d_energy": null,
+          "d_intensity": 0.4336907913479372,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 33.034,
+          "intensity": 0.548,
+          "d_energy": null,
+          "d_intensity": 0.01,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 33.442,
+          "intensity": 1.006,
+          "d_energy": null,
+          "d_intensity": 0.017,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 37.908,
+          "intensity": 0.3,
+          "d_energy": null,
+          "d_intensity": 0.006,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 38.273,
+          "intensity": 0.375,
+          "d_energy": null,
+          "d_intensity": 0.007,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 132.687,
+          "intensity": 0.202437,
+          "d_energy": null,
+          "d_intensity": 0.005208566021468865,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 162.66,
+          "intensity": 6.21945,
+          "d_energy": null,
+          "d_intensity": 0.09220118708563356,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 304.849,
+          "intensity": 4.29264,
+          "d_energy": null,
+          "d_intensity": 0.06227942517396897,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 423.722,
+          "intensity": 3.09753,
+          "d_energy": null,
+          "d_intensity": 0.037087945480978046,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 437.575,
+          "intensity": 1.929249,
+          "d_energy": null,
+          "d_intensity": 0.019950166415346013,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 537.261,
+          "intensity": 24.39,
+          "d_energy": null,
+          "d_intensity": 0.22,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Ce-141",
+      "half_life_value": 32.504,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 141,
+      "category": "fission",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 5.637,
+          "intensity": 2.4641247708,
+          "d_energy": null,
+          "d_intensity": 0.09887947014899852,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 35.551,
+          "intensity": 4.798054690214311,
+          "d_energy": null,
+          "d_intensity": 0.07671368527300416,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 36.027,
+          "intensity": 8.761969850647025,
+          "d_energy": null,
+          "d_intensity": 0.13425825236747513,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 40.857,
+          "intensity": 2.6655812572760063,
+          "d_energy": null,
+          "d_intensity": 0.04990792933542664,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 41.266,
+          "intensity": 3.347970059138664,
+          "d_energy": null,
+          "d_intensity": 0.06125108821902497,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 41.766,
+          "intensity": 0.6823888018626576,
+          "d_energy": null,
+          "d_intensity": 0.018462671724870407,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 145.4433,
+          "intensity": 48.3,
+          "d_energy": null,
+          "d_intensity": 0.3,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Ce-144",
+      "half_life_value": 284.91,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 144,
+      "category": "fission",
+      "lifetime": "long",
+      "lines": [
+        {
+          "energy": 5.637,
+          "intensity": 1.514806347771816,
+          "d_energy": null,
+          "d_intensity": 0.06314896182070501,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 33.568,
+          "intensity": 0.19962,
+          "d_energy": null,
+          "d_intensity": 0.0223661977099372,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 35.551,
+          "intensity": 2.4646642472104143,
+          "d_energy": null,
+          "d_intensity": 0.05205634182136806,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 36.027,
+          "intensity": 4.500847785263722,
+          "d_energy": null,
+          "d_intensity": 0.09281538967714789,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 40.857,
+          "intensity": 1.369255510205306,
+          "d_energy": null,
+          "d_intensity": 0.03184871053439456,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 40.98,
+          "intensity": 0.257288,
+          "d_energy": null,
+          "d_intensity": 0.015963571655491136,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 41.266,
+          "intensity": 1.7197849208178642,
+          "d_energy": null,
+          "d_intensity": 0.03941176121556081,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 41.766,
+          "intensity": 0.3505294106125583,
+          "d_energy": null,
+          "d_intensity": 0.01064647013407902,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 80.12,
+          "intensity": 1.36407,
+          "d_energy": null,
+          "d_intensity": 0.0588388043726247,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 133.515,
+          "intensity": 11.09,
+          "d_energy": null,
+          "d_intensity": 0.19467616700561988,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Cs-136",
+      "half_life_value": 13.01,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 136,
+      "category": "fission",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 4.966,
+          "intensity": 2.114047614236723,
+          "d_energy": null,
+          "d_intensity": 0.10879204277056828,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 31.816,
+          "intensity": 3.7114957415493737,
+          "d_energy": null,
+          "d_intensity": 0.12223608967722241,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 32.193,
+          "intensity": 6.837685596074749,
+          "d_energy": null,
+          "d_intensity": 0.2229825168008491,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 36.482,
+          "intensity": 2.011253662372906,
+          "d_energy": null,
+          "d_intensity": 0.06902676315604717,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 36.827,
+          "intensity": 2.5180895852908782,
+          "d_energy": null,
+          "d_intensity": 0.08583442445350253,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 37.255,
+          "intensity": 0.5068359229179723,
+          "d_energy": null,
+          "d_intensity": 0.020092427980602626,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 66.881,
+          "intensity": 4.7856,
+          "d_energy": null,
+          "d_intensity": 0.1994577649528842,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 86.36,
+          "intensity": 5.8823,
+          "d_energy": null,
+          "d_intensity": 0.6979249386574462,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 109.681,
+          "intensity": 0.40877,
+          "d_energy": null,
+          "d_intensity": 0.01994421470000762,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 153.246,
+          "intensity": 7.6769,
+          "d_energy": null,
+          "d_intensity": 0.4985594648585061,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 163.92,
+          "intensity": 4.6859,
+          "d_energy": null,
+          "d_intensity": 0.19945538348212113,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 166.576,
+          "intensity": 0.62811,
+          "d_energy": null,
+          "d_intensity": 0.02991663416897028,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 176.602,
+          "intensity": 13.6589,
+          "d_energy": null,
+          "d_intensity": 0.2994135935457841,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 187.285,
+          "intensity": 0.53838,
+          "d_energy": null,
+          "d_intensity": 0.04985292468852755,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 273.646,
+          "intensity": 12.6619,
+          "d_energy": null,
+          "d_intensity": 0.19980402898840655,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 319.911,
+          "intensity": 0.4985,
+          "d_energy": null,
+          "d_intensity": 0.06979179106456575,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 340.547,
+          "intensity": 46.7593,
+          "d_energy": null,
+          "d_intensity": 0.5007013680828124,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 507.188,
+          "intensity": 0.997,
+          "d_energy": null,
+          "d_intensity": 0.04986002908141952,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 818.514,
+          "intensity": 99.7,
+          "d_energy": null,
+          "d_intensity": 0.1,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1048.073,
+          "intensity": 79.76,
+          "d_energy": null,
+          "d_intensity": 2.9920696850173796,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1235.362,
+          "intensity": 20.0397,
+          "d_energy": null,
+          "d_intensity": 0.6981893869144675,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "I-131",
+      "half_life_value": 8.0252,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 131,
+      "category": "fission",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 4.54,
+          "intensity": 0.6040157907418778,
+          "d_energy": null,
+          "d_intensity": 0.04431587811313878,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 29.458,
+          "intensity": 1.446036761837186,
+          "d_energy": null,
+          "d_intensity": 0.09038665112772425,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 29.778,
+          "intensity": 2.6788380174827457,
+          "d_energy": null,
+          "d_intensity": 0.16698444403299537,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 33.726,
+          "intensity": 0.7765844345855567,
+          "d_energy": null,
+          "d_intensity": 0.0491505576795818,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 34.03,
+          "intensity": 0.9598583611477481,
+          "d_energy": null,
+          "d_intensity": 0.06062587124636211,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 34.414,
+          "intensity": 0.18327392656219138,
+          "d_energy": null,
+          "d_intensity": 0.012232179618843382,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 80.185,
+          "intensity": 2.61615,
+          "d_energy": null,
+          "d_intensity": 0.036336792648774055,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 177.214,
+          "intensity": 0.26895,
+          "d_energy": null,
+          "d_intensity": 0.0036537788657771833,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 284.305,
+          "intensity": 6.12065,
+          "d_energy": null,
+          "d_intensity": 0.06165397391896162,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 325.789,
+          "intensity": 0.273025,
+          "d_energy": null,
+          "d_intensity": 0.02125609853665531,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 364.489,
+          "intensity": 81.5,
+          "d_energy": null,
+          "d_intensity": 0.7585975547020963,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 503.004,
+          "intensity": 0.359415,
+          "d_energy": null,
+          "d_intensity": 0.0039356860901245665,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 636.989,
+          "intensity": 7.1557,
+          "d_energy": null,
+          "d_intensity": 0.09982150319445204,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 642.719,
+          "intensity": 0.21679,
+          "d_energy": null,
+          "d_intensity": 0.0042865516443873625,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 722.911,
+          "intensity": 1.76855,
+          "d_energy": null,
+          "d_intensity": 0.026749299056236967,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "I-132",
+      "half_life_value": 2.295,
+      "half_life_unit": "hour",
+      "gamma_constant": null,
+      "atomic_mass": 132,
+      "category": "fission",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 262.9,
+          "intensity": 1.2831,
+          "d_energy": null,
+          "d_intensity": 0.09870000000000001,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 505.79,
+          "intensity": 4.935,
+          "d_energy": null,
+          "d_intensity": 0.19740000000000002,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 522.65,
+          "intensity": 15.9894,
+          "d_energy": null,
+          "d_intensity": 0.4935,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 547.2,
+          "intensity": 1.13505,
+          "d_energy": null,
+          "d_intensity": 0.07896,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 621.2,
+          "intensity": 1.5792,
+          "d_energy": null,
+          "d_intensity": 0.19740000000000002,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 630.19,
+          "intensity": 13.3245,
+          "d_energy": null,
+          "d_intensity": 0.39480000000000004,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 650.5,
+          "intensity": 2.5662,
+          "d_energy": null,
+          "d_intensity": 0.19740000000000002,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 667.714,
+          "intensity": 98.7,
+          "d_energy": null,
+          "d_intensity": 0.0,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 669.8,
+          "intensity": 4.6389,
+          "d_energy": null,
+          "d_intensity": 0.5922000000000001,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 671.4,
+          "intensity": 3.4545,
+          "d_energy": null,
+          "d_intensity": 0.987,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 727.0,
+          "intensity": 2.1714,
+          "d_energy": null,
+          "d_intensity": 0.5922000000000001,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 727.2,
+          "intensity": 3.1584,
+          "d_energy": null,
+          "d_intensity": 0.5922000000000001,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 728.4,
+          "intensity": 1.5792,
+          "d_energy": null,
+          "d_intensity": 0.39480000000000004,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 772.6,
+          "intensity": 75.6042,
+          "d_energy": null,
+          "d_intensity": 1.2831,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 780.0,
+          "intensity": 1.1844,
+          "d_energy": null,
+          "d_intensity": 0.03948,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 809.5,
+          "intensity": 2.5662,
+          "d_energy": null,
+          "d_intensity": 0.29610000000000003,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 812.0,
+          "intensity": 5.5272,
+          "d_energy": null,
+          "d_intensity": 0.39480000000000004,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 876.6,
+          "intensity": 1.03635,
+          "d_energy": null,
+          "d_intensity": 0.03948,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 910.1,
+          "intensity": 0.92778,
+          "d_energy": null,
+          "d_intensity": 0.02961,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 954.55,
+          "intensity": 17.5686,
+          "d_energy": null,
+          "d_intensity": 0.4935,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1136.0,
+          "intensity": 3.01035,
+          "d_energy": null,
+          "d_intensity": 0.13818,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1143.3,
+          "intensity": 1.35219,
+          "d_energy": null,
+          "d_intensity": 0.05922,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1172.9,
+          "intensity": 1.0857,
+          "d_energy": null,
+          "d_intensity": 0.06909,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1290.8,
+          "intensity": 1.12518,
+          "d_energy": null,
+          "d_intensity": 0.049350000000000005,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1295.1,
+          "intensity": 1.8753,
+          "d_energy": null,
+          "d_intensity": 0.06909,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1372.07,
+          "intensity": 2.4675,
+          "d_energy": null,
+          "d_intensity": 0.09870000000000001,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1398.57,
+          "intensity": 7.0077,
+          "d_energy": null,
+          "d_intensity": 0.19740000000000002,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1442.56,
+          "intensity": 1.40154,
+          "d_energy": null,
+          "d_intensity": 0.049350000000000005,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1921.08,
+          "intensity": 1.23375,
+          "d_energy": null,
+          "d_intensity": 0.05922,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 2002.2,
+          "intensity": 1.13505,
+          "d_energy": null,
+          "d_intensity": 0.07896,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "I-133",
+      "half_life_value": 20.83,
+      "half_life_unit": "hour",
+      "gamma_constant": null,
+      "atomic_mass": 133,
+      "category": "fission",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 4.54,
+          "intensity": 0.298,
+          "d_energy": null,
+          "d_intensity": 0.018,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 29.458,
+          "intensity": 0.66,
+          "d_energy": null,
+          "d_intensity": 0.03,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 29.778,
+          "intensity": 1.22,
+          "d_energy": null,
+          "d_intensity": 0.05,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 33.726,
+          "intensity": 0.355,
+          "d_energy": null,
+          "d_intensity": 0.015,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 34.03,
+          "intensity": 0.439,
+          "d_energy": null,
+          "d_intensity": 0.019,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 233.221,
+          "intensity": 0.29406,
+          "d_energy": null,
+          "d_intensity": 0.008610836196328438,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 262.702,
+          "intensity": 0.35931,
+          "d_energy": null,
+          "d_intensity": 0.011400128288751843,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 267.173,
+          "intensity": 0.11745,
+          "d_energy": null,
+          "d_intensity": 0.006417844264237019,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 345.43,
+          "intensity": 0.1044,
+          "d_energy": null,
+          "d_intensity": 0.017492855684535902,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 361.09,
+          "intensity": 0.1131,
+          "d_energy": null,
+          "d_intensity": 0.0348545908023606,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 417.56,
+          "intensity": 0.15399,
+          "d_energy": null,
+          "d_intensity": 0.010772308248467456,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 422.91,
+          "intensity": 0.31146,
+          "d_energy": null,
+          "d_intensity": 0.01022383978747711,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 510.53,
+          "intensity": 1.827,
+          "d_energy": null,
+          "d_intensity": 0.053707541369904466,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 529.872,
+          "intensity": 87.0,
+          "d_energy": null,
+          "d_intensity": 2.2973027662891976,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 617.974,
+          "intensity": 0.54375,
+          "d_energy": null,
+          "d_intensity": 0.015370199250497698,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 680.247,
+          "intensity": 0.64989,
+          "d_energy": null,
+          "d_intensity": 0.019255846514760134,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 706.578,
+          "intensity": 1.5051,
+          "d_energy": null,
+          "d_intensity": 0.04341016586008397,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 768.382,
+          "intensity": 0.46023,
+          "d_energy": null,
+          "d_intensity": 0.014536733642741068,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 820.506,
+          "intensity": 0.15486,
+          "d_energy": null,
+          "d_intensity": 0.0058632158411574785,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 856.278,
+          "intensity": 1.2441,
+          "d_energy": null,
+          "d_intensity": 0.040879609831797566,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 875.329,
+          "intensity": 4.5066,
+          "d_energy": null,
+          "d_intensity": 0.12327116451141362,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 909.67,
+          "intensity": 0.21402,
+          "d_energy": null,
+          "d_intensity": 0.008655922827752105,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1052.296,
+          "intensity": 0.55593,
+          "d_energy": null,
+          "d_intensity": 0.016191810429967365,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1060.07,
+          "intensity": 0.13833,
+          "d_energy": null,
+          "d_intensity": 0.006540361228556111,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1236.441,
+          "intensity": 1.5051,
+          "d_energy": null,
+          "d_intensity": 0.04341016586008397,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1298.223,
+          "intensity": 2.349,
+          "d_energy": null,
+          "d_intensity": 0.06606882774803864,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1350.38,
+          "intensity": 0.14964,
+          "d_energy": null,
+          "d_intensity": 0.005057558699609921,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "I-135",
+      "half_life_value": 6.58,
+      "half_life_unit": "hour",
+      "gamma_constant": null,
+      "atomic_mass": 135,
+      "category": "fission",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 220.502,
+          "intensity": 1.7507,
+          "d_energy": null,
+          "d_intensity": 0.06194917271441161,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 288.451,
+          "intensity": 3.0996,
+          "d_energy": null,
+          "d_intensity": 0.11288312539968053,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 417.633,
+          "intensity": 3.5301,
+          "d_energy": null,
+          "d_intensity": 0.11435987058404709,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 433.741,
+          "intensity": 0.55391,
+          "d_energy": null,
+          "d_intensity": 0.022530854400133166,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 451.63,
+          "intensity": 0.3157,
+          "d_energy": null,
+          "d_intensity": 0.017433659971446042,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 546.557,
+          "intensity": 7.1463,
+          "d_energy": null,
+          "d_intensity": 0.24007086453795262,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 649.85,
+          "intensity": 0.45633,
+          "d_energy": null,
+          "d_intensity": 0.029529053489741254,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 707.92,
+          "intensity": 0.6601,
+          "d_energy": null,
+          "d_intensity": 0.03538615548487855,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 836.804,
+          "intensity": 6.6871,
+          "d_energy": null,
+          "d_intensity": 0.2266876705954693,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 971.96,
+          "intensity": 0.8897,
+          "d_energy": null,
+          "d_intensity": 0.04002624139236658,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 972.62,
+          "intensity": 1.2054,
+          "d_energy": null,
+          "d_intensity": 0.047460825951515004,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1038.76,
+          "intensity": 7.9499,
+          "d_energy": null,
+          "d_intensity": 0.2637493127953133,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1101.58,
+          "intensity": 1.6072,
+          "d_energy": null,
+          "d_intensity": 0.05663346095728213,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1124.0,
+          "intensity": 3.6162,
+          "d_energy": null,
+          "d_intensity": 0.11697542476947882,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1131.511,
+          "intensity": 22.5869,
+          "d_energy": null,
+          "d_intensity": 0.7226902102560958,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1169.04,
+          "intensity": 0.87535,
+          "d_energy": null,
+          "d_intensity": 0.03578636751613665,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1240.47,
+          "intensity": 0.90405,
+          "d_energy": null,
+          "d_intensity": 0.03835246276316555,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1260.409,
+          "intensity": 28.7,
+          "d_energy": null,
+          "d_intensity": 0.9163257281120071,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1367.89,
+          "intensity": 0.60844,
+          "d_energy": null,
+          "d_intensity": 0.02985310704097649,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1448.35,
+          "intensity": 0.3157,
+          "d_energy": null,
+          "d_intensity": 0.027662228760531933,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1457.56,
+          "intensity": 8.6674,
+          "d_energy": null,
+          "d_intensity": 0.27779488836189914,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1502.79,
+          "intensity": 1.07625,
+          "d_energy": null,
+          "d_intensity": 0.042500016470585045,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1566.41,
+          "intensity": 1.2915,
+          "d_energy": null,
+          "d_intensity": 0.049638090213061176,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1678.027,
+          "intensity": 9.5571,
+          "d_energy": null,
+          "d_intensity": 0.3608059034993746,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1706.459,
+          "intensity": 4.1041,
+          "d_energy": null,
+          "d_intensity": 0.1724608071417967,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1791.196,
+          "intensity": 7.7203,
+          "d_energy": null,
+          "d_intensity": 0.24379520093718005,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1830.69,
+          "intensity": 0.57974,
+          "d_energy": null,
+          "d_intensity": 0.025040782735369915,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 2045.88,
+          "intensity": 0.87248,
+          "d_energy": null,
+          "d_intensity": 0.0376265664125761,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 2255.457,
+          "intensity": 0.61418,
+          "d_energy": null,
+          "d_intensity": 0.02783084080655847,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 2408.65,
+          "intensity": 0.95571,
+          "d_energy": null,
+          "d_intensity": 0.039565007266522775,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "La-140",
+      "half_life_value": 1.67858,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 140,
+      "category": "fission",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 5.41,
+          "intensity": 0.39,
+          "d_energy": null,
+          "d_intensity": 0.1,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 34.279,
+          "intensity": 0.5836925385786633,
+          "d_energy": null,
+          "d_intensity": 0.00699331341266602,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 34.72,
+          "intensity": 1.0690339534407753,
+          "d_energy": null,
+          "d_intensity": 0.011836054552187503,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 39.366,
+          "intensity": 0.3219785342905494,
+          "d_energy": null,
+          "d_intensity": 0.00499416809247129,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 39.753,
+          "intensity": 0.40376108200034894,
+          "d_energy": null,
+          "d_intensity": 0.006052230282340464,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 109.422,
+          "intensity": 0.21942,
+          "d_energy": null,
+          "d_intensity": 0.00382043348325815,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 131.117,
+          "intensity": 0.46746,
+          "d_energy": null,
+          "d_intensity": 0.00954805027217599,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 173.543,
+          "intensity": 0.126882,
+          "d_energy": null,
+          "d_intensity": 0.0038174830661052055,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 241.933,
+          "intensity": 0.414036,
+          "d_energy": null,
+          "d_intensity": 0.007639893444283108,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 266.543,
+          "intensity": 0.465552,
+          "d_energy": null,
+          "d_intensity": 0.007641978550087667,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 328.762,
+          "intensity": 20.3202,
+          "d_energy": null,
+          "d_intensity": 0.28670682168375416,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 432.493,
+          "intensity": 2.90016,
+          "d_energy": null,
+          "d_intensity": 0.028723144396113738,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 487.021,
+          "intensity": 45.5058,
+          "d_energy": null,
+          "d_intensity": 0.5736705897987102,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 751.637,
+          "intensity": 4.33116,
+          "d_energy": null,
+          "d_intensity": 0.038332453926144615,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 815.772,
+          "intensity": 23.2776,
+          "d_energy": null,
+          "d_intensity": 0.19179590819410094,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 867.846,
+          "intensity": 5.50458,
+          "d_energy": null,
+          "d_intensity": 0.06693934460390241,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 919.55,
+          "intensity": 2.66166,
+          "d_energy": null,
+          "d_intensity": 0.028706902027212898,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 925.189,
+          "intensity": 6.89742,
+          "d_energy": null,
+          "d_intensity": 0.06703001608234926,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 950.987,
+          "intensity": 0.518976,
+          "d_energy": null,
+          "d_intensity": 0.006692165795913906,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1596.21,
+          "intensity": 95.4,
+          "d_energy": null,
+          "d_intensity": 0.08,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 2347.88,
+          "intensity": 0.84906,
+          "d_energy": null,
+          "d_intensity": 0.028628855094117892,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 2521.4,
+          "intensity": 3.46302,
+          "d_energy": null,
+          "d_intensity": 0.038270338592701264,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 2547.34,
+          "intensity": 0.101124,
+          "d_energy": null,
+          "d_intensity": 0.002863256020686938,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Nb-95",
+      "half_life_value": 34.991,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 95,
+      "category": "fission",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 765.803,
+          "intensity": 99.808,
+          "d_energy": null,
+          "d_intensity": 0.007,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Nd-147",
+      "half_life_value": 11.03,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 147,
+      "category": "fission",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 6.109,
+          "intensity": 7.544033913560843,
+          "d_energy": null,
+          "d_intensity": 0.39649677180508014,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 38.171,
+          "intensity": 13.278481975042261,
+          "d_energy": null,
+          "d_intensity": 0.5151269709037386,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 38.724,
+          "intensity": 24.107628858101418,
+          "d_energy": null,
+          "d_intensity": 0.9288110516074177,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 43.934,
+          "intensity": 7.474247933467786,
+          "d_energy": null,
+          "d_intensity": 0.29940400816247,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 44.387,
+          "intensity": 9.395129652369006,
+          "d_energy": null,
+          "d_intensity": 0.3744907794657969,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 44.938,
+          "intensity": 1.920881718901221,
+          "d_energy": null,
+          "d_intensity": 0.08554194419328116,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 91.105,
+          "intensity": 28.9,
+          "d_energy": null,
+          "d_intensity": 0.5,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 120.483,
+          "intensity": 0.369,
+          "d_energy": null,
+          "d_intensity": 0.005,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 196.64,
+          "intensity": 0.181,
+          "d_energy": null,
+          "d_intensity": 0.004,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 275.388,
+          "intensity": 0.791,
+          "d_energy": null,
+          "d_intensity": 0.016,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 319.41,
+          "intensity": 1.967,
+          "d_energy": null,
+          "d_intensity": 0.025,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 398.13,
+          "intensity": 0.867,
+          "d_energy": null,
+          "d_intensity": 0.013,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 410.52,
+          "intensity": 0.1071,
+          "d_energy": null,
+          "d_intensity": 0.0021,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 439.875,
+          "intensity": 1.203,
+          "d_energy": null,
+          "d_intensity": 0.016,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 489.27,
+          "intensity": 0.142,
+          "d_energy": null,
+          "d_intensity": 0.005,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 531.012,
+          "intensity": 13.11,
+          "d_energy": null,
+          "d_intensity": 0.13,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 594.796,
+          "intensity": 0.243,
+          "d_energy": null,
+          "d_intensity": 0.004,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 685.882,
+          "intensity": 0.823,
+          "d_energy": null,
+          "d_intensity": 0.017,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Pr-144",
+      "half_life_value": 17.28,
+      "half_life_unit": "minute",
+      "gamma_constant": null,
+      "atomic_mass": 144,
+      "category": "fission",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 696.51,
+          "intensity": 1.342,
+          "d_energy": null,
+          "d_intensity": 0.014,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1489.16,
+          "intensity": 0.277794,
+          "d_energy": null,
+          "d_intensity": 0.0049605523885954475,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 2185.662,
+          "intensity": 0.693814,
+          "d_energy": null,
+          "d_intensity": 0.015247460247529751,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Rh-106",
+      "half_life_value": 30.07,
+      "half_life_unit": "second",
+      "gamma_constant": null,
+      "atomic_mass": 106,
+      "category": "fission",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 511.8605,
+          "intensity": 20.4,
+          "d_energy": null,
+          "d_intensity": 0.4,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 616.22,
+          "intensity": 0.7548,
+          "d_energy": null,
+          "d_intensity": 0.08293129686674386,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 621.93,
+          "intensity": 9.9348,
+          "d_energy": null,
+          "d_intensity": 0.23006260017656063,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 873.49,
+          "intensity": 0.4386,
+          "d_energy": null,
+          "d_intensity": 0.010555301985258404,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1050.41,
+          "intensity": 1.55856,
+          "d_energy": null,
+          "d_intensity": 0.04324665998663943,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1128.07,
+          "intensity": 0.40392,
+          "d_energy": null,
+          "d_intensity": 0.010009035917609647,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 1562.25,
+          "intensity": 0.1632,
+          "d_energy": null,
+          "d_intensity": 0.0037949440048569887,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Ru-103",
+      "half_life_value": 39.247,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 103,
+      "category": "fission",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 2.892,
+          "intensity": 4.170564389751258,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 20.073,
+          "intensity": 2.5773737361456392,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 20.215,
+          "intensity": 4.879541340677091,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 22.806,
+          "intensity": 1.3251053206841077,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 22.957,
+          "intensity": 1.5450728039176695,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 23.17,
+          "intensity": 0.21996748323356188,
+          "d_energy": null,
+          "d_intensity": null,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 53.286,
+          "intensity": 0.44317,
+          "d_energy": null,
+          "d_intensity": 0.010574562922409606,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 294.964,
+          "intensity": 0.28847,
+          "d_energy": null,
+          "d_intensity": 0.003518076320945866,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 443.81,
+          "intensity": 0.33943,
+          "d_energy": null,
+          "d_intensity": 0.004479611701922389,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 497.085,
+          "intensity": 91.0,
+          "d_energy": null,
+          "d_intensity": 1.2214749281094557,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 557.057,
+          "intensity": 0.84084,
+          "d_energy": null,
+          "d_intensity": 0.010436049252470976,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 610.333,
+          "intensity": 5.7603,
+          "d_energy": null,
+          "d_intensity": 0.06351083450876709,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 612.094,
+          "intensity": 0.10465,
+          "d_energy": null,
+          "d_intensity": 0.005519023917324512,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Te-132",
+      "half_life_value": 3.204,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 132,
+      "category": "fission",
+      "lifetime": "short",
+      "lines": [
+        {
+          "energy": 4.335,
+          "intensity": 7.934537561632,
+          "d_energy": null,
+          "d_intensity": 0.6543942386218947,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 28.318,
+          "intensity": 20.675625756214114,
+          "d_energy": null,
+          "d_intensity": 1.668175259183812,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 28.613,
+          "intensity": 38.40197948776767,
+          "d_energy": null,
+          "d_intensity": 3.093258513022578,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 32.395,
+          "intensity": 11.063799481254662,
+          "d_energy": null,
+          "d_intensity": 0.8990012888052584,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 32.68,
+          "intensity": 13.564218164018216,
+          "d_energy": null,
+          "d_intensity": 1.100786454240863,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 33.04,
+          "intensity": 2.5004186827635535,
+          "d_energy": null,
+          "d_intensity": 0.2105706154882427,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 49.72,
+          "intensity": 14.96,
+          "d_energy": null,
+          "d_intensity": 0.5742786779952743,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 111.76,
+          "intensity": 1.7424,
+          "d_energy": null,
+          "d_intensity": 0.07392130951221035,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 116.3,
+          "intensity": 1.9624,
+          "d_energy": null,
+          "d_intensity": 0.08522587635219717,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 228.16,
+          "intensity": 88.0,
+          "d_energy": null,
+          "d_intensity": 3.4781604333325395,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
+    },
+    {
+      "name": "Zr-95",
+      "half_life_value": 64.032,
+      "half_life_unit": "day",
+      "gamma_constant": null,
+      "atomic_mass": 95,
+      "category": "fission",
+      "lifetime": "long",
+      "lines": [
+        {
+          "energy": 16.521,
+          "intensity": 0.15848212874552395,
+          "d_energy": null,
+          "d_intensity": 0.018530644874874307,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 16.615,
+          "intensity": 0.3026778623864094,
+          "d_energy": null,
+          "d_intensity": 0.035361322960567425,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 235.69,
+          "intensity": 0.27,
+          "d_energy": null,
+          "d_intensity": 0.02,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 724.192,
+          "intensity": 44.27,
+          "d_energy": null,
+          "d_intensity": 0.22,
+          "line_type": null,
+          "used": true
+        },
+        {
+          "energy": 756.725,
+          "intensity": 54.38,
+          "d_energy": null,
+          "d_intensity": 0.22,
+          "line_type": null,
+          "used": true
+        }
+      ],
+      "_source": "IAEA LiveChart ENSDF (decay_rads, rad_types=g)"
     }
   ]
 }

@@ -88,6 +88,17 @@ def test_smooth_2d_axis_preserves_shape():
     assert smooth_counts(m, 2, axis=0).shape == (6, 8)
 
 
+def test_smooth_per_time_slice_independent_axis1(app):
+    # Задача #90: при включении сглаживания SMA применяется ПО КАНАЛАМ в каждом
+    # временно́м срезе (axis=1, как в view3d.py:237) — строки-срезы независимы,
+    # смешивания по времени нет. Доказываем декомпозицией: 2D-сглаживание по axis=1
+    # == одномерный SMA, применённый к каждому срезу по отдельности.
+    m = np.random.RandomState(7).poisson(40, (5, 16)).astype(float)
+    s = smooth_counts(m, 2, axis=1)
+    for i in range(m.shape[0]):
+        assert np.allclose(s[i], smooth_counts(m[i], 2))
+
+
 def test_smooth_view3d_setter(app):
     v = Waterfall3DView()
     v.set_spectrogram(_make_sg())
@@ -111,12 +122,13 @@ def test_smooth_slice_setter_uses_raw_cache(app):
     assert s._smooth == 2
 
 
-# ---------- IV-R2: шкала энергий в «конец по времени» + вертикальные отрезки ----------
-def test_energy_scale_has_vertical_teeth(app):
+# ---------- IV-R2 / #80: шкала энергий в «конец по времени», зубцы убраны ----------
+def test_energy_scale_has_no_vertical_teeth(app):
+    # Задача #80: вертикальные оливковые отрезки-зубцы шкалы энергий убраны — остались только подписи.
     v = Waterfall3DView()
     v.set_spectrogram(_make_sg(ns=30, nc=50))
     teeth = [it for it in v._axis_items if isinstance(it, gl.GLLinePlotItem)]
-    assert len(teeth) >= 2     # вертикальные отрезки-зубцы шкалы энергий появились
+    assert len(teeth) == 0     # зубцов больше нет (только GLTextItem-подписи)
 
 
 def test_energy_teeth_cleared_when_axes_hidden(app):
@@ -127,14 +139,35 @@ def test_energy_teeth_cleared_when_axes_hidden(app):
     assert len(teeth) == 0     # при скрытых осях зубцы тоже убраны
 
 
-# ---------- IV-R3: показывать только объём между плоскостями ----------
-def test_single_plane_no_clip(app):
+# ---------- IV-R3 + #84: одиночная плоскость режет от своего края до текущей позиции ----------
+def test_single_plane_clips_from_edge(app):
+    # Задача #84: видима только нижняя плоскость (слот 0) -> режет от минимума оси до позиции
     v = Waterfall3DView()
     v.set_spectrogram(_make_sg(ns=30, nc=50))
-    v.set_plane("time", 0, 0.3, True)      # видима только одна плоскость оси
+    v.set_plane("time", 0, 0.3, True)
     i0, i1, j0, j1, z_lo, z_hi, ca = v._clip_windows()
-    assert (i0, i1) == (0, v._nt - 1)      # окно = весь диапазон оси времени
+    assert i0 > 0                          # нижняя граница поднялась от минимума
+    assert i1 == v._nt - 1                 # верхняя сторона не тронута
     assert not ca
+
+
+def test_single_plane_slot1_clips_upper(app):
+    # Задача #84: видима только верхняя плоскость (слот 1) -> режет от максимума оси до позиции
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=30, nc=50))
+    v.set_plane("energy", 1, 0.6, True)
+    i0, i1, j0, j1, *_ = v._clip_windows()
+    assert j0 == 0                         # нижняя сторона не тронута
+    assert j1 < v._nc - 1                  # верхняя граница опустилась от максимума
+
+
+def test_single_counts_plane_activates_clip(app):
+    # Задача #84: одиночная counts-плоскость слота 0 включает высотную обрезку снизу
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=30, nc=50))
+    v.set_plane("counts", 0, 0.2, True)
+    *_, z_lo, z_hi, ca = v._clip_windows()
+    assert ca and z_lo > -np.inf and z_hi == np.inf
 
 
 def test_both_planes_clip_window(app):
@@ -167,14 +200,27 @@ def test_counts_planes_activate_height_clip(app):
     assert v._surface is not None
 
 
-def test_disable_one_plane_restores_full(app):
+def test_disable_one_plane_keeps_other_clip(app):
+    # Задача #84: снятие слота 1 не убирает обрезку слота 0 — его сторона режется по-прежнему
     v = Waterfall3DView()
     v.set_spectrogram(_make_sg(ns=30, nc=50))
     v.set_plane("time", 0, 0.3, True)
     v.set_plane("time", 1, 0.6, True)
-    v.set_plane("time", 1, 0.6, False)     # снимаем одну -> обрезка снимается
+    v.set_plane("time", 1, 0.6, False)     # снимаем верхнюю -> остаётся нижняя
     i0, i1, *_ = v._clip_windows()
-    assert (i0, i1) == (0, v._nt - 1)
+    assert i0 > 0                          # слот 0 продолжает резать от минимума
+    assert i1 == v._nt - 1                 # верхняя сторона восстановлена
+
+
+def test_crossed_planes_empty_surface(app):
+    # Задача #84: встречные плоскости пересеклись -> поверхность убрана (пустое окно, без ошибок)
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=30, nc=50))
+    v.set_plane("time", 0, 0.8, True)      # нижняя граница выше...
+    v.set_plane("time", 1, 0.2, True)      # ...верхней -> перекрытие
+    i0, i1, *_ = v._clip_windows()
+    assert i0 > i1                         # окно вырождено
+    assert v._surface is None              # поверхность снята
 
 
 # ---------- IV-R1: серая градиентная схема оформления ----------
@@ -198,9 +244,9 @@ def test_toolbar_and_statusbar_sized_up():
     assert "QToolBar QComboBox" in APP_QSS and "min-height" in APP_QSS
     assert "QToolBar QPushButton" in APP_QSS
     assert "QStatusBar QLabel" in APP_QSS
-    # размер шрифта тулбара/статуса поднят выше дефолтного 12px
-    for token in ("font-size: 15px", "font-size: 14px"):
-        assert token in APP_QSS
+    # размер шрифта тулбара/статуса поднят выше дефолтного 12px (Задача #93: тулбар → 14px как меню)
+    assert "font-size: 14px" in APP_QSS
+    assert "font-size: 15px" not in APP_QSS    # Задача #93: укрупнённого 15px тулбара больше нет
 
 
 def test_toolbar_combo_taller_than_default(app):
@@ -451,8 +497,10 @@ def test_top_menus_skeleton_present(app):
     for expected in ("Изотопы", "Анализ", "Сервис", "Помощь", "О программе"):
         assert expected in titles
     assert set(w._menus) == {"isotopes", "analysis", "service", "help", "about"}
-    # каждый пункт пока неактивен — это каркас, наполнение позже
-    for m in w._menus.values():
+    # остальные пункты пока неактивны (каркас); «Изотопы» наполнено в #79
+    for key, m in w._menus.items():
+        if key == "isotopes":
+            continue
         acts = m.actions()
         assert acts and all(not a.isEnabled() for a in acts)
     w.close()
@@ -527,3 +575,100 @@ def test_axis_labels_follow_viewer_side(app):
     assert tm1 and en1
     assert all(it.pos[1] > 0 for it in tm1)
     assert all(it.pos[0] < 0 for it in en1)
+
+
+# ---------- #78: ограничить вывод и сетку 3D порогом 3000 кэВ ----------
+def test_energy_axis_capped_at_3000(app):
+    """Задача #78: каналы с энергией выше 3000 кэВ не выводятся; деления оси энергии
+    тоже не выходят за порог."""
+    from awf.ui.view3d import _MAX_ENERGY_KEV
+    ns, nch = 20, 1000
+    counts = np.random.RandomState(1).poisson(20, size=(ns, nch)).astype(np.int64)
+    cal = Calibration(coeffs=[0.0, 5.0])   # E(ch)=5·ch -> до ~4995 кэВ, заведомо выше порога
+    t = np.arange(ns, dtype=np.float64) * 2.0
+    sg = Spectrogram(counts=counts, calibration=cal, time_offsets_s=t,
+                     real_time_s=np.full(ns, 2.0), live_time_s=np.full(ns, 2.0))
+    v = Waterfall3DView()
+    v.set_spectrogram(sg)
+    assert v._ch_centers.size > 0
+    assert float(v._ch_centers[-1]) <= _MAX_ENERGY_KEV            # вывод обрезан
+    assert v._nc == v._ch_centers.size == v._colors_full.shape[1]
+    ev, _wy = v._energy_ticks()
+    if ev.size:
+        assert float(ev.max()) <= _MAX_ENERGY_KEV                # сетка/деления обрезаны
+
+
+# ---------- #79: меню «Изотопы» — ссылка на окно нуклидов ----------
+def test_isotopes_menu_opens_nuclides_dock(app):
+    """Задача #79: пункт «Изотопы» — действующая ссылка (toggleViewAction дока нуклидов),
+    переключает видимость окна нуклидов."""
+    from awf.ui.main_window import MainWindow
+    w = MainWindow()
+    act = w._menus["isotopes"].actions()[0]
+    assert act.isEnabled() and act.isCheckable()      # больше не заглушка, это переключатель
+    assert act is w._ndock.toggleViewAction()         # ведёт именно на док нуклидов
+    s0 = act.isChecked()
+    act.trigger()
+    assert act.isChecked() != s0                      # клик переключил видимость окна
+    act.trigger()
+    assert act.isChecked() == s0                      # повторный клик вернул
+    w.close()
+
+
+# ---------- #82: жёлтое окно (ROI-выделение) на 2D-карте отключено ----------
+def test_heatmap_roi_hidden(app):
+    """Задача #82: после загрузки данных жёлтый прямоугольник ROI на 2D-карте не показывается."""
+    h = HeatmapPanel()
+    h.set_spectrogram(_make_sg(ns=30, nc=50))
+    assert not h._roi.isVisible()      # жёлтое окно выделения скрыто
+
+
+# ---------- #87: 2D-карта не «уезжает» — зум/панорама привязаны к окну данных ----------
+def test_heatmap_view_limited_to_data(app):
+    """Задача #87: после загрузки ViewBox 2D-карты ограничен прямоугольником данных —
+    панорама не выходит за [0..cols]×[0..rows], минимальный зум = полное окно."""
+    h = HeatmapPanel()
+    h.set_spectrogram(_make_sg(ns=30, nc=50))
+    lim = h._plot.getViewBox().state["limits"]
+    assert lim["xLimits"][0] == 0 and lim["xLimits"][1] == h._disp_cols
+    assert lim["yLimits"][0] == 0 and lim["yLimits"][1] == h._disp_rows
+    assert lim["xRange"][1] == h._disp_cols   # maxXRange = полное окно (минимальный зум)
+    assert lim["yRange"][1] == h._disp_rows
+
+
+# ---------- #92: рукоятки Регулировок не сбрасывают зум 3D ----------
+def test_adjust_setters_preserve_camera_zoom(app):
+    """Задача #92: ре-рендер от рукояток (set_smoothing/set_contrast/set_colormap) сохраняет
+    положение/масштаб камеры — пользовательский зум не сбрасывается на каждый ход рукоятки.
+    Новый спектр (другой объект) — камеру по-прежнему кадрирует под размер данных."""
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=40, nc=60))     # первая загрузка кадрирует камеру
+    v.setCameraPosition(distance=12.5)            # пользователь приблизил вручную
+    azim0 = v.opts["azimuth"]
+    v.set_smoothing(5)                            # рукоятка «Сглаживание» -> ре-рендер того же sg
+    assert v.opts["distance"] == 12.5             # зум сохранён
+    v.set_contrast(gain=2.0)                      # рукоятки «Усиление/Гамма/Отсечка»
+    assert v.opts["distance"] == 12.5
+    v.set_colormap("inferno")                     # смена палитры — тоже без сброса
+    assert v.opts["distance"] == 12.5
+    assert v.opts["azimuth"] == azim0             # азимут/поворот тоже не трогаем
+    v.set_spectrogram(_make_sg(ns=80, nc=120))    # новый файл — камеру кадрируем заново
+    assert v.opts["distance"] != 12.5
+
+
+# ---------- #89: графики дока «Срезы/Сечения/Выборки» привязаны к окну данных ----------
+def test_slice_views_locked_to_data(app):
+    """Задача #89: после загрузки X-домен обоих графиков SlicePanel ограничен экстентом
+    данных — спектр по энергии [emin..emax], профиль по времени [tmin..tmax];
+    панорама не выходит за домен, минимальный зум = полный домен."""
+    sp = SlicePanel()
+    sg = _make_sg(ns=30, nc=50, t_step=2.0)   # энергии 0..49 кэВ, время 0..58 с
+    sp.set_spectrogram(sg)
+    emin, emax = float(sg.energies().min()), float(sg.energies().max())
+    tmin, tmax = float(sg.time_offsets_s.min()), float(sg.time_offsets_s.max())
+    slim = sp._spectrum_plot.getViewBox().state["limits"]
+    assert slim["xLimits"][0] == emin and slim["xLimits"][1] == emax
+    assert slim["xRange"][1] == emax - emin            # maxXRange = полный домен энергии
+    tlim = sp._series_plot.getViewBox().state["limits"]
+    assert tlim["xLimits"][0] == tmin and tlim["xLimits"][1] == tmax
+    assert tlim["xRange"][1] == tmax - tmin            # maxXRange = полный домен времени

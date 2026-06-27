@@ -39,14 +39,17 @@ def test_view3d_highlight_mask_marks_channel(app):
     assert mask[10]  # центр полосы на энергии 10 кэВ -> канал 10
 
 
-def test_view3d_highlight_enable_recolors_and_keeps_rays(app):
+def test_view3d_highlight_enable_recolors_and_keeps_markers(app):
+    # Задача #85: маркеры живут на секущих плоскостях; при ре-рендере подсветки не теряются
     v = Waterfall3DView()
     v.set_spectrogram(_make_sg(ns=20, nc=40))
+    v.set_plane("time", 0, 0.5, True)
     v.set_energy_lines([(10.0, "#ff0000", "X"), (25.0, "#00ff00", "Y")])
     v.set_highlight_enabled(True)
     assert v._highlight_on is True
     assert v._surface is not None
-    assert len(v._ray_items) == 2  # лучи энергий не теряются при ре-рендере
+    assert v._ray_items == []                 # рёберных лучей больше нет (#85)
+    assert len(v._plane_nuclide_items) == 2   # маркеры на плоскости сохранены
 
 
 def test_view3d_highlight_out_of_range_no_mask(app):

@@ -99,6 +99,7 @@ class MainWindow(QtWidgets.QMainWindow):
         ndock.setWidget(self._nuclides)
         ndock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, ndock)
+        self._ndock = ndock   # Задача #79: ссылка для пункта меню «Изотопы»
 
         # Задача #35: правило QSS «QDockWidget > QWidget» красит тело панелей только при
         # WA_StyledBackground — кастомные QWidget-подклассы иначе игнорируют background из
@@ -181,8 +182,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _build_stub_menus(self) -> None:
         """Задача #75: каркас выпадающих меню верхней панели (Изотопы/Анализ/Сервис/
-        Помощь/О программе). Пока — по одному disabled-пункту-заглушке в каждом;
-        реальные действия подключатся в следующих задачах («наполню потом»)."""
+        Помощь/О программе). Меню «Изотопы» наполнено (Задача #79: пункт-ссылка на окно
+        нуклидов через toggleViewAction дока); остальные — disabled-заглушка до наполнения."""
         bar = self.menuBar()
         self._menus = {}
         spec = [
@@ -194,9 +195,16 @@ class MainWindow(QtWidgets.QMainWindow):
         ]
         for key, title in spec:
             m = bar.addMenu(title)
-            stub = QtGui.QAction("— наполняется позже —", self)
-            stub.setEnabled(False)   # каркас: действие будет подключено позже
-            m.addAction(stub)
+            if key == "isotopes":
+                # Задача #79: действующая ссылка на окно (док) с изотопами/нуклидами.
+                # toggleViewAction открывает/прячет док, галочкой отражая его видимость.
+                act = self._ndock.toggleViewAction()
+                act.setText("Окно изотопов (нуклиды)")
+                m.addAction(act)
+            else:
+                stub = QtGui.QAction("— наполняется позже —", self)
+                stub.setEnabled(False)   # каркас: действие будет подключено позже
+                m.addAction(stub)
             self._menus[key] = m
 
     def _build_toolbar(self) -> None:

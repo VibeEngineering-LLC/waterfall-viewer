@@ -77,17 +77,30 @@ class HeatmapPanel(QtWidgets.QWidget):
         # Z-контраст по выбранной шкале (с усреднением спектра по энергии, IV-R4); row-major =>
         # ось0=строки=Время(Y), ось1=столбцы=Канал(X)
         self._img.setImage(self._scaled_image(), axisOrder="row-major", autoLevels=True)
-        # ROI по умолчанию — центральная четверть карты (в дисплейных координатах)
+        # Задача #82: жёлтое окно выделения (ROI) отключено — на 2D-карте его не показываем.
+        # Окно по умолчанию (центральная четверть) всё равно задаём, чтобы _emit_roi отдал
+        # панели срезов дефолтную «полосу ROI» (магента-кривая там продолжает работать).
         x0 = self._disp_cols * 0.25; y0 = self._disp_rows * 0.25
         w = max(1.0, self._disp_cols * 0.5); h = max(1.0, self._disp_rows * 0.5)
         self._roi.setPos([x0, y0]); self._roi.setSize([w, h])
         self._roi.maxBounds = QtCore.QRectF(0, 0, self._disp_cols, self._disp_rows)
-        self._roi.setVisible(True)
+        self._roi.setVisible(False)   # #82: скрыто (жёлтый прямоугольник убран)
         self._plot.setRange(xRange=(0, self._disp_cols), yRange=(0, self._disp_rows), padding=0)
+        self._lock_view_to_data()     # Задача #87: карта не «уезжает» за пределы данных
         self._emit_roi()
         self._apply_highlight()  # перерисовать маркеры подсветки под новую геометрию (Задача 18)
         self._apply_contours()   # пересчитать изолинии под новые данные (Задача 20)
         self._clear_section_items()  # сбросить маркеры сечений старого файла (Задача #39)
+
+    def _lock_view_to_data(self) -> None:
+        """Задача #87: «привязать минимальный зум к окну» — ограничить ViewBox прямоугольником
+        данных. Панорама не выходит за [0..cols]×[0..rows]; максимально отдалённый вид
+        (минимальный зум) = полное окно. Карта больше не «уезжает» в пустоту."""
+        vb = self._plot.getViewBox()
+        if vb is None or self._disp_cols <= 0 or self._disp_rows <= 0:
+            return
+        vb.setLimits(xMin=0, xMax=self._disp_cols, yMin=0, yMax=self._disp_rows,
+                     maxXRange=self._disp_cols, maxYRange=self._disp_rows)
 
     def _disp_from_source(self, sg, src):
         """Дисплейная матрица из источника src (counts или cps): прорежаем method='max', если
@@ -335,9 +348,11 @@ class SlicePanel(QtWidgets.QWidget):
         ewin_row = QtWidgets.QHBoxLayout()
         ewin_row.addWidget(QtWidgets.QLabel("Энергоокно:"))
         self._ewin_preset = QtWidgets.QComboBox()
-        self._ewin_preset.addItem("— вручную —")
+        # Задача #94: пункт «— вручную —» убран (был пустышкой — его выбор ничего не делал).
+        # Комбо держит только пресеты; «ручное» состояние = пустой выбор (currentIndex == -1).
         for w in DEFAULT_WINDOWS:
             self._ewin_preset.addItem(f"{w.name} ({w.center:.0f} кэВ)")
+        self._ewin_preset.setCurrentIndex(-1)   # старт без активного пресета (как прежняя «вручную»)
         ewin_row.addWidget(self._ewin_preset)
         self._ewin_lo = QtWidgets.QDoubleSpinBox()
         self._ewin_hi = QtWidgets.QDoubleSpinBox()
@@ -404,6 +419,23 @@ class SlicePanel(QtWidgets.QWidget):
         self._ewin_lo.blockSignals(True); self._ewin_lo.setValue(lo); self._ewin_lo.blockSignals(False)
         self._ewin_hi.blockSignals(True); self._ewin_hi.setValue(hi); self._ewin_hi.blockSignals(False)
         self.show_energy_window(lo, hi)
+        self._lock_views_to_data()    # Задача #89: графики не «уезжают» за окно данных
+
+    def _lock_views_to_data(self) -> None:
+        """Задача #89: привязать X-домен графиков к экстенту данных, чтобы они не «уезжали»
+        при зуме/панораме. Верхний график — энергия [emin..emax], нижний — время [tmin..tmax];
+        панорама не выходит за домен, минимальный зум (макс. отдаление) = полный домен.
+        Y не ограничиваем — у спектра бывает лог-шкала, у профиля масштаб счёта меняется."""
+        if self._energies is not None and self._energies.size:
+            emin = float(self._energies.min()); emax = float(self._energies.max())
+            vb = self._spectrum_plot.getViewBox()
+            if vb is not None and emax > emin:
+                vb.setLimits(xMin=emin, xMax=emax, maxXRange=emax - emin)
+        if self._times is not None and self._times.size:
+            tmin = float(self._times.min()); tmax = float(self._times.max())
+            vb = self._series_plot.getViewBox()
+            if vb is not None and tmax > tmin:
+                vb.setLimits(xMin=tmin, xMax=tmax, maxXRange=tmax - tmin)
 
     def _plot_spectrum(self, energies, spec_raw, lt_total=None) -> None:
         """Кэшировать сырой спектр (+ живое время окна для cps, Задача #44) и отрисовать."""
@@ -589,9 +621,10 @@ class SlicePanel(QtWidgets.QWidget):
     def _on_ewin_preset(self, idx: int) -> None:
         """Выбран пресет нуклида: выставить границы спинбоксов (с клиппингом к диапазону спектра)
         и перерисовать временной профиль."""
-        if self._sg is None or idx <= 0 or idx > len(DEFAULT_WINDOWS):
+        # Задача #94: «вручную» убран — пресеты теперь с индекса 0; пустой выбор (idx == -1) = ручное.
+        if self._sg is None or idx < 0 or idx >= len(DEFAULT_WINDOWS):
             return
-        w = DEFAULT_WINDOWS[idx - 1]
+        w = DEFAULT_WINDOWS[idx]
         emin = float(self._energies.min()); emax = float(self._energies.max())
         lo = max(emin, min(emax, float(w.e_lo)))
         hi = max(emin, min(emax, float(w.e_hi)))
@@ -601,10 +634,11 @@ class SlicePanel(QtWidgets.QWidget):
 
     @QtCore.Slot()
     def _on_ewin_spin(self) -> None:
-        """Ручная правка границ энергоокна -> сбросить пресет в «вручную» и перерисовать профиль."""
+        """Ручная правка границ энергоокна -> снять активный пресет (пустой выбор, Задача #94)
+        и перерисовать профиль."""
         if self._sg is None:
             return
         lo = float(self._ewin_lo.value()); hi = float(self._ewin_hi.value())
-        self._ewin_preset.blockSignals(True); self._ewin_preset.setCurrentIndex(0)
+        self._ewin_preset.blockSignals(True); self._ewin_preset.setCurrentIndex(-1)
         self._ewin_preset.blockSignals(False)
         self.show_energy_window(lo, hi)

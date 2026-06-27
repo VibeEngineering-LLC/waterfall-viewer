@@ -257,8 +257,7 @@ def test_mainwindow_light_slider(app):
     w = MainWindow()
     w._view3d.set_spectrogram(_make_sg(ns=15, nc=25))
     assert w._light_slider.value() == 0                  # по умолчанию тени выключены
-    w._adjust._global.setChecked(True)                   # Задача #60: дефолт выкл — включаем
-    w._adjust.rows["light"].set_on(True)
+    w._adjust.rows["light"].set_on(True)                 # Задача #91: ряд включаем напрямую
     w._light_slider.setValue(60)
     assert w._view3d._light == pytest.approx(0.6)
     w.close()

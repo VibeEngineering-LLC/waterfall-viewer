@@ -72,10 +72,10 @@ _DEFAULTS = {"gain": 100, "gamma": 100, "clip": 100, "smooth": 0, "light": 0, "t
 
 
 def test_panel_defaults_all_off(app):
-    """Задача #60: по умолчанию общий выключатель и все ряды — ВЫКЛ (эталон-скриншот)."""
+    """Задача #60: по умолчанию все ряды — ВЫКЛ (эталон-скриншот).
+    Задача #91: общего выключателя больше нет — bypass по каждому ряду отдельно."""
     p = AdjustPanel()
-    assert p.is_global_on() is False
-    assert "ВЫКЛ" in p._global.text()
+    assert not hasattr(p, "_global")             # #91: мастер-выключатель убран
     for r in p.rows.values():
         assert r.is_on() is False
         assert r._chk.text() == "выкл"
@@ -83,36 +83,32 @@ def test_panel_defaults_all_off(app):
     assert p.values() == _DEFAULTS               # всё выкл → нейтральные дефолты (bypass)
 
 
-def test_adjustpanel_global_bypass(app):
+def test_adjustpanel_per_row_bypass(app):
+    # Задача #91: общий выключатель убран — bypass только по каждому ряду отдельно.
     p = AdjustPanel()
     assert p.values() == _DEFAULTS               # старт — всё выкл → дефолты (bypass, #60)
-    assert p.is_global_on() is False             # #60: общий по умолчанию выкл
     assert all(not r.is_on() for r in p.rows.values())   # #60: все ряды выкл
-    p._global.setChecked(True)                   # включаем общий + два ряда для проверки
-    p.rows["gain"].set_on(True)
+    p.rows["gain"].set_on(True)                  # включаем два ряда — без всякого мастер-гейта
     p.rows["smooth"].set_on(True)
     p.rows["gain"].setValue(250)
     p.rows["smooth"].setValue(7)
     assert p.values()["gain"] == 250 and p.values()["smooth"] == 7
-    p.rows["gain"].set_on(False)                 # один ряд выкл → его дефолт
+    p.rows["gain"].set_on(False)                 # один ряд выкл → его дефолт, второй держит значение
     assert p.values()["gain"] == 100 and p.values()["smooth"] == 7
-    p._global.setChecked(False)                  # общий выкл → всё к дефолтам
-    assert p.values() == _DEFAULTS
-    assert p.rows["gain"].value() == 250         # позиции ручек сохранены
-    p._global.setChecked(True)                   # назад: gain выкл, smooth вкл
-    assert p.values()["gain"] == 100 and p.values()["smooth"] == 7
+    assert p.rows["gain"].value() == 250         # позиция ручки сохранена
+    p.rows["gain"].set_on(True)                  # назад — снова 250
+    assert p.values()["gain"] == 250 and p.values()["smooth"] == 7
 
 
 def test_adjustpanel_reset_all(app):
     p = AdjustPanel()
-    p._global.setChecked(True)                   # #60: дефолт выкл — включаем, чтобы было что сбрасывать
-    p.rows["gain"].set_on(True)
+    p.rows["gain"].set_on(True)                   # #91: включаем ряды напрямую (мастера нет)
     p.rows["gain"].setValue(300)
     p.rows["light"].set_on(True)
     p.rows["light"].setValue(40)
     p.reset_all()
-    assert p.is_global_on() is False             # #60: сброс → дефолт = всё выкл
-    assert all(not r.is_on() for r in p.rows.values())
+    assert all(not r.is_on() for r in p.rows.values())   # сброс → все ряды выкл
+    assert all(not r.knob.isEnabled() for r in p.rows.values())  # #91: ручки погашены
     assert p.values() == _DEFAULTS
 
 
@@ -129,8 +125,7 @@ def test_mainwindow_adjust_dock_exists(app):
 def test_mainwindow_bypass_reverts_gain(app):
     w = MainWindow()
     w._view3d.set_spectrogram(_make_sg())
-    w._adjust._global.setChecked(True)           # #60: дефолт выкл — включаем
-    w._adjust.rows["gain"].set_on(True)
+    w._adjust.rows["gain"].set_on(True)          # #91: ряд включаем напрямую (мастера нет)
     w._adjust.rows["gain"].setValue(250)         # усиление 2.5×
     assert w._view3d._gain == pytest.approx(2.5)
     w._adjust.rows["gain"].set_on(False)         # выкл ряда → стандартный вид (gain 1.0)
@@ -141,17 +136,19 @@ def test_mainwindow_bypass_reverts_gain(app):
     w.close()
 
 
-def test_mainwindow_global_off_reverts_all(app):
+def test_mainwindow_rows_off_revert_all(app):
+    # Задача #91: выключение рядов (по отдельности) возвращает стандартный вид —
+    # общего выключателя больше нет, каждый ряд сам себе bypass.
     w = MainWindow()
     w._view3d.set_spectrogram(_make_sg())
-    w._adjust._global.setChecked(True)           # #60: дефолт выкл — включаем
     w._adjust.rows["gain"].set_on(True)
     w._adjust.rows["light"].set_on(True)
     w._adjust.rows["gain"].setValue(250)
     w._adjust.rows["light"].setValue(60)
     assert w._view3d._gain == pytest.approx(2.5)
     assert w._view3d._light == pytest.approx(0.6)
-    w._adjust._global.setChecked(False)          # общий выкл → всё к дефолтам
+    w._adjust.rows["gain"].set_on(False)         # ряды выкл → всё к дефолтам
+    w._adjust.rows["light"].set_on(False)
     assert w._view3d._gain == pytest.approx(1.0)
     assert w._view3d._light == pytest.approx(0.0)
     w.close()
@@ -163,8 +160,7 @@ def test_mainwindow_tbin_changes_time_bins(app):
     w = MainWindow()
     w._view3d.set_spectrogram(_make_sg(ns=120, nc=30))   # ns>бинов — LOD реально режет
     assert w._view3d._max_time == 400                    # дефолт — стандартная ширина
-    w._adjust._global.setChecked(True)                   # #60: дефолт выкл — включаем
-    w._adjust.rows["tbin"].set_on(True)
+    w._adjust.rows["tbin"].set_on(True)                  # #91: ряд включаем напрямую
     w._adjust.rows["tbin"].setValue(200)                 # ширина ×2 → меньше бинов («сжатие»)
     assert w._view3d._max_time == 200
     w._adjust.rows["tbin"].setValue(50)                  # ширина ×0.5 → больше бинов («растяжение»)
@@ -180,8 +176,7 @@ def test_mainwindow_tbin_persists_across_load(app):
     set_spectrogram(sg) не сбрасывает max_time (None-дефолт сохраняет текущее)."""
     w = MainWindow()
     w._view3d.set_spectrogram(_make_sg(ns=120))
-    w._adjust._global.setChecked(True)                   # #60: дефолт выкл — включаем
-    w._adjust.rows["tbin"].set_on(True)
+    w._adjust.rows["tbin"].set_on(True)                  # #91: ряд включаем напрямую
     w._adjust.rows["tbin"].setValue(200)                 # max_time=200
     assert w._view3d._max_time == 200
     w._view3d.set_spectrogram(_make_sg(ns=140))          # новый файл, аргументный вызов как в _on_loaded

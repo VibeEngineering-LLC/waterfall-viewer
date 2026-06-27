@@ -6,7 +6,8 @@
 QSlider (value/setValue/setRange/valueChanged), поэтому обработчики main_window читают
 значение тем же способом (имя Knob и _*_slider-алиасы целы — внешний код не трогаем).
 `KnobRow` — горизонтальный ряд: подпись + движок + значение + индивидуальные вкл/выкл и сброс.
-`AdjustPanel` собирает ряды одной колонкой (Задача #58) и общий выключатель (bypass к дефолтам).
+`AdjustPanel` собирает ряды одной колонкой (Задача #58) и кнопку «Сброс всех». Bypass —
+по каждому ряду отдельно (per-row вкл/выкл); общий выключатель убран (Задача #91).
 """
 from __future__ import annotations
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -227,12 +228,6 @@ class KnobRow(QtWidgets.QWidget):
         """Значение для применения: ручка, если ряд включён, иначе дефолт (bypass)."""
         return self.knob.value() if self._chk.isChecked() else self._default
 
-    def set_global_enabled(self, on: bool):
-        """Глобальный выключатель: визуально гасит ручку (значение/состояние сохраняются)."""
-        vis = bool(on) and self._chk.isChecked()
-        self.knob.setEnabled(vis)
-        self._readout.setEnabled(vis)
-
 
 # Спецификации регулировок отображения (ключ, подпись, lo, hi, дефолт, форматтер).
 # Дефолты = «нейтральные» значения, при которых apply_z_scale/сглаживание/свет не меняют картину
@@ -269,20 +264,15 @@ class AdjustPanel(QtWidgets.QWidget):
             self.rows[key] = row
             grid.addWidget(row, i, 0)           # Задача #58: одна колонка (ряды друг под другом)
 
-        self._global = QtWidgets.QToolButton(self)      # общий выключатель всех регулировок
-        self._global.setCheckable(True)
-        self._global.setChecked(False)                  # Задача #60: по умолчанию выкл
-        self._global.setText("Регулировки: ВЫКЛ")
-        self._global.setObjectName("knobGlobal")
-        self._global.setToolTip("Выключить все регулировки — отображение как без них (bypass)")
-        self._global.toggled.connect(self._on_global)
+        # Задача #91: общий выключатель «Регулировки: ВКЛ/ВЫКЛ» убран — он был нефункционален
+        # (per-row тумблеры уже дают bypass на каждую ручку, а мастер-гейт по дефолту ВЫКЛ
+        # глушил все ряды, из-за чего включение отдельной регулировки не давало эффекта).
         self._reset_all = QtWidgets.QToolButton(self)
         self._reset_all.setText("Сброс всех")
         self._reset_all.setObjectName("knobResetAll")
         self._reset_all.clicked.connect(self.reset_all)
 
         top = QtWidgets.QHBoxLayout()
-        top.addWidget(self._global)
         top.addStretch(1)
         top.addWidget(self._reset_all)
         outer = QtWidgets.QVBoxLayout(self)
@@ -293,34 +283,18 @@ class AdjustPanel(QtWidgets.QWidget):
         outer.addStretch(1)
 
     # --- реакции / API ---
-    def _on_global(self, on):
-        self._global.setText("Регулировки: ВКЛ" if on else "Регулировки: ВЫКЛ")
-        for r in self.rows.values():
-            r.set_global_enabled(bool(on))
-        self.changed.emit()
-
-    def is_global_on(self) -> bool:
-        return self._global.isChecked()
-
     def values(self) -> dict:
-        """Эффективные значения регулировок. Глобальный выкл → все дефолты (полный bypass);
-        иначе по каждому ряду: значение, если ряд включён, иначе его дефолт."""
-        if not self._global.isChecked():
-            return {k: r.default() for k, r in self.rows.items()}
+        """Эффективные значения регулировок: по каждому ряду — значение, если ряд включён,
+        иначе его дефолт (per-row bypass). Задача #91: общий выключатель убран."""
         return {k: r.effective_value() for k, r in self.rows.items()}
 
     def reset_all(self):
-        """Сброс всей панели к умолчанию (#60): значения = дефолты, все ряды и общий — ВЫКЛ
-        (как стартовое состояние). Сигналы глушим — пересчёт отображения один раз в конце."""
+        """Сброс всей панели к умолчанию (#60): значения = дефолты, все ряды ВЫКЛ
+        (стартовое состояние). Сигналы рядов глушим — пересчёт отображения один раз в конце.
+        Гашение ручек делает _on_toggle при set_on(False) (сигнал _chk не заглушён)."""
         for r in self.rows.values():
             r.blockSignals(True)
             r.set_on(False)
             r.reset()
             r.blockSignals(False)
-        self._global.blockSignals(True)
-        self._global.setChecked(False)
-        self._global.setText("Регулировки: ВЫКЛ")
-        self._global.blockSignals(False)
-        for r in self.rows.values():
-            r.set_global_enabled(False)
         self.changed.emit()

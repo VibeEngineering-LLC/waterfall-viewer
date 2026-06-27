@@ -49,8 +49,9 @@ def test_tree_builds_all_nuclides(app):
     names = _leaf_names(p._tree)
     assert len(names) == len(lib)
     assert "Cs-137" in names and "K-40" in names
-    # верхний уровень — категории (в встроенной библиотеке: natural/technogenic/fission)
-    assert p._tree.topLevelItemCount() == 3
+    # верхний уровень — категории (после #86 в библиотеке все 4:
+    # natural/technogenic/medical/fission)
+    assert p._tree.topLevelItemCount() == 4
 
 
 def test_category_filter_hides_branch(app):
@@ -65,14 +66,23 @@ def test_category_filter_hides_branch(app):
     assert len(_leaf_names(p._tree)) == full
 
 
-def test_lifetime_filter_empties_when_all_long(app):
-    lib = default_library()  # все 21 нуклида — long
+def test_lifetime_filter_partitions_long_short(app):
+    # после #86 в библиотеке есть и long, и short — фильтр должен их разделять
+    lib = default_library()
     p = NuclidePanel(lib)
     full = len(_leaf_names(p._tree))
-    assert full > 0
+    n_long = sum(1 for n in lib if n.lifetime == "long")
+    n_short = sum(1 for n in lib if n.lifetime == "short")
+    assert n_long > 0 and n_short > 0
+    # снять «long» -> остаются только short
     p._lt_checks["long"].setChecked(False)
+    assert len(_leaf_names(p._tree)) == n_short
+    # снять оба -> дерево пусто
+    p._lt_checks["short"].setChecked(False)
     assert len(_leaf_names(p._tree)) == 0
+    # вернуть оба -> полный список
     p._lt_checks["long"].setChecked(True)
+    p._lt_checks["short"].setChecked(True)
     assert len(_leaf_names(p._tree)) == full
 
 
@@ -129,16 +139,18 @@ def test_candidates_cleared(app):
 
 
 def test_add_nuclide_replaces_not_duplicates(app):
+    # Po-210 — чистый альфа-излучатель, нет в библиотеке (после #86),
+    # но есть в карте категорий -> подходит для проверки добавления
     p = NuclidePanel(default_library())
     before = len(_leaf_names(p._tree))
     g = (GammaLine(energy=1001.0, intensity=0.84, d_intensity=0.05),)
-    p.add_nuclide(Nuclide(name="Th-234", lines=g))
+    p.add_nuclide(Nuclide(name="Po-210", lines=g))
     after = _leaf_names(p._tree)
-    assert "Th-234" in after
+    assert "Po-210" in after
     assert len(after) == before + 1
-    # категория проставлена обогащением (Th-234 -> natural в карте категорий)
-    th = next(n for n in p.library() if n.name == "Th-234")
-    assert th.category is not None
+    # категория проставлена обогащением (Po-210 -> natural в карте категорий)
+    po = next(n for n in p.library() if n.name == "Po-210")
+    assert po.category is not None
     # повторное добавление заменяет, не дублирует
-    p.add_nuclide(Nuclide(name="Th-234", lines=g))
-    assert _leaf_names(p._tree).count("Th-234") == 1
+    p.add_nuclide(Nuclide(name="Po-210", lines=g))
+    assert _leaf_names(p._tree).count("Po-210") == 1

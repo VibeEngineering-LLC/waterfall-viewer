@@ -31,14 +31,15 @@ QToolBar {
     border: 0px;
     spacing: 8px;            /* Задача #62: было 3px — тулбар «Вид» скучен */
     padding: 7px 8px;        /* Задача #62: было 3px — выше панель, больше воздух */
-    font-size: 15px;
+    font-size: 14px;         /* Задача #93: 15px→14px — как главное меню (QMenuBar) */
 }
 /* Задача #62: контролы тулбара «Вид» крупнее и выше. Целюсь по потомкам QToolBar —
-   доки-панели (рукоятки/сечения) не вложены в тулбар и не затрагиваются. */
-QToolBar QLabel { font-size: 15px; }
-QToolBar QCheckBox { font-size: 15px; spacing: 7px; }
-QToolBar QComboBox { font-size: 15px; padding: 5px 10px; min-height: 28px; }
-QToolBar QPushButton { font-size: 15px; padding: 6px 16px; min-height: 28px; }
+   доки-панели (рукоятки/сечения) не вложены в тулбар и не затрагиваются.
+   Задача #93: шрифт приведён к 14px — как у главного меню (QMenuBar/QMenu, строки выше). */
+QToolBar QLabel { font-size: 14px; }
+QToolBar QCheckBox { font-size: 14px; spacing: 7px; }
+QToolBar QComboBox { font-size: 14px; padding: 5px 10px; min-height: 28px; }
+QToolBar QPushButton { font-size: 14px; padding: 6px 16px; min-height: 28px; }
 
 QStatusBar {
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
@@ -163,13 +164,11 @@ QToolButton#knobToggle, QToolButton#knobReset {
 QToolButton#knobToggle:checked { background: #3d6b3d; color: #ffffff; }
 QToolButton#knobToggle:!checked { background: #4a3030; color: #c8b0b0; }
 QToolButton#knobReset:hover, QToolButton#knobToggle:hover { background: #50545a; }
-QToolButton#knobGlobal, QToolButton#knobResetAll {
+QToolButton#knobResetAll {
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                 stop:0 #45484d, stop:1 #2f3236);
     color: #d8dade; border: 1px solid #1c1e21;
     border-radius: 3px; padding: 3px 10px;
 }
-QToolButton#knobGlobal:checked { background: #3d6b3d; color: #ffffff; }
-QToolButton#knobGlobal:!checked { background: #4a3030; color: #d8c0c0; }
-QToolButton#knobResetAll:hover, QToolButton#knobGlobal:hover { background: #50545a; }
+QToolButton#knobResetAll:hover { background: #50545a; }
 """

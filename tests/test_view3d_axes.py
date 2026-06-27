@@ -48,9 +48,9 @@ def test_axis_labels_created_after_load(app):
     texts = [it for it in v._axis_items if isinstance(it, gl.GLTextItem)]
     teeth = [it for it in v._axis_items if isinstance(it, gl.GLLinePlotItem)]
     assert len(texts) >= 6                     # подписи делений + заголовки осей
-    assert len(teeth) >= 2                     # вертикальные отрезки-зубцы шкалы энергий (IV-R2)
-    # в _axis_items только подписи и зубцы — ничего постороннего
-    assert len(texts) + len(teeth) == len(v._axis_items)
+    assert len(teeth) == 0                     # Задача #80: зубцы шкалы энергий убраны
+    # в _axis_items теперь только подписи — ничего постороннего
+    assert len(texts) == len(v._axis_items)
 
 
 def test_axis_labels_toggle_off_on(app):

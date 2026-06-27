@@ -31,3 +31,8 @@ graphify-out/
 
 # Кэш IAEA LiveChart (сырые ENSDF CSV, скачиваются по кнопке; офлайн-воспроизводимость) — не в git
 awf/data/iaea_cache/
+
+# Промежуточные артефакты fetch_missing_nuclides.py (#86): кэш кандидатов + отчёт прогона.
+# Регенерируются скриптом из сети; в библиотеку уже слиты (nuclides.json). Не в git.
+scripts/_missing_candidates.json
+scripts/_missing_report.txt

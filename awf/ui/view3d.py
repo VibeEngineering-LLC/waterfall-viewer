@@ -65,8 +65,6 @@ def _fmt_count(v: float) -> str:
         return f"{v:.2f}"
     return "0"
 
-_ENERGY_TICK_RGBA = (0.62, 0.69, 0.45, 0.95)  # оливковые отрезки-зубцы шкалы энергий (IV-R2)
-
 # Задача #68/#63: координатная сетка — линии на делениях шкал, поле обрамлено пустой клеткой.
 _GRID_RGBA = (0.28, 0.28, 0.33, 0.55)         # тонкие линии сетки на делениях шкал
 _GRID_BORDER_RGBA = (0.46, 0.47, 0.54, 0.9)   # рамка поля (на 1 клетку шире данных) — ярче сетки
@@ -83,6 +81,9 @@ _PREF_STEP_MAX_TICKS = 40      # больше — деления слишком 
 # фиолетовый минимум). При отключении подложки такие ячейки делаем прозрачными (alpha=0): остаётся
 # только рельеф-«всплески», сплошной фиолетовый прямоугольник базы исчезает (виден фон).
 _FLOOR_FRAC = 0.02             # доля высоты рельефа, ниже которой ячейка считается «дном»
+# Задача #78: верхний предел энергии для вывода и сетки 3D-водопада. Каналы с энергией выше
+# отсекаются ПОСЛЕ LOD-прорежки — и рельеф, и деления оси энергии обрезаются согласованно.
+_MAX_ENERGY_KEV = 3000.0
 
 
 class Waterfall3DView(gl.GLViewWidget):
@@ -204,6 +205,10 @@ class Waterfall3DView(gl.GLViewWidget):
         """Прорядить через sg.downsample(method='max') и построить цветную поверхность.
         Геометрия в индексном пространстве (X=индекс времени, Y=индекс канала), высота Z и цвет —
         по counts. Реальные единицы (с / кэВ) подписываем делениями осей (Задача 14)."""
+        # Задача #92: отличить загрузку НОВОГО спектра от ре-рендера того же (рукоятки Регулировок,
+        # смена палитры/Z-шкалы/единиц передают self._sg). Идентичность объекта — надёжный признак:
+        # сеттеры ре-рендера зовут set_spectrogram(self._sg, ...), новый файл — другой объект.
+        is_new = sg is not self._sg
         self._sg = sg
         # Задача #56: None -> сохранить текущие max_time/max_chan (ширина выборки по времени из
         # рукоятки переживает загрузку файла, как _gain/_smooth/_light); число -> установить новое.
@@ -222,6 +227,16 @@ class Waterfall3DView(gl.GLViewWidget):
         # Сумма по окну времени == sg.sum_spectrum, прорежённому к nc каналам — точно как окно.
         z_sum, _ts, _cs = sg.downsample(max_time, max_chan, method="sum", data=src)
         self._z_counts_sum = np.asarray(z_sum, dtype=np.float64)
+        # Задача #78: ограничить вывод и сетку 3D по энергии _MAX_ENERGY_KEV (3000 кэВ). Каналы
+        # выше порога отсекаем здесь, на прорежённых данных: ch_centers задаёт и рельеф, и деления
+        # оси энергии, поэтому срез прefix'а (калибровка канал→энергия монотонно возрастает) обрезает
+        # данные и градуировку согласованно. Если файл и так в пределах порога — срез не нужен.
+        ch_centers = np.asarray(ch_centers, dtype=np.float64)
+        keep = int(np.count_nonzero(ch_centers <= _MAX_ENERGY_KEV))
+        if 0 < keep < ch_centers.size:
+            z_counts = z_counts[:, :keep]
+            self._z_counts_sum = self._z_counts_sum[:, :keep]
+            ch_centers = ch_centers[:keep]
         # 1b) регулируемое усреднение спектра по энергетической оси (axis=1) — Замечание IV-R4
         z_counts = smooth_counts(z_counts, self._smooth, axis=1)
         nt, nc = z_counts.shape
@@ -260,41 +275,50 @@ class Waterfall3DView(gl.GLViewWidget):
         self._t_centers = np.asarray(t_centers, dtype=np.float64)
         self._ch_centers = np.asarray(ch_centers, dtype=np.float64)
         self._rebuild_surface()
-        # 6) координатная сетка на делениях шкал (Задача #63/#68); камера — отдалить под размер
-        span = float(max(nt, nc, 10))
-        self.setCameraPosition(distance=span * 1.6)
+        # 6) координатная сетка на делениях шкал (Задача #63/#68); камера — отдалить под размер.
+        # Задача #92: кадрируем камеру ТОЛЬКО при загрузке нового спектра. Ре-рендеры от рукояток
+        # Регулировок (set_contrast/set_smoothing/set_light_intensity/set_time_bins/set_z_scale/
+        # set_colormap/set_unit_mode передают тот же self._sg) сохраняют зум/панораму пользователя.
+        if is_new:
+            span = float(max(nt, nc, 10))
+            self.setCameraPosition(distance=span * 1.6)
         self._rebuild_grid()
-        # 7) переразместить активные секущие плоскости/подписи/лучи/маркеры нуклидов
+        # 7) переразместить активные секущие плоскости/подписи/маркеры нуклидов на плоскостях
         self._refresh_all_planes()
         self._rebuild_axis_labels()
-        self._rebuild_energy_rays()
-        self._rebuild_plane_nuclides()
+        self._rebuild_energy_rays()       # Задача #85: лишь снимает старые рёберные лучи
+        self._rebuild_plane_nuclides()    # маркеры изотопов — только на секущих плоскостях
 
     def _clip_windows(self):
-        """Окна обрезки поверхности по осям; активны ТОЛЬКО когда видимы ОБЕ плоскости оси
-        (Замечание IV-R3). Возвращает (i0,i1,j0,j1,z_lo,z_hi,counts_active) в дисплейных
-        индексах/высотах. Неактивная пара -> окно = весь диапазон оси."""
+        """Окна обрезки поверхности по осям. Задача #84: каждая ВИДИМАЯ плоскость режет
+        односторонне от своего края оси до текущей позиции — слот 0 задаёт нижнюю границу
+        (от минимума оси), слот 1 — верхнюю (от максимума); пройденная полоса скрывается.
+        Видимы обе плоскости оси -> окно между ними (обратно совместимо с IV-R3). Возвращает
+        (i0,i1,j0,j1,z_lo,z_hi,counts_active) в дисплейных индексах/высотах; невидимый слот ->
+        его граница = край оси (весь диапазон)."""
         nt, nc = self._nt, self._nc
         i0, i1 = 0, max(0, nt - 1)
         j0, j1 = 0, max(0, nc - 1)
         z_lo, z_hi = -np.inf, np.inf
         counts_active = False
+        # Задача #84: слот 0 -> нижняя граница (режет от минимума оси), слот 1 -> верхняя (от максимума)
         tv = self._planes[("time", 0)], self._planes[("time", 1)]
-        if tv[0]["visible"] and tv[1]["visible"]:
-            a = self._frac_to_index(self._t_centers, tv[0]["frac"])
-            b = self._frac_to_index(self._t_centers, tv[1]["frac"])
-            i0, i1 = min(a, b), max(a, b)
+        if tv[0]["visible"]:
+            i0 = self._frac_to_index(self._t_centers, tv[0]["frac"])
+        if tv[1]["visible"]:
+            i1 = self._frac_to_index(self._t_centers, tv[1]["frac"])
         ev = self._planes[("energy", 0)], self._planes[("energy", 1)]
-        if ev[0]["visible"] and ev[1]["visible"]:
-            a = self._frac_to_index(self._ch_centers, ev[0]["frac"])
-            b = self._frac_to_index(self._ch_centers, ev[1]["frac"])
-            j0, j1 = min(a, b), max(a, b)
+        if ev[0]["visible"]:
+            j0 = self._frac_to_index(self._ch_centers, ev[0]["frac"])
+        if ev[1]["visible"]:
+            j1 = self._frac_to_index(self._ch_centers, ev[1]["frac"])
+        H = self._height_scale
         cv = self._planes[("counts", 0)], self._planes[("counts", 1)]
-        if cv[0]["visible"] and cv[1]["visible"]:
-            H = self._height_scale
-            a = max(0.0, min(1.0, cv[0]["frac"])) * H
-            b = max(0.0, min(1.0, cv[1]["frac"])) * H
-            z_lo, z_hi = min(a, b), max(a, b)
+        if cv[0]["visible"]:
+            z_lo = max(0.0, min(1.0, cv[0]["frac"])) * H
+            counts_active = True
+        if cv[1]["visible"]:
+            z_hi = max(0.0, min(1.0, cv[1]["frac"])) * H
             counts_active = True
         return i0, i1, j0, j1, z_lo, z_hi, counts_active
 
@@ -307,6 +331,13 @@ class Waterfall3DView(gl.GLViewWidget):
         nt, nc = self._nt, self._nc
         i0, i1, j0, j1, z_lo, z_hi, counts_active = self._clip_windows()
         self._clip_sig = (i0, i1, j0, j1, z_lo, z_hi, counts_active)
+        # Задача #84: встречные плоскости пересеклись (срезы перекрыли друг друга) -> данных
+        # в окне не остаётся; убираем поверхность, чтобы не строить пустой GLSurfacePlotItem.
+        if i0 > i1 or j0 > j1:
+            if self._surface is not None:
+                self.removeItem(self._surface)
+                self._surface = None
+            return
         xs = np.arange(i0, i1 + 1, dtype=np.float32)
         ys = np.arange(j0, j1 + 1, dtype=np.float32)
         zsub = np.ascontiguousarray(self._z_surface[i0:i1 + 1, j0:j1 + 1], dtype=np.float32)
@@ -456,14 +487,6 @@ class Waterfall3DView(gl.GLViewWidget):
         self.addItem(item)
         self._axis_items.append(item)
 
-    def _add_line(self, p0, p1, color) -> None:
-        """Короткий GL-отрезок (зубец шкалы); хранится в _axis_items для совместной очистки."""
-        pts = np.array([p0, p1], dtype=np.float32)
-        item = gl.GLLinePlotItem(pos=pts, color=color, width=1.6,
-                                 mode="line_strip", antialias=True)
-        self.addItem(item)
-        self._axis_items.append(item)
-
     def _time_ticks(self):
         """Деления оси времени (Задача #64/#71): (disp_values, world_x, unit). Для длинных
         водопадов — фиксированный шаг 15 минут (#71); для коротких записей — авто-деления
@@ -547,14 +570,15 @@ class Waterfall3DView(gl.GLViewWidget):
 
     def _rebuild_axis_labels(self) -> None:
         """Подписи делений осей времени и энергии (Задача #64/#66): значение + единица на каждой
-        клетке. Вертикальную шкалу счёта (Z) не строим (Задача #65). Зубцы шкалы энергий (IV-R2)."""
+        клетке. Вертикальную шкалу счёта (Z) не строим (Задача #65). Зубцы шкалы энергий убраны
+        (Задача #80)."""
         self._clear_axis_items()
         if not self._axis_labels_visible or self._z_surface is None:
             return
         nt, nc = self._nt, self._nc
         if nt == 0 or nc == 0:
             return
-        xmin, xmax, ymin, ymax, zmax = self._axis_extent()
+        xmin, xmax, ymin, ymax, _zmax = self._axis_extent()   # zmax не нужен: зубцов нет (#80)
         pad = 0.05 * float(max(nt, nc, 10))
         font = QtGui.QFont("Helvetica", 7)   # Задача #73: подписи делений были крупны (10) — уменьшено
         # Задача #77: подписи держим на ближнем к зрителю крае оси (по знаку XY-направления камеры),
@@ -568,12 +592,11 @@ class Waterfall3DView(gl.GLViewWidget):
         dv, wx, unit = self._time_ticks()
         for tv, x in zip(dv, wx):
             self._add_text((float(x), y_time, 0.0), f"{tv:g} {unit}", font)
-        # ось энергии (Y): значение в кэВ + единица; вертикальные зубцы вверх по Z (IV-R2/#66)
+        # ось энергии (Y): значение в кэВ + единица на каждом делении (Задача #66).
+        # Задача #80: вертикальные оливковые зубцы-отрезки (IV-R2/#77) убраны — только подписи.
         ev, wy = self._energy_ticks()
-        tooth = 0.10 * zmax if zmax > 0 else 1.0
         for en, y in zip(ev, wy):
             self._add_text((x_en_lab, float(y), 0.0), f"{en:g} кэВ", font)
-            self._add_line((x_en, float(y), 0.0), (x_en, float(y), tooth), _ENERGY_TICK_RGBA)
 
     def _viewer_sides(self):
         """Задача #77: знаки X/Y-направления «на зрителя» (камера → центр сцены, центр в 0,0).
@@ -619,39 +642,11 @@ class Waterfall3DView(gl.GLViewWidget):
         self._ray_items = []
 
     def _rebuild_energy_rays(self) -> None:
-        """Вертикальный луч на каждой энергии-маркере: от опорной плоскости (Z=0) до вершины
-        столбца энергии в рельефе. Энергия -> индекс канала через ch_centers (LOD-aware)."""
+        """Задача #85: маркеры изотопов отображаются ТОЛЬКО на секущих плоскостях
+        (`_rebuild_plane_nuclides`). Прежние рёберные лучи у края данных (Задача 15/IV-R2)
+        больше не рисуются — метод лишь снимает ранее построенные лучи, чтобы при
+        перестроениях не оставалось «висящих» маркеров вне плоскостей."""
         self._clear_ray_items()
-        if self._z_surface is None or not self._energy_lines:
-            return
-        nc = self._nc
-        cc = self._ch_centers
-        if cc is None or len(cc) < 2 or nc == 0:
-            return
-        xmin, xmax, ymin, ymax, zmax = self._axis_extent()
-        emin = float(cc[0]); emax = float(cc[-1])
-        idx = np.arange(nc, dtype=float)
-        stub = 0.05 * zmax if zmax > 0 else 1.0
-        for ln in self._energy_lines:
-            energy, color = ln[0], ln[1]   # 3- или 4-кортеж (Задача #69 добавил интенсивность)
-            e = float(energy)
-            if e < emin or e > emax:
-                continue   # энергия вне диапазона спектра — луч не рисуем
-            jf = float(np.interp(e, cc, idx))
-            py = jf - nc / 2.0
-            jcol = int(min(nc - 1, max(0, round(jf))))
-            h_top = float(self._z_surface[:, jcol].max())
-            if h_top < stub:
-                h_top = stub    # нет сигнала на энергии — короткий заметный штырь
-            try:
-                rgba = pg.mkColor(color).getRgbF()
-            except Exception:
-                rgba = (1.0, 1.0, 1.0, 1.0)
-            pos = np.array([[xmin, py, 0.0], [xmin, py, h_top]], dtype=np.float32)
-            ray = gl.GLLinePlotItem(pos=pos, color=rgba, width=2.5,
-                                    mode="line_strip", antialias=True)
-            self.addItem(ray)
-            self._ray_items.append(ray)
 
     def _clear_plane_nuclides(self) -> None:
         for it in self._plane_nuclide_items:

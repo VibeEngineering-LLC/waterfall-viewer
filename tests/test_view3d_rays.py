@@ -29,23 +29,30 @@ def test_energy_lines_stored_before_load(app):
     v = Waterfall3DView()
     v.set_energy_lines([(30.0, "#ff0000", "Cs")])
     assert len(v._energy_lines) == 1
-    assert v._ray_items == []          # нет поверхности -> луч не строится
+    assert v._ray_items == []             # Задача #85: рёберных лучей нет
+    assert v._plane_nuclide_items == []   # нет поверхности/плоскостей -> маркеров нет
 
 
-def test_rays_built_after_load_in_range_only(app):
+def test_no_edge_rays_markers_only_on_planes(app):
+    # Задача #85: после загрузки и выбора линий рёберных лучей нет; маркеры появляются
+    # только при видимой секущей плоскости Времени
     v = Waterfall3DView()
     v.set_spectrogram(_make_sg(), max_time=400, max_chan=512)
-    # 30 кэВ — в диапазоне; 1000 кэВ — вне (0..59) -> пропущена
-    v.set_energy_lines([(30.0, "#ff0000", "A"), (1000.0, "#00ff00", "B")])
-    assert len(v._ray_items) == 1
-    assert all(isinstance(it, gl.GLLinePlotItem) for it in v._ray_items)
+    v.set_energy_lines([(30.0, "#ff0000", "A")])
+    assert v._ray_items == []                # рёберные лучи убраны
+    assert v._plane_nuclide_items == []      # плоскость не видима -> маркеров нет
+    v.set_plane("time", 0, 0.5, True)        # включаем секущую плоскость
+    items = [it for it in v._plane_nuclide_items if isinstance(it, gl.GLLinePlotItem)]
+    assert len(items) == 1                   # маркер появился на плоскости
 
 
-def test_ray_y_matches_energy_channel(app):
+def test_plane_marker_y_matches_energy_channel(app):
+    # Задача #85: маркер на плоскости — вертикальный отрезок на позиции энергии
     v = Waterfall3DView()
     v.set_spectrogram(_make_sg(nc=60), max_time=400, max_chan=512)
+    v.set_plane("time", 0, 0.5, True)
     v.set_energy_lines([(30.0, "#ff0000", "A")])
-    pos = np.asarray(v._ray_items[0].pos)
+    pos = np.asarray(v._plane_nuclide_items[0].pos)
     # центрировано: канал 30 при nc=60 -> Y = 30 - 30 = 0
     assert pos[0, 1] == pytest.approx(0.0, abs=1.0)
     # вертикальный: оба конца на одной (x,y), z от 0 до вершины
@@ -53,21 +60,24 @@ def test_ray_y_matches_energy_channel(app):
     assert pos[0, 2] == pytest.approx(0.0) and pos[1, 2] > 0.0
 
 
-def test_rays_cleared_on_empty_and_replaced(app):
+def test_plane_markers_cleared_on_empty_and_replaced(app):
+    # Задача #85: маркеры на видимой плоскости снимаются при пустом выборе и появляются вновь
     v = Waterfall3DView()
     v.set_spectrogram(_make_sg(), max_time=400, max_chan=512)
+    v.set_plane("time", 0, 0.5, True)
     v.set_energy_lines([(10.0, "#fff", "a"), (40.0, "#0ff", "b")])
-    assert len(v._ray_items) == 2
-    v.set_energy_lines([])              # снятие выбора -> лучи исчезают
-    assert v._ray_items == []
+    assert len(v._plane_nuclide_items) == 2
+    v.set_energy_lines([])              # снятие выбора -> маркеры исчезают
+    assert v._plane_nuclide_items == []
     v.set_energy_lines([(20.0, "#f0f", "c")])
-    assert len(v._ray_items) == 1
+    assert len(v._plane_nuclide_items) == 1
 
 
-def test_rays_rebuilt_on_zscale_change(app):
+def test_plane_markers_rebuilt_on_zscale_change(app):
     v = Waterfall3DView()
     v.set_spectrogram(_make_sg(), max_time=400, max_chan=512)
+    v.set_plane("time", 0, 0.5, True)
     v.set_energy_lines([(30.0, "#ff0000", "A")])
-    n = len(v._ray_items)
-    v.set_z_scale("linear")            # пересоздание поверхности перестраивает лучи
-    assert len(v._ray_items) == n      # не задвоены, не потеряны
+    n = len(v._plane_nuclide_items)
+    v.set_z_scale("linear")            # пересоздание поверхности перестраивает маркеры
+    assert len(v._plane_nuclide_items) == n   # не задвоены, не потеряны
