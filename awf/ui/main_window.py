@@ -13,6 +13,7 @@ from awf.ui.analytics_panel import AnalyticsPanel
 from awf.ui.zscale import Z_MODES
 from awf.ui.colormaps import COLORMAPS
 from awf.ui.nuclide_panel import NuclidePanel
+from awf.ui.knobs import AdjustPanel
 from awf.ui.style import APP_QSS
 
 # Задача #40: организация/приложение для QSettings (запоминание расположения окон между
@@ -111,6 +112,18 @@ class MainWindow(QtWidgets.QMainWindow):
         # и -> подсветка столбцов на 2D-карте (Задача 18)
         self._nuclides.linesChanged.connect(self._heatmap.set_energy_lines)
 
+        # Задача #55: панель регулировок отображения (рукоятки) в отдельном доке.
+        # 5 ручек (усиление/гамма/отсечка/сглаживание/освещение) с индивидуальными вкл/выкл
+        # и сбросом + общий выключатель (bypass к дефолтам). Старые имена _*_slider оставлены
+        # алиасами на сами ручки (Knob имеет QSlider-совместимый API) — внешний код/тесты целы.
+        self._adjust = AdjustPanel()
+        adock = QtWidgets.QDockWidget("Регулировки отображения", self)
+        adock.setObjectName("dock_adjust")          # Задача #40: имя нужно saveState/restoreState
+        adock.setWidget(self._adjust)
+        adock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
+        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, adock)
+        self._wire_adjust_panel()
+
         self._build_menu()
         self._build_toolbar()
         self.statusBar().showMessage("Готов. Файл → Открыть… (Ctrl+O)")
@@ -119,6 +132,17 @@ class MainWindow(QtWidgets.QMainWindow):
         # Вызывается ПОСЛЕ создания всех доков/тулбара (иначе restoreState не к чему применять).
         self._settings = QtCore.QSettings(SETTINGS_ORG, SETTINGS_APP)
         self._restore_layout()
+
+    def _wire_adjust_panel(self) -> None:
+        """Задача #55: алиасы старых имён слайдеров на сами ручки (Knob ≈ QSlider по API),
+        кэш применённых значений и подписка на изменения панели регулировок."""
+        self._gain_slider = self._adjust.rows["gain"].knob
+        self._gamma_slider = self._adjust.rows["gamma"].knob
+        self._clip_slider = self._adjust.rows["clip"].knob
+        self._smooth_slider = self._adjust.rows["smooth"].knob
+        self._light_slider = self._adjust.rows["light"].knob
+        self._adj_last = self._adjust.values()
+        self._adjust.changed.connect(self._on_adjust_changed)
 
     def _restore_layout(self) -> None:
         """Применить сохранённые QSettings геометрию/состояние окна, если они есть."""
@@ -183,21 +207,8 @@ class MainWindow(QtWidgets.QMainWindow):
         # идентификации пиков и подгонки их чистыми гауссианами. Механизм контуров в
         # HeatmapPanel (set_contours_enabled / set_contour_levels) сохранён и покрыт тестами;
         # обработчики _on_contours_toggled / _on_contour_levels_changed оставлены для возврата.
-        self._build_contrast_controls(tb)
-        tb.addWidget(QtWidgets.QLabel("  Сглаживание: "))  # усреднение спектра по энергии (IV-R4)
-        self._smooth_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
-        self._smooth_slider.setRange(0, 15)        # радиус скользящего среднего (0 = выкл.)
-        self._smooth_slider.setValue(0)
-        self._smooth_slider.setMaximumWidth(90)
-        self._smooth_slider.valueChanged.connect(self._on_smooth_changed)
-        tb.addWidget(self._smooth_slider)
-        tb.addWidget(QtWidgets.QLabel("  Освещение: "))   # Задача #46: интенсивность теней 3D
-        self._light_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
-        self._light_slider.setRange(0, 100)        # /100 -> 0.0..1.0 (0 = без теней)
-        self._light_slider.setValue(0)
-        self._light_slider.setMaximumWidth(90)
-        self._light_slider.valueChanged.connect(self._on_light_changed)
-        tb.addWidget(self._light_slider)
+        # Задача #55: регулировки усиление/гамма/отсечка/сглаживание/освещение перенесены из
+        # тулбара на отдельную панель-рукоятки (док «Регулировки отображения», см. __init__).
         # Задача #51: вернуть все настройки отображения к значениям по умолчанию
         self._reset_btn = QtWidgets.QPushButton("Сброс")
         self._reset_btn.setToolTip("Вернуть настройки отображения к значениям по умолчанию")
@@ -214,11 +225,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self._unit_combo.setCurrentIndex(1)   # cps (Задача #53 — дефолт)
         self._axes_check.setChecked(True)     # оси видимы
         self._hl_check.setChecked(False)      # подсветка выкл
-        self._gain_slider.setValue(100)       # усиление 1.0
-        self._gamma_slider.setValue(100)      # гамма 1.0
-        self._clip_slider.setValue(100)       # без отсечки
-        self._smooth_slider.setValue(0)       # без сглаживания
-        self._light_slider.setValue(0)        # без теней
+        # Задача #55: регулировки (усиление/гамма/отсечка/сглаживание/освещение) живут на
+        # панели-рукоятках; сброс к дефолтам + включение всех рядов/общего — одним вызовом.
+        self._adjust.reset_all()
 
     @QtCore.Slot(bool)
     def _on_axes_toggled(self, on: bool) -> None:
@@ -268,50 +277,28 @@ class MainWindow(QtWidgets.QMainWindow):
         self._heatmap.set_colormap(name)
         self._sections.emit_all()  # 3D-поверхность пересоздана — переразместить плоскости
 
-    def _build_contrast_controls(self, tb) -> None:
-        """Слайдеры контраста (Задача 16): усиление, гамма, верхняя отсечка перцентиля.
-        Один обработчик задаёт единые параметры и для 2D-карты, и для 3D-поверхности."""
-        def _mk(label, lo, hi, val):
-            tb.addWidget(QtWidgets.QLabel(f"  {label}: "))
-            s = QtWidgets.QSlider(QtCore.Qt.Horizontal)
-            s.setRange(lo, hi)
-            s.setValue(val)
-            s.setMaximumWidth(90)
-            s.valueChanged.connect(self._on_contrast_changed)
-            tb.addWidget(s)
-            return s
-        self._gain_slider = _mk("Усиление", 20, 500, 100)   # /100 -> 0.2..5.0
-        self._gamma_slider = _mk("Гамма", 20, 300, 100)     # /100 -> 0.2..3.0
-        self._clip_slider = _mk("Отсечка%", 80, 100, 100)   # верхний перцентиль (100 = без отсечки)
-
     @QtCore.Slot()
-    def _on_contrast_changed(self) -> None:
-        """Слайдеры контраста -> единые параметры контраста для 2D-карты и 3D-поверхности."""
-        gain = self._gain_slider.value() / 100.0
-        gamma = self._gamma_slider.value() / 100.0
-        clip = (0.0, float(self._clip_slider.value()))
-        self._heatmap.set_contrast(gain=gain, gamma=gamma, clip=clip)
-        self._view3d.set_contrast(gain=gain, gamma=gamma, clip=clip)
-        # перестроение поверхности сбрасывает плоскости в исходную геометрию — обновить их
-        self._sections.emit_all()
-
-    @QtCore.Slot()
-    def _on_smooth_changed(self) -> None:
-        """Слайдер «Сглаживание» (Замечание IV-R4) -> единый радиус усреднения спектра по
-        энергии для 3D-поверхности, 2D-карты и графика спектра."""
-        r = int(self._smooth_slider.value())
-        self._view3d.set_smoothing(r)
-        self._heatmap.set_smoothing(r)
-        self._slices.set_smoothing(r)
-        # 3D-поверхность пересоздана при смене радиуса — переразместить секущие плоскости
-        self._sections.emit_all()
-
-    @QtCore.Slot()
-    def _on_light_changed(self) -> None:
-        """Слайдер «Освещение» (Задача #46) -> интенсивность рельефного затенения 3D 0..1.
-        Только 3D-поверхность (у плоской 2D-карты теней нет). Плоскости переразместить."""
-        self._view3d.set_light_intensity(self._light_slider.value() / 100.0)
-        self._sections.emit_all()
+    def _on_adjust_changed(self) -> None:
+        """Задача #55: единый обработчик панели регулировок. Берёт эффективные значения
+        (с учётом per-row и общего bypass) и применяет только изменившиеся группы — стоимость
+        на один поворот ручки та же, что у прежних отдельных слайдеров (Задачи 16/IV-R4/#46)."""
+        v = self._adjust.values()
+        last = self._adj_last
+        if (v["gain"] != last["gain"] or v["gamma"] != last["gamma"]
+                or v["clip"] != last["clip"]):
+            gain, gamma = v["gain"] / 100.0, v["gamma"] / 100.0
+            clip = (0.0, float(v["clip"]))
+            self._heatmap.set_contrast(gain=gain, gamma=gamma, clip=clip)
+            self._view3d.set_contrast(gain=gain, gamma=gamma, clip=clip)
+        if v["smooth"] != last["smooth"]:
+            r = int(v["smooth"])
+            self._view3d.set_smoothing(r)
+            self._heatmap.set_smoothing(r)
+            self._slices.set_smoothing(r)
+        if v["light"] != last["light"]:
+            self._view3d.set_light_intensity(v["light"] / 100.0)
+        self._adj_last = v
+        self._sections.emit_all()  # 3D-поверхность могла пересоздаться — переразместить плоскости
 
     @QtCore.Slot()
     def _on_z_scale_changed(self) -> None:
