@@ -6,6 +6,7 @@ from awf.ui.zscale import (apply_z_scale, DEFAULT_GAIN, DEFAULT_GAMMA, DEFAULT_C
                            smooth_counts)
 from awf.ui.colormaps import get_colormap
 from awf.analysis.peakmap import DEFAULT_WINDOWS
+from awf.model.dose import dose_rate_series  # Задача #104: мощность дозы (RadiaCode)
 
 class HeatmapPanel(QtWidgets.QWidget):
     """2D-карта Время(ось Y)×Энергия/канал(ось X). Цвет = log(1+counts). Прямоугольная выборка
@@ -342,6 +343,9 @@ class SlicePanel(QtWidgets.QWidget):
         self._ewin_active = None  # (e_lo,e_hi) активного энергоокна временного профиля (Задача 19)
         self._bg_cps = None       # поканальный фон cps (Задача #96), длина = n_channels
         self._bg_overlay = False  # наложение кривой фона на спектр среза (Задача #96)
+        self._dose = None         # np.ndarray дозы по срезам (Задача #104)
+        self._dose_unit = "mSv/h" # единицы дозы (Задача #104): 'mSv/h' | 'uSv/h'
+        self._dose_visible = True # флаг показа оверлея дозы (Задача #104)
         layout = QtWidgets.QVBoxLayout(self)
         self._header = QtWidgets.QLabel("Файл не загружен")
         self._header.setWordWrap(True)
@@ -396,6 +400,20 @@ class SlicePanel(QtWidgets.QWidget):
         # жёлтая кривая — временной профиль энергоокна (Задача 19.2), независим от ROI
         self._ewin_curve = self._series_plot.plot([], [], pen=pg.mkPen("y", width=1),
                                                   name="энергоокно")
+        # Задача #104: вторая ось Y (правая) — мощность дозы RadiaCode
+        self._dose_vb = pg.ViewBox()
+        pi = self._series_plot.getPlotItem()
+        pi.scene().addItem(self._dose_vb)
+        self._dose_axis = pg.AxisItem("right")
+        self._dose_axis.setLabel("Мощность дозы, мЗв/ч")
+        pi.layout.addItem(self._dose_axis, 2, 3)
+        self._dose_axis.linkToView(self._dose_vb)
+        self._dose_vb.setXLink(pi.vb)
+        self._dose_curve = pg.PlotDataItem([], [],
+            pen=pg.mkPen((255, 170, 0), width=2), name="доза")
+        self._dose_vb.addItem(self._dose_curve)
+        self._dose_axis.hide()
+        self._series_plot.getViewBox().sigResized.connect(self._sync_dose_vb)
         self._nuclide_lines = []  # текущие вертикальные маркеры энергий нуклидов на спектре
         self._ewin_preset.currentIndexChanged.connect(self._on_ewin_preset)
         self._ewin_lo.editingFinished.connect(self._on_ewin_spin)
@@ -429,6 +447,20 @@ class SlicePanel(QtWidgets.QWidget):
         self._ewin_lo.blockSignals(True); self._ewin_lo.setValue(lo); self._ewin_lo.blockSignals(False)
         self._ewin_hi.blockSignals(True); self._ewin_hi.setValue(hi); self._ewin_hi.blockSignals(False)
         self.show_energy_window(lo, hi)
+        # Задача #104: мощность дозы — только для RadiaCode .rcspg (калибровка RC-103)
+        src = getattr(sg, "source_path", None) or ""
+        if src.lower().endswith(".rcspg"):
+            d_msvh = dose_rate_series(sg, unit="mSv/h")
+            if float(d_msvh.max()) < 1.0:
+                self._dose = dose_rate_series(sg, unit="uSv/h")
+                self._dose_unit = "uSv/h"
+            else:
+                self._dose = d_msvh
+                self._dose_unit = "mSv/h"
+        else:
+            self._dose = None
+            self._dose_unit = "mSv/h"
+        self._draw_dose_overlay()
         self._lock_views_to_data()    # Задача #89: графики не «уезжают» за окно данных
 
     def _lock_views_to_data(self) -> None:
@@ -524,6 +556,30 @@ class SlicePanel(QtWidgets.QWidget):
         s = np.asarray(series_raw, dtype=np.float64)
         self._raw_ewin = (t, s)
         self._ewin_curve.setData(t, self._series_to_unit(s))
+
+    def _sync_dose_vb(self) -> None:
+        """Задача #104: синхронизировать геометрию dose ViewBox с основным при ресайзе."""
+        self._dose_vb.setGeometry(self._series_plot.getViewBox().sceneBoundingRect())
+
+    def set_dose_overlay(self, on: bool) -> None:
+        """Задача #104: показать/скрыть оверлей мощности дозы (только для RadiaCode .rcspg)."""
+        self._dose_visible = bool(on)
+        self._draw_dose_overlay()
+
+    def _draw_dose_overlay(self) -> None:
+        """Задача #104: нарисовать/скрыть кривую дозы и правую ось."""
+        dose = self._dose
+        if dose is None or not self._dose_visible:
+            self._dose_curve.setData([], [])
+            self._dose_axis.hide()
+            return
+        label = ("Мощность дозы, мкЗв/ч"
+                 if self._dose_unit == "uSv/h" else "Мощность дозы, мЗв/ч")
+        self._dose_axis.setLabel(label)
+        self._dose_curve.setData(self._times, dose)
+        self._dose_vb.autoRange()
+        self._dose_axis.show()
+        self._sync_dose_vb()
 
     def _apply_unit_labels(self) -> None:
         """Подписи осей Y графиков под текущие единицы (Задача #44)."""

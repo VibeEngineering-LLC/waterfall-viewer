@@ -235,6 +235,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act_bg_subtract.setEnabled(False)   # до выбора фона недоступно
         self._act_bg_subtract.toggled.connect(self._on_bg_subtract_toggled)
         m.addAction(self._act_bg_subtract)
+        m.addSeparator()
+        # Задача #104: оверлей мощности дозы (только RadiaCode .rcspg, калибровка RC-103)
+        self._act_dose = QtGui.QAction("Мощность дозы (RadiaCode)", self)
+        self._act_dose.setCheckable(True)
+        self._act_dose.setChecked(False)
+        self._act_dose.setEnabled(False)
+        self._act_dose.setToolTip("Калибровка дозы доступна только для RadiaCode (.rcspg)")
+        self._act_dose.toggled.connect(self._on_dose_toggled)
+        m.addAction(self._act_dose)
 
     def _build_toolbar(self) -> None:
         tb = self.addToolBar("Вид")
@@ -385,6 +394,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self._bg_subtract = bool(on)
         self._redistribute()
 
+    @QtCore.Slot(bool)
+    def _on_dose_toggled(self, on: bool) -> None:
+        """Задача #104: переключатель оверлея мощности дозы (RadiaCode .rcspg)."""
+        self._slices.set_dose_overlay(on)
+
     def _active_spectrogram(self):
         """Задача #96: активная спектрограмма для 3D/2D/срезов — с вычтенным фоном, если вычет
         включён и фон задан, иначе исходная."""
@@ -534,9 +548,20 @@ class MainWindow(QtWidgets.QMainWindow):
         # порядок важен: сперва панель срезов получает данные, затем карта — её set_spectrogram
         # испускает roiChanged, который сразу нарисует срез по умолчанию.
         self._reset_background()              # Задача #96: новый файл -> сбросить фон/вычет
+        # Задача #104: пункт «Мощность дозы» — только для RadiaCode .rcspg
+        src = getattr(sg, "source_path", None) or ""
+        is_rcspg = src.lower().endswith(".rcspg")
+        act_dose = getattr(self, "_act_dose", None)
+        if act_dose is not None:
+            act_dose.setEnabled(is_rcspg)
+            act_dose.blockSignals(True)
+            act_dose.setChecked(is_rcspg)   # включаем по умолчанию для RadiaCode
+            act_dose.blockSignals(False)
         self._analytics.set_spectrogram(sg)   # «Аналитика» (Задача 26) — всегда на исходных данных
         # 3D/2D/срезы + секущие плоскости под новую геометрию (через активную спектрограмму)
         self._redistribute()
+        # Задача #104: после redistribute явно синхронизировать видимость дозы
+        self._slices.set_dose_overlay(is_rcspg)
         total = int(np.asarray(sg.counts).sum(dtype=np.int64))
         t0 = sg.t0_iso if sg.t0_iso else "—"
         src = sg.source_path if sg.source_path else "?"
