@@ -267,7 +267,7 @@ def test_mainwindow_light_slider(app):
 
 def _assert_display_defaults(w):
     assert w._z_combo.currentIndex() == 2
-    assert w._cmap_combo.currentIndex() == 0
+    assert w._cmap_name == "insight"             # Задача #102: палитра-дефолт — Insight
     assert w._unit_combo.currentIndex() == 1     # Задача #53: дефолт — cps
     assert w._axes_check.isChecked() is True
     assert w._hl_check.isChecked() is False
@@ -288,7 +288,7 @@ def test_display_reset_restores_defaults(app):
     w._heatmap.set_spectrogram(sg)
     w._slices.set_spectrogram(sg)
     w._z_combo.setCurrentIndex(0)          # увести все контролы с умолчаний
-    w._cmap_combo.setCurrentIndex(1)
+    w._apply_colormap("turbo")             # Задача #102: палитра уведена с дефолта
     w._unit_combo.setCurrentIndex(0)       # Задача #53: дефолт cps -> уводим в counts
     w._axes_check.setChecked(False)
     w._hl_check.setChecked(True)

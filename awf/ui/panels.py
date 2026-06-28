@@ -368,6 +368,11 @@ class SlicePanel(QtWidgets.QWidget):
         self._log_check = QtWidgets.QCheckBox("лог Y")
         self._log_check.toggled.connect(self.set_spectrum_log)
         ewin_row.addWidget(self._log_check)
+        # Задача #100: сброс зума/панорамы обоих графиков (спектр среза + временной ряд)
+        self._reset_zoom_btn = QtWidgets.QPushButton("Сброс зума")
+        self._reset_zoom_btn.setToolTip("Вернуть полный вид графиков среза и времени")
+        self._reset_zoom_btn.clicked.connect(self.reset_zoom)
+        ewin_row.addWidget(self._reset_zoom_btn)
         layout.addLayout(ewin_row)
         self._spectrum_plot = pg.PlotWidget()
         self._spectrum_plot.setLabel("bottom", "Энергия, кэВ")
@@ -442,6 +447,15 @@ class SlicePanel(QtWidgets.QWidget):
             if vb is not None and tmax > tmin:
                 vb.setLimits(xMin=tmin, xMax=tmax, maxXRange=tmax - tmin)
 
+    def reset_zoom(self) -> None:
+        """Задача #100: сброс зума/панорамы графиков среза и времени к полному виду данных.
+        autoRange() однократно подгоняет ViewBox под содержимое; X-домен при этом не выходит
+        за окно данных (ограничен _lock_views_to_data, Задача #89)."""
+        for plot in (self._spectrum_plot, self._series_plot):
+            vb = plot.getViewBox()
+            if vb is not None:
+                vb.autoRange()
+
     def _plot_spectrum(self, energies, spec_raw, lt_total=None) -> None:
         """Кэшировать сырой спектр (+ живое время окна для cps, Задача #44) и отрисовать."""
         e = np.asarray(energies, dtype=np.float64)
@@ -457,6 +471,24 @@ class SlicePanel(QtWidgets.QWidget):
         disp = self._spec_to_unit(s, lt_total)
         self._spectrum_curve.setData(e, smooth_counts(disp, self._smooth, axis=-1))
         self._render_background(e, lt_total)   # Задача #96: кривая фона в тех же единицах
+        self._lock_spectrum_y()                # Задача #101: зафиксировать нижнюю границу Y
+
+    def _lock_spectrum_y(self) -> None:
+        """Задача #101: зафиксировать нижнюю границу оси Y графика спектра, чтобы «0» (лин.) или
+        пол данных (лог) не «уезжал» при зуме/панораме. Лин.: yMin=0 (счёт ≥ 0). Лог: yMin —
+        минимальное положительное отображаемое значение (вид в лог-координатах = log10)."""
+        vb = self._spectrum_plot.getViewBox()
+        if vb is None or self._raw_spec is None:
+            return
+        _, s, lt_total = self._raw_spec
+        disp = self._spec_to_unit(s, lt_total)
+        disp = np.asarray(smooth_counts(disp, self._smooth, axis=-1), dtype=np.float64)
+        if not self._spec_log:
+            vb.setLimits(yMin=0.0)
+            return
+        pos = disp[disp > 0.0]
+        floor = float(pos.min()) if pos.size else 1e-3
+        vb.setLimits(yMin=float(np.log10(floor)))
 
     def set_smoothing(self, radius: int) -> None:
         """Радиус скользящего среднего спектра по энергии (Замечание IV-R4); перерисовать кривую."""
@@ -524,19 +556,26 @@ class SlicePanel(QtWidgets.QWidget):
 
     def _render_background(self, energies, lt_total) -> None:
         """Задача #96: кривая фона в единицах текущего спектра. cps: bg как есть; counts:
-        bg*живое_время_окна (то же окно, что у спектра). Длины bg и энергий должны совпадать."""
+        bg*живое_время_окна (то же окно, что у спектра). Длины bg и энергий должны совпадать.
+        Задача #99: на лог-шкале нулевой/неположительный фон (ВЭ-хвост) -> nan, кривая рвётся
+        по сегментам (connect='finite'). Иначе лог-ось рисует «частокол» вертикальных пунктиров
+        до ~1e-10 в каналах, где фон == 0 (сумма отсчётов фонового окна там нулевая)."""
         bg = self._bg_cps
         e = np.asarray(energies, dtype=np.float64)
         if not self._bg_overlay or bg is None or bg.size != e.size:
             self._bg_curve.setData([], [])
             return
         disp = bg if self._unit == "cps" else bg * float(lt_total or 0.0)
-        self._bg_curve.setData(e, smooth_counts(disp, self._smooth, axis=-1))
+        disp = np.asarray(smooth_counts(disp, self._smooth, axis=-1), dtype=np.float64)
+        if self._spec_log:
+            disp = np.where(disp > 0.0, disp, np.nan)
+        self._bg_curve.setData(e, disp, connect="finite")
 
     def set_spectrum_log(self, on: bool) -> None:
         """Лог/лин шкала Y графика спектра среза (Задача #43)."""
         self._spec_log = bool(on)
         self._spectrum_plot.setLogMode(False, self._spec_log)
+        self._render_spectrum()   # Задача #99: пере-маскировать фон под новую шкалу (nan на лог)
 
     def _clear_series_sections(self) -> None:
         """Снять маркеры сечений Времени с нижнего графика (Задача #42)."""

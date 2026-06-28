@@ -1183,6 +1183,84 @@ UI-контролы (пресет нуклида `DEFAULT_WINDOWS` + два сп
   восстанавливается, аналитика на исходных, сброс при перезагрузке, диалог range/file/default) + правка
   #75 `test_top_menus_skeleton_present` (меню «Анализ» теперь наполнено). **Полный pytest — 329 passed.**
 
+- **#97 — стиль диалога «Выбор фона» не соответствует тёмной теме** (`awf/ui/style.py`):
+  `BackgroundDialog` (#96) — дочерний к `MainWindow`, поэтому тёмный фон темы (`APP_QSS`) на него
+  каскадировал, НО в теме не было правил для `QRadioButton` (рисовался дефолтным синим индикатором
+  Windows) и для кнопок-стрелок спинбоксов `QSpinBox::up/down-button` (светлые системные, выбивались
+  из тёмного диалога). Добавлены в `APP_QSS`: `QDialog` (явный тёмный фон top-level), `QRadioButton` +
+  `::indicator` (тёмный кружок, checked — зелёный акцент `#4a7d4a`, как у выделения меню/вкладок),
+  `QSpinBox/QDoubleSpinBox ::up/down-button` (тёмные `#45484d` + hover) и `::up/down-arrow`
+  (CSS-треугольники светлым `#cfd2d6`). Правила общие — чинят радиокнопки и спинбоксы во всём
+  приложении. Тесты: `test_bg_dialog_theme_covers_radio_and_spinbox` (QSS покрывает виджеты),
+  `test_bg_dialog_inherits_window_theme` (диалог — child окна, наследует градиентную тему).
+  **Полный pytest — 331 passed.**
+
+- **#99 — наложение фона в окне среза выглядит странно (лог-шкала, ВЭ-хвост)** (`awf/ui/panels.py`):
+  оранжевая кривая фона (`_bg_curve`) в высокоэнергетическом хвосте имеет много каналов с фоном
+  `== 0` (в фоновом временно́м окне там нулевая сумма отсчётов). На лог-шкале Y `log10(0) → −∞`,
+  pyqtgraph рисовал «частокол» вертикальных пунктиров до ~1e-10. Исправлено в `_render_background`:
+  при включённой лог-шкале (`_spec_log`) неположительный фон маскируется в `nan`, кривая рисуется
+  с `connect="finite"` — рвётся по сегментам, нули просто не отображаются (на линейной шкале
+  маскирования нет — нули остаются точками). `set_spectrum_log` теперь вызывает `_render_spectrum`,
+  чтобы маска пересчитывалась при переключении лог/лин. Тест:
+  `test_slice_bg_log_masks_nonpositive`. **Полный pytest — 334 passed.**
+- **#100 — сброс зума на окнах среза и времени** (`awf/ui/panels.py`): в `SlicePanel` добавлена
+  кнопка «Сброс зума» (рядом с «лог Y») и метод `reset_zoom()` — `autoRange()` на обоих ViewBox
+  (спектр среза + временной ряд) возвращает полный вид данных; X-домен при этом не выходит за окно
+  данных (ограничен `_lock_views_to_data`, #89). Тесты: `test_slice_has_reset_zoom_button`,
+  `test_slice_reset_zoom_restores_full_view`. **Полный pytest — 334 passed.**
+- **#98 — фоновый массив не отображается на 3D-спектрограмме** (`awf/ui/view3d.py` +
+  `awf/ui/main_window.py`): выбранный фон (поканальный cps) теперь виден на 3D-водопаде как
+  «тусклая постоянная простыня» (решение оператора) — полупрозрачный сине-серый лист
+  (`GLSurfacePlotItem`, alpha 0.16, translucent), натянутый по всей оси времени на высоте рельефа,
+  соответствующей `bg(энергия)`. Высота берётся интерполяцией `bg` в реализованное отображение
+  значение→высота текущего рельефа (`z_counts`→`z_surface`, `np.interp` по отсортированным
+  значениям) — согласовано с любой Z-шкалой/контрастом без повторного применения лог-преобразования
+  с data-зависимым полом. Перевод cps→counts (если рельеф в counts) — через медианное живое время
+  среза (`_bg_unit_factor`). Простыня пересобирается на каждом `set_spectrogram` и при смене
+  фона/видимости. Один пункт меню «Наложение фона» теперь управляет и кривой среза (1D), и
+  простынёй (3D): `set_background_sheet` / `set_background_sheet_visible`, разводка в
+  `_on_bg_select` / `_on_bg_overlay_toggled` / `_reset_background`. Тест:
+  `test_view3d_bg_sheet_toggle`. **Полный pytest — 335 passed.**
+- **#101 — 0 по оси Y не зафиксирован (окно среза/выборки)** (`awf/ui/panels.py`): `_lock_views_to_data`
+  (#89) ограничивал только X, оставляя нижнюю границу Y свободной — при зуме/панораме «0» уезжал.
+  Добавлен `_lock_spectrum_y()` (вызывается из `_render_spectrum`, т.е. на каждую перерисовку, смену
+  единиц, сглаживание, переключение лог/лин и фон): в линейном режиме `setLimits(yMin=0)` (счёт ≥ 0 —
+  ноль прибит к низу), в логарифмическом `setLimits(yMin=log10(min>0))` — пол по минимальному
+  положительному отображаемому значению (вид pyqtgraph в лог-режиме = координаты log10, поэтому floor
+  переводится через `log10`). Это убирает «уезжание» дна и пустой провал лог-оси до ~1e-10 в ВЭ-хвосте.
+  Тесты: `test_slice_spectrum_y_floor_linear`, `test_slice_spectrum_y_floor_log`.
+  **Полный pytest — 337 passed.**
+- **#102 — добавить палитры в окно «Цветовая палитра»** (`awf/ui/colormaps.py` + новый `awf/ui/palette_dialog.py`
+  + `awf/ui/main_window.py`): было 3 палитры (Insight/Inferno/Viridis), стало 15 — Insight (фирменная, дефолт)
+  + 14 со скриншота-макета оператора: Inferno, Magma, Plasma, Viridis, Cividis, Turbo, Jet, Hot, Ocean,
+  Parula, Cubehelix, Spectral, Cool, Grayscale. `COLORMAPS` теперь `(ключ, подпись, описание)`. `get_colormap`
+  чинён: пробует pyqtgraph-источник, затем `source="matplotlib"` (jet/hot/ocean/cubehelix/cool/gray/Spectral
+  резолвятся только так — раньше молча падали бы на Insight); `parula` отсутствует в pyqtgraph/matplotlib
+  (лицензия MathWorks) → задан кастомными контрольными точками (как Insight), `Spectral` — только с заглавной.
+  Новый модальный диалог `PaletteDialog` (тёмная тема): список строк с превью-градиентом (рендер из
+  `getLookupTable` → скруглённый QPixmap), названием и описанием; клик = выбор + подсветка текущей + сигнал
+  `selected(key)` для живого применения к 2D/3D. В тулбаре кнопка-цикл палитр (#74) заменена на кнопку,
+  открывающую окно; `_apply_colormap` единообразит 2D-карту и 3D-поверхность и переразмещает сечения.
+  Тесты: `test_registry_has_screenshot_palettes`, `test_added_palettes_resolve_distinct_from_insight`
+  (доказывает отсутствие молчаливого fallback), `test_palette_dialog_lists_all_and_selects`.
+  **Полный pytest — 340 passed.**
+
+- **#103 — `.rcspg` RadiaCode не загружался (`JSONDecodeError`)** (`awf/io/rcspg_loader.py` + `awf/ui/main_window.py`
+  + новый `tests/test_rcspg_android_text.py`): причина — `load_rcspg` делал `json.load`, но **Android**-экспорт
+  RadiaCode это табулированный ТЕКСТ, а не JSON (JSON — это **iOS**-экспорт; оператор подтвердил: нужны оба
+  варианта). `load_rcspg` переписан в диспетчер по формату: первый непустой символ `{` → ветка `_load_rcspg_json`
+  (iOS, прежняя логика без изменений), иначе → новая `_load_rcspg_text` (Android). Текст-формат: строка-заголовок
+  `Spectrogram: …` (tab-разделённые `Channels`/`Timestamp`=Windows-FILETIME/`Accumulation time`/`Device serial`);
+  строка `Spectrum: <hex>` → калибровка `[a0,a1,a2]` из 3×float32 LE после 4 служебных байт (преднакопленный
+  спектр как временно́й срез НЕ используется); далее по строке на интервал `<FILETIME>\t<живых_сек>\t<отсчёты>`
+  с опущенными хвостовыми нулями → паддинг до `Channels`. `live_time_s` = поле «живых секунд» (Σ = Accumulation
+  time ТОЧНО — проверено), `time_offsets_s`/`real_time_s` из разностей FILETIME-меток (целочисленно по тикам,
+  деление на 1e7). FILETIME трактуется как **UTC** (заголовочный `Time` — локальное время прибора, отличие = зона).
+  Проверено на реальном файле оператора: 1236 срезов × 1024 канала, калибровка [3.94, 2.37, 3.8e-4], `live_total`
+  = 1624 c. Заголовок диалога ошибки «Ошибка загрузки N42» сделан общим «Ошибка загрузки» (`main_window.py:550`).
+  9 Android-тестов; iOS/JSON-тест `test_rcspg_loader.py` не тронут. **Полный pytest — 349 passed.**
+
 **Задача 26 — Вкладка «Аналитика»** (`awf/ui/analytics_panel.py` + `main_window.py`): `AnalyticsPanel`
 (2D-скаттер проекций, по одному `ScatterPlotItem` на кластер для легенды; каждая точка несёт индекс
 среза). Сигнал `sliceClicked(i)` → `MainWindow._on_analytics_slice` → `SlicePanel.show_time_slice` +

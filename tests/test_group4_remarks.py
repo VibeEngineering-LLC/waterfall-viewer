@@ -236,6 +236,30 @@ def test_main_window_applies_style(app):
     assert "qlineargradient" in w.styleSheet()
 
 
+# ---------- #97: диалог «Выбор фона» наследует тёмную тему ----------
+def test_bg_dialog_theme_covers_radio_and_spinbox():
+    """Задача #97: QSS темы покрывает виджеты диалога фона — радиокнопки и кнопки-стрелки
+    спинбоксов (без них рисовались дефолтным синим/светлым системным стилем) + фон QDialog."""
+    from awf.ui.style import APP_QSS
+    assert "QDialog" in APP_QSS                       # тёмный фон диалога
+    assert "QRadioButton::indicator" in APP_QSS       # индикатор радиокнопки под тему
+    assert "QSpinBox::up-button" in APP_QSS and "QSpinBox::down-button" in APP_QSS
+    assert "QSpinBox::up-arrow" in APP_QSS            # стрелки светлым цветом
+
+
+def test_bg_dialog_inherits_window_theme(app):
+    """Задача #97: BackgroundDialog создаётся как дочерний к MainWindow (parent), поэтому
+    QSS главного окна (градиентная тема) каскадируется на него при отрисовке."""
+    import numpy as np
+    from awf.ui.main_window import MainWindow
+    from awf.ui.background_dialog import BackgroundDialog
+    w = MainWindow()
+    dlg = BackgroundDialog(8, np.arange(8.0), w)
+    assert dlg.parent() is w                          # источник наследуемого QSS — тема окна
+    assert "qlineargradient" in w.styleSheet()
+    dlg.deleteLater(); w.close()
+
+
 # ---------- #62: тулбар «Вид» и строка статуса — крупнее шрифт и выше ----------
 def test_toolbar_and_statusbar_sized_up():
     """Задача #62: QSS задаёт увеличенный шрифт и высоту контролов тулбара и строки статуса

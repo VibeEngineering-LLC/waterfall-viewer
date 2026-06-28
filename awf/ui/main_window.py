@@ -15,6 +15,7 @@ from awf.model.background import (background_from_range, background_from_spectro
                                   subtract_background)
 from awf.ui.zscale import Z_MODES
 from awf.ui.colormaps import COLORMAPS
+from awf.ui.palette_dialog import PaletteDialog
 from awf.ui.nuclide_panel import NuclidePanel
 from awf.ui.knobs import AdjustPanel
 from awf.ui.cyclebutton import CycleButton   # Задача #74: переключатель-перебор вместо QComboBox
@@ -246,12 +247,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self._z_combo.currentIndexChanged.connect(self._on_z_scale_changed)
         tb.addWidget(self._z_combo)
         tb.addWidget(QtWidgets.QLabel("  Палитра: "))
-        self._cmap_combo = CycleButton()   # Задача #74: клик = следующее значение, колесо = листать
-        for key, label in COLORMAPS:
-            self._cmap_combo.addItem(label, key)
-        self._cmap_combo.setCurrentIndex(0)  # iZotope Insight по умолчанию (Задача 17)
-        self._cmap_combo.currentIndexChanged.connect(self._on_colormap_changed)
-        tb.addWidget(self._cmap_combo)
+        self._cmap_name = COLORMAPS[0][0]                 # Задача #102: текущий ключ (дефолт — Insight)
+        self._cmap_btn = QtWidgets.QToolButton()          # кнопка открывает окно «Цветовая палитра»
+        self._cmap_btn.setText(COLORMAPS[0][1])
+        self._cmap_btn.setToolTip("Выбрать цветовую палитру")
+        self._cmap_btn.clicked.connect(self._open_palette_dialog)
+        tb.addWidget(self._cmap_btn)
         tb.addWidget(QtWidgets.QLabel("  Единицы: "))  # Задача #44: счёт / скорость счёта
         self._unit_combo = CycleButton()   # Задача #74: клик = следующее значение, колесо = листать
         self._unit_combo.addItem("отсчёты", "counts")
@@ -297,7 +298,7 @@ class MainWindow(QtWidgets.QMainWindow):
         дефолтное значение; Qt шлёт valueChanged/currentIndexChanged/toggled только при реальном
         изменении, и штатный обработчик применяет дефолт на все панели (2D/3D/срезы)."""
         self._z_combo.setCurrentIndex(2)      # log
-        self._cmap_combo.setCurrentIndex(0)   # iZotope Insight
+        self._apply_colormap(COLORMAPS[0][0])  # Задача #102: палитра -> Insight (дефолт)
         self._unit_combo.setCurrentIndex(1)   # cps (Задача #53 — дефолт)
         self._tunit_combo.setCurrentIndex(0)  # Задача #64: единицы времени — секунды (дефолт)
         self._axes_check.setChecked(True)     # оси видимы
@@ -356,6 +357,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         self._bg_cps = bg
         self._slices.set_background(bg)
+        self._view3d.set_background_sheet(bg)              # Задача #98: «простыня» фона на 3D
         self._act_bg_overlay.setEnabled(True)
         self._act_bg_subtract.setEnabled(True)
         self._redistribute()
@@ -372,9 +374,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
     @QtCore.Slot(bool)
     def _on_bg_overlay_toggled(self, on: bool) -> None:
-        """Задача #96: наложение кривой фона на спектр среза (панель срезов)."""
+        """Задача #96: наложение фона на спектр среза (панель срезов) и «простыню» на 3D (#98)."""
         self._bg_overlay = bool(on)
         self._slices.set_background_overlay(self._bg_overlay)
+        self._view3d.set_background_sheet_visible(self._bg_overlay)   # Задача #98
 
     @QtCore.Slot(bool)
     def _on_bg_subtract_toggled(self, on: bool) -> None:
@@ -408,6 +411,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._bg_overlay = False
         self._slices.set_background(None)
         self._slices.set_background_overlay(False)
+        self._view3d.set_background_sheet(None)            # Задача #98: снять «простыню» фона
+        self._view3d.set_background_sheet_visible(False)
         for act in (getattr(self, "_act_bg_overlay", None), getattr(self, "_act_bg_subtract", None)):
             if act is None:
                 continue
@@ -435,9 +440,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self._sections.emit_all()  # 3D-поверхность пересоздана — переразместить плоскости
 
     @QtCore.Slot()
-    def _on_colormap_changed(self) -> None:
-        """Переключатель палитры -> единая палитра для 2D-карты и 3D-поверхности."""
-        name = self._cmap_combo.currentData()
+    def _open_palette_dialog(self) -> None:
+        """Задача #102: окно «Цветовая палитра» с превью-градиентами; выбор применяется живьём."""
+        dlg = PaletteDialog(self._cmap_name, self)
+        dlg.selected.connect(self._apply_colormap)
+        dlg.exec()
+
+    def _apply_colormap(self, name: str) -> None:
+        """Задача #102/#17: единая палитра для 2D-карты и 3D-поверхности (+переразместить сечения)."""
+        self._cmap_name = name
+        label = next((l for k, l, _ in COLORMAPS if k == name), name)
+        self._cmap_btn.setText(label)
         self._view3d.set_colormap(name)
         self._heatmap.set_colormap(name)
         self._sections.emit_all()  # 3D-поверхность пересоздана — переразместить плоскости
@@ -534,7 +547,7 @@ class MainWindow(QtWidgets.QMainWindow):
     @QtCore.Slot(str)
     def _on_failed(self, message: str) -> None:
         self.statusBar().showMessage(f"Ошибка загрузки: {message}")
-        QtWidgets.QMessageBox.critical(self, "Ошибка загрузки N42", message)
+        QtWidgets.QMessageBox.critical(self, "Ошибка загрузки", message)
 
 def main(argv: list[str] | None = None) -> int:
     """Точка входа. Необязательный первый аргумент — путь к файлу N42 для авто-открытия."""

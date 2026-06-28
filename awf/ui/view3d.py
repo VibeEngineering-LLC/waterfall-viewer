@@ -141,6 +141,11 @@ class Waterfall3DView(gl.GLViewWidget):
         self._grid_items = []         # линии координатной сетки/рамки (Задача #63/#68)
         self._time_unit = "с"         # единицы оси времени: с | мин | ч (Задача #64)
         self._floor_visible = True    # Задача #76: видна ли «подложка» (плоское дно рельефа)
+        # Задача #98: «фоновая простыня» — полупрозрачная поверхность на высоте рельефа, отвечающей
+        # фону bg(энергия), постоянная во времени; показывает уровень фона над/под водопадом.
+        self._bg_cps_full = None      # поканальный фон cps (полное разрешение), None — нет фона
+        self._bg_sheet_on = False     # видна ли простыня (пункт «Наложение фона», #96/#98)
+        self._bg_sheet = None         # GLSurfacePlotItem простыни (или None)
 
         # --- геометрия последнего рендера (для позиционирования плоскостей) ---
         self._nt = 0
@@ -288,6 +293,7 @@ class Waterfall3DView(gl.GLViewWidget):
         self._rebuild_axis_labels()
         self._rebuild_energy_rays()       # Задача #85: лишь снимает старые рёберные лучи
         self._rebuild_plane_nuclides()    # маркеры изотопов — только на секущих плоскостях
+        self._rebuild_bg_sheet()          # Задача #98: «фоновая простыня» под текущий рельеф
 
     def _clip_windows(self):
         """Окна обрезки поверхности по осям. Задача #84: каждая ВИДИМАЯ плоскость режет
@@ -381,6 +387,62 @@ class Waterfall3DView(gl.GLViewWidget):
         self._floor_visible = visible
         if self._z_surface is not None:
             self._rebuild_surface()
+
+    def set_background_sheet(self, bg_cps) -> None:
+        """Задача #98: задать поканальный фон (cps, полное разрешение) для «простыни» на 3D;
+        None — снять. Видимость управляет set_background_sheet_visible («Наложение фона»)."""
+        self._bg_cps_full = (None if bg_cps is None
+                             else np.asarray(bg_cps, dtype=np.float64).ravel())
+        self._rebuild_bg_sheet()
+
+    def set_background_sheet_visible(self, on: bool) -> None:
+        """Задача #98: показать/скрыть «фоновую простыню» на 3D-водопаде."""
+        self._bg_sheet_on = bool(on)
+        self._rebuild_bg_sheet()
+
+    def _bg_unit_factor(self) -> float:
+        """Задача #98: множитель перевода фона cps в единицы рельефа. cps -> 1.0; counts ->
+        медианное живое время среза (рельеф counts зависит от LT — приближение для простыни)."""
+        if self._unit == "cps" or self._sg is None:
+            return 1.0
+        lt = np.asarray(self._sg.live_time_s, dtype=np.float64)
+        pos = lt[lt > 0.0]
+        return float(np.median(pos)) if pos.size else 1.0
+
+    def _rebuild_bg_sheet(self) -> None:
+        """Задача #98: «простыня» фона — полупрозрачный лист на высоте рельефа, отвечающей bg(E),
+        постоянный по времени. Высота = интерполяция bg в реализованное value->height рельефа."""
+        if self._bg_sheet is not None:
+            self.removeItem(self._bg_sheet); self._bg_sheet = None
+        bg = None if self._bg_cps_full is None else np.asarray(self._bg_cps_full, dtype=np.float64)
+        if (not self._bg_sheet_on or bg is None or self._z_surface is None
+                or self._z_counts is None or self._sg is None or self._nc == 0):
+            return
+        e_full = np.asarray(self._sg.energies(), dtype=np.float64)
+        if e_full.size != bg.size:
+            return
+        bg_b = np.interp(self._ch_centers, e_full, bg) * self._bg_unit_factor()
+        vals = np.asarray(self._z_counts, dtype=np.float64).ravel()
+        hts = np.asarray(self._z_surface, dtype=np.float64).ravel()
+        order = np.argsort(vals)
+        bg_h = np.interp(bg_b, vals[order], hts[order]).astype(np.float32)
+        self._add_bg_sheet(bg_h)
+
+    def _add_bg_sheet(self, bg_h) -> None:
+        """Задача #98: собрать GLSurfacePlotItem простыни — тусклый полупрозрачный «лист»."""
+        nt, nc = self._nt, self._nc
+        ys = np.arange(nc, dtype=np.float32)
+        xs = np.array([0.0, max(1.0, nt - 1)], dtype=np.float32)
+        z = np.vstack([bg_h, bg_h]).astype(np.float32)        # (2, nc) — плоско по времени
+        colors = np.empty((2 * nc, 4), dtype=np.float32)
+        colors[:] = (0.82, 0.86, 0.95, 0.16)                  # тусклый сине-серый, низкая alpha
+        sheet = gl.GLSurfacePlotItem(x=xs, y=ys, z=z, colors=colors,
+                                     shader=None, computeNormals=False, smooth=True)
+        sheet.setGLOptions("translucent")
+        sheet.setDepthValue(5)
+        sheet.translate(-nt / 2.0, -nc / 2.0, 0.0)
+        self.addItem(sheet)
+        self._bg_sheet = sheet
 
     def set_smoothing(self, radius: int) -> None:
         """Радиус скользящего среднего по энергии (Замечание IV-R4); ре-рендер из той же sg."""

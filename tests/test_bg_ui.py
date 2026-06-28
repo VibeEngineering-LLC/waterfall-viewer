@@ -138,3 +138,94 @@ def test_bg_dialog_default_full_range(app):
     dlg = BackgroundDialog(15)
     assert dlg._lo.value() == 0 and dlg._hi.value() == 15   # по умолчанию весь диапазон
     assert dlg.result_spec() is None                        # до accept — None
+
+
+# ---------- #99: на лог-шкале нулевой фон ВЭ-хвоста маскируется (нет «частокола») ----------
+
+def test_slice_bg_log_masks_nonpositive(app):
+    p = SlicePanel()
+    p.set_spectrogram(_make_sg(nc=8))
+    bg = np.array([1.0, 0.0, 2.0, 0.0, 0.0, 3.0, 0.0, 0.0])  # нули = пустой ВЭ-хвост фона
+    p.set_background(bg)
+    p.set_background_overlay(True)
+    p.set_spectrum_log(True)                                 # лог Y -> нули фона в nan (#99)
+    _, y = p._bg_curve.getData()
+    y = np.asarray(y, dtype=np.float64)
+    assert np.isnan(y[1]) and np.isnan(y[3]) and np.isnan(y[4])   # разрывы там, где фон == 0
+    assert np.isfinite(y[0]) and np.isfinite(y[2]) and np.isfinite(y[5])
+    p.set_spectrum_log(False)                                # линейная -> маскирования нет
+    _, y2 = p._bg_curve.getData()
+    assert np.isfinite(np.asarray(y2, dtype=np.float64)).all()
+
+
+# ---------- #100: сброс зума графиков среза и времени ----------
+
+def test_slice_has_reset_zoom_button(app):
+    p = SlicePanel()
+    assert hasattr(p, "_reset_zoom_btn")
+    assert p._reset_zoom_btn.text() == "Сброс зума"
+
+
+def test_slice_reset_zoom_restores_full_view(app):
+    p = SlicePanel()
+    p.set_spectrogram(_make_sg(ns=10, nc=16, t_step=2.0))    # энергии 0..15, время 0..18
+    sp_vb = p._spectrum_plot.getViewBox()
+    sr_vb = p._series_plot.getViewBox()
+    sp_vb.setXRange(5.0, 6.0, padding=0)                     # зум обоих графиков в узкое окно
+    sr_vb.setXRange(3.0, 4.0, padding=0)
+    p.reset_zoom()
+    app.processEvents()
+    (sx0, sx1), _ = sp_vb.viewRange()
+    (tx0, tx1), _ = sr_vb.viewRange()
+    assert sx1 - sx0 > 1.5 and tx1 - tx0 > 1.5              # вид шире узкого зума 1.0
+
+
+# ---------- #98: «фоновая простыня» на 3D-водопаде ----------
+
+def test_view3d_bg_sheet_toggle(app):
+    from awf.ui.view3d import Waterfall3DView
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=12, nc=20))
+    v.set_background_sheet(np.ones(20))
+    assert v._bg_sheet is None                          # фон задан, наложение выкл -> простыни нет
+    v.set_background_sheet_visible(True)
+    assert v._bg_sheet is not None                      # включили наложение -> простыня построена
+    v.set_background_sheet_visible(False)
+    assert v._bg_sheet is None                          # выключили -> простыня снята
+
+
+# ---------- #101: нижняя граница оси Y графика спектра зафиксирована ----------
+
+def test_slice_spectrum_y_floor_linear(app):
+    p = SlicePanel()
+    p.set_spectrogram(_make_sg(ns=6, nc=12))
+    ymin, _ = p._spectrum_plot.getViewBox().state["limits"]["yLimits"]
+    assert ymin == 0.0                                  # лин.: 0 прибит к низу (счёт ≥ 0)
+
+
+def test_slice_spectrum_y_floor_log(app):
+    p = SlicePanel()
+    sg = _make_sg(ns=6, nc=12)
+    p.set_spectrogram(sg)
+    p.set_spectrum_log(True)
+    _, s, lt = p._raw_spec
+    disp = p._spec_to_unit(s, lt)
+    expected = float(np.log10(disp[disp > 0].min()))
+    ymin, _ = p._spectrum_plot.getViewBox().state["limits"]["yLimits"]
+    assert ymin == pytest.approx(expected)              # лог: пол = log10(min>0)
+
+
+# ---------- #102: окно «Цветовая палитра» с превью-градиентами ----------
+
+def test_palette_dialog_lists_all_and_selects(app):
+    from awf.ui.palette_dialog import PaletteDialog
+    from awf.ui.colormaps import COLORMAPS
+    dlg = PaletteDialog("insight")
+    assert len(dlg._rows) == len(COLORMAPS)             # строка на каждую палитру (15)
+    assert dlg._rows["insight"].property("selected") is True
+    got = []
+    dlg.selected.connect(got.append)
+    dlg._on_pick("turbo")                               # выбор палитры кликом
+    assert dlg.selected_key() == "turbo" and got == ["turbo"]
+    assert dlg._rows["turbo"].property("selected") is True
+    assert dlg._rows["insight"].property("selected") is False

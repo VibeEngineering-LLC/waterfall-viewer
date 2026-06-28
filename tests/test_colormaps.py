@@ -9,8 +9,25 @@ from awf.ui.colormaps import (
 
 def test_registry_shape():
     assert COLORMAP_NAMES[0] == "insight"
-    assert len(COLORMAPS) == 3
-    assert dict(COLORMAPS)["insight"] == "iZotope Insight"
+    assert len(COLORMAPS) == 15                              # #102: Insight + 14 палитр со скриншота
+    assert COLORMAPS[0][:2] == ("insight", "iZotope Insight")
+    assert all(len(entry) == 3 for entry in COLORMAPS)       # (ключ, подпись, описание)
+
+
+def test_registry_has_screenshot_palettes():
+    for key in ("inferno", "magma", "plasma", "viridis", "cividis", "turbo", "jet",
+                "hot", "ocean", "parula", "cubehelix", "Spectral", "cool", "gray"):
+        assert key in COLORMAP_NAMES                         # #102: все палитры макета на месте
+
+
+def test_added_palettes_resolve_distinct_from_insight():
+    # #102: каждая добавленная палитра даёт НЕ-insight карту (нет молчаливого fallback на Insight)
+    samples = np.array([0.1, 0.5, 0.9], dtype=float)
+    b = insight_colormap().map(samples, mode="float")
+    for name in ("magma", "plasma", "cividis", "turbo", "jet", "hot",
+                 "ocean", "parula", "cubehelix", "Spectral", "cool", "gray"):
+        a = get_colormap(name).map(samples, mode="float")
+        assert not np.allclose(a, b), name
 
 
 def test_get_colormap_each_name():
