@@ -1433,6 +1433,20 @@ UI-контролы (пресет нуклида `DEFAULT_WINDOWS` + два сп
   выключенном поиске пиков. +4 теста (клип по времени, скрытие по окну энергии, пересечение плоскостей,
   регрессия полного пролёта без плоскостей). **Полный pytest — 479 passed.**
 
+**Задача #122 — палитры в окне «Цветовая палитра» вырождались в Insight (тихий fallback)**
+(`awf/ui/colormaps.py`): семь палитр (jet/hot/ocean/cubehelix/Spectral/cool/gray) резолвились ТОЛЬКО
+через `pg.colormap.get(name, source="matplotlib")` (бывшая colormaps.py:70). matplotlib НЕ объявлен в
+`requirements.txt` — в рантайме оператора без него `ImportError` ловился и все семь молча падали в
+`insight_colormap()`: на скриншоте одинаковые чёрно-оранжевые превью у Jet/Ocean/Cubehelix/Spectral/
+Cool/Grayscale. Снял эталонные LUT этих палитр с matplotlib (`getLookupTable`, равномерные контрольные
+точки) и зашил в `_BUILTIN_COLORS`; `_evenly_spaced_colormap()` строит из них `pg.ColorMap`.
+`get_colormap()` теперь отдаёт встроенные ДО ветки matplotlib — превью и палитры 2D/3D от matplotlib
+больше не зависят (inferno/magma/plasma/viridis/cividis/turbo остаются нативными в pyqtgraph, им
+matplotlib и не нужен). Регресс-тест `test_builtin_palettes_independent_of_matplotlib` блокирует импорт
+matplotlib и проверяет, что ни одна из семи не вырождается в Insight (до фикса упал бы), +
+`test_builtin_palette_endpoints` (точные эндпоинты cool/gray). Это закрывает фрагильность, помеченную в
+проектной заметке к #102. **Полный pytest — 481 passed.**
+
 **Задача 26 — Вкладка «Аналитика»** (`awf/ui/analytics_panel.py` + `main_window.py`): `AnalyticsPanel`
 (2D-скаттер проекций, по одному `ScatterPlotItem` на кластер для легенды; каждая точка несёт индекс
 среза). Сигнал `sliceClicked(i)` → `MainWindow._on_analytics_slice` → `SlicePanel.show_time_slice` +

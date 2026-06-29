@@ -63,3 +63,34 @@ def test_inferno_distinct_from_insight():
     inf = get_colormap("inferno").map(np.array([0.5]), mode="float")
     ins = get_colormap("insight").map(np.array([0.5]), mode="float")
     assert not np.allclose(inf, ins)
+
+
+def test_builtin_palettes_independent_of_matplotlib():
+    # #122: jet/hot/ocean/cubehelix/Spectral/cool/gray НЕ должны вырождаться в Insight, даже
+    # если matplotlib недоступен в рантайме (он не объявлен в requirements). Блокируем импорт.
+    import builtins, sys
+    real_import = builtins.__import__
+    def block(name, *a, **k):
+        if name == "matplotlib" or name.startswith("matplotlib."):
+            raise ImportError("matplotlib blocked (#122 regression)")
+        return real_import(name, *a, **k)
+    saved = {m: sys.modules[m] for m in list(sys.modules) if m.split(".")[0] == "matplotlib"}
+    for mod in saved:
+        del sys.modules[mod]
+    builtins.__import__ = block
+    try:
+        ins = insight_colormap().getLookupTable(0.0, 1.0, 32, alpha=False)
+        for name in ("jet", "hot", "ocean", "cubehelix", "Spectral", "cool", "gray"):
+            lut = get_colormap(name).getLookupTable(0.0, 1.0, 32, alpha=False)
+            assert not np.array_equal(lut, ins), name
+    finally:
+        builtins.__import__ = real_import
+        sys.modules.update(saved)
+
+
+def test_builtin_palette_endpoints():
+    # #122: точные эндпоинты встроенных линейных палитр (2-точечные карты).
+    cool = get_colormap("cool").getLookupTable(0.0, 1.0, 2, alpha=False)
+    assert tuple(cool[0]) == (0, 255, 255) and tuple(cool[-1]) == (255, 0, 255)
+    gray = get_colormap("gray").getLookupTable(0.0, 1.0, 2, alpha=False)
+    assert tuple(gray[0]) == (0, 0, 0) and tuple(gray[-1]) == (255, 255, 255)
