@@ -8,6 +8,9 @@ from awf.ui.colormaps import get_colormap
 from awf.analysis.peakmap import DEFAULT_WINDOWS
 from awf.model.dose import dose_rate_series  # Задача #104: мощность дозы (RadiaCode)
 
+# Задача #110: поиск фотопиков перенесён на 3D-водопад (awf/ui/view3d.py) — раньше (#108) маркеры
+# рисовались здесь, на спектре среза; оператор попросил вести поиск на 3D-спектрограмме.
+
 class HeatmapPanel(QtWidgets.QWidget):
     """2D-карта Время(ось Y)×Энергия/канал(ось X). Цвет = log(1+counts). Прямоугольная выборка
     (pg.RectROI) задаёт окно [t_lo:t_hi, ch_lo:ch_hi] в ПОЛНЫХ индексах исходной матрицы.
@@ -394,7 +397,7 @@ class SlicePanel(QtWidgets.QWidget):
         # Задача #96: кривая фона поверх спектра среза (оранжевый пунктир), в текущих единицах
         self._bg_curve = self._spectrum_plot.plot(
             [], [], pen=pg.mkPen((255, 165, 0), width=1, style=QtCore.Qt.DashLine))
-        self._series_plot.addLegend(offset=(-10, 10))
+        self._legend = self._series_plot.addLegend(offset=(-10, 10))
         self._series_curve = self._series_plot.plot([], [], pen=pg.mkPen("m", width=1),
                                                     name="полоса ROI")
         # жёлтая кривая — временной профиль энергоокна (Задача 19.2), независим от ROI
@@ -412,6 +415,7 @@ class SlicePanel(QtWidgets.QWidget):
         self._dose_curve = pg.PlotDataItem([], [],
             pen=pg.mkPen((255, 170, 0), width=2), name="доза")
         self._dose_vb.addItem(self._dose_curve)
+        self._dose_in_legend = False  # #105: записи дозы в легенде ещё нет
         self._dose_axis.hide()
         self._series_plot.getViewBox().sigResized.connect(self._sync_dose_vb)
         self._nuclide_lines = []  # текущие вертикальные маркеры энергий нуклидов на спектре
@@ -567,19 +571,31 @@ class SlicePanel(QtWidgets.QWidget):
         self._draw_dose_overlay()
 
     def _draw_dose_overlay(self) -> None:
-        """Задача #104: нарисовать/скрыть кривую дозы и правую ось."""
+        """Задача #104: нарисовать/скрыть кривую дозы и правую ось.
+        Задача #105: запись дозы в легенде появляется/исчезает вместе с кривой."""
         dose = self._dose
         if dose is None or not self._dose_visible:
             self._dose_curve.setData([], [])
             self._dose_axis.hide()
+            self._set_dose_legend(False)
             return
-        label = ("Мощность дозы, мкЗв/ч"
-                 if self._dose_unit == "uSv/h" else "Мощность дозы, мЗв/ч")
-        self._dose_axis.setLabel(label)
+        unit_lbl = "мкЗв/ч" if self._dose_unit == "uSv/h" else "мЗв/ч"
+        self._dose_axis.setLabel("Мощность дозы, " + unit_lbl)
         self._dose_curve.setData(self._times, dose)
         self._dose_vb.autoRange()
         self._dose_axis.show()
+        self._set_dose_legend(True, unit_lbl)
         self._sync_dose_vb()
+
+    def _set_dose_legend(self, on: bool, unit_lbl: str = "мЗв/ч") -> None:
+        """Задача #105: показать/скрыть запись кривой дозы в легенде графика отсчётов
+        (кривая дозы в отдельном ViewBox, легенда сама её не подхватывает)."""
+        if on and not self._dose_in_legend:
+            self._legend.addItem(self._dose_curve, "мощность дозы, " + unit_lbl)
+            self._dose_in_legend = True
+        elif not on and self._dose_in_legend:
+            self._legend.removeItem(self._dose_curve)
+            self._dose_in_legend = False
 
     def _apply_unit_labels(self) -> None:
         """Подписи осей Y графиков под текущие единицы (Задача #44)."""

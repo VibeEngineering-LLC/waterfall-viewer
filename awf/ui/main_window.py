@@ -17,9 +17,12 @@ from awf.ui.zscale import Z_MODES
 from awf.ui.colormaps import COLORMAPS
 from awf.ui.palette_dialog import PaletteDialog
 from awf.ui.nuclide_panel import NuclidePanel
+from awf.ui.peaks_panel import PeaksPanel   # Задача #111: панель «Найденные пики»
 from awf.ui.knobs import AdjustPanel
 from awf.ui.cyclebutton import CycleButton   # Задача #74: переключатель-перебор вместо QComboBox
 from awf.ui.style import APP_QSS
+from awf.ui import i18n          # Задача #106: переключение языка интерфейса RU↔EN
+from awf.ui.i18n import tr       # короткий доступ к переводу: tr("Файл") -> "File" / "Файл"
 
 # Задача #40: организация/приложение для QSettings (запоминание расположения окон между
 # запусками). На Windows пишется в реестр HKCU\Software\<ORG>\<APP>.
@@ -55,8 +58,22 @@ class LoaderThread(QtCore.QThread):
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("AtomSpectra Waterfall Viewer")
+        # Задача #106: i18n — QSettings и язык СНАЧАЛА, потому что подписи меню/тулбара
+        # ниже регистрируются через self._register_i18n(...) уже с tr() применённым.
+        self._settings = QtCore.QSettings(SETTINGS_ORG, SETTINGS_APP)
+        saved_lang = self._settings.value("interface/language", i18n.DEFAULT, type=str)
+        i18n.set_language(saved_lang)
+        self._i18n_widgets: list[tuple[object, str]] = []
+        i18n.signals.changed.connect(self._on_language_changed)
+        self._register_i18n(self.setWindowTitle, "AtomSpectra Waterfall Viewer")
         self.resize(1280, 800)
+        # Задача #117: тему ставим и на уровне ПРИЛОЖЕНИЯ, не только окна. Контекстные
+        # меню pyqtgraph (ViewBoxMenu) — popup БЕЗ QWidget-родителя, поэтому stylesheet
+        # окна до них не каскадирует и они рисуются системной светлой темой. app-level
+        # QSS достаёт и такие parentless-попапы (меню/субменю/спинбоксы экспорта).
+        _app = QtWidgets.QApplication.instance()
+        if _app is not None:
+            _app.setStyleSheet(APP_QSS)
         self.setStyleSheet(APP_QSS)    # серая градиентная схема оформления (Замечание IV-R1)
         self._sg = None
         self._loader = None            # ссылка на текущий поток (чтобы не был собран GC)
@@ -71,9 +88,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self._view3d = Waterfall3DView()
         self._heatmap = HeatmapPanel()
         self._analytics = AnalyticsPanel()      # вкладка «Аналитика» (Задача 26)
-        self._tabs.addTab(self._view3d, "3D Waterfall")
-        self._tabs.addTab(self._heatmap, "2D Карта (Время×Энергия)")
-        self._tabs.addTab(self._analytics, "Аналитика")
+        # Задача #106: подписи вкладок через i18n-реестр (см. _register_i18n / _retranslate_ui)
+        _idx_3d = self._tabs.addTab(self._view3d, "3D Waterfall")
+        _idx_2d = self._tabs.addTab(self._heatmap, "2D Карта (Время×Энергия)")
+        _idx_an = self._tabs.addTab(self._analytics, "Аналитика")
+        self._register_i18n(lambda s: self._tabs.setTabText(_idx_3d, s), "3D Waterfall")
+        self._register_i18n(lambda s: self._tabs.setTabText(_idx_2d, s), "2D Карта (Время×Энергия)")
+        self._register_i18n(lambda s: self._tabs.setTabText(_idx_an, s), "Аналитика")
         self.setCentralWidget(self._tabs)
 
         # правый док: срезы/сечения/выборки
@@ -134,7 +155,22 @@ class MainWindow(QtWidgets.QMainWindow):
         adock.setWidget(self._adjust)
         adock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, adock)
+        self._adock = adock   # Задача #115: ссылка для пункта меню «Инструменты»
         self._wire_adjust_panel()
+
+        # Задача #111: панель «Найденные пики» в левом доке.
+        self._peaks_panel = PeaksPanel()
+        self._peaks_panel.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        pdock = QtWidgets.QDockWidget("Найденные пики", self)
+        pdock.setObjectName("dock_peaks")    # Задача #40: имя нужно saveState/restoreState
+        pdock.setWidget(self._peaks_panel)
+        pdock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
+        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, pdock)
+        self.tabifyDockWidget(adock, pdock)
+        self._peaks_dock = pdock
+        self._register_i18n(pdock.setWindowTitle, "Найденные пики")
+        # Связь: sigma → view3d, view3d._found_peaks() → panel.set_peaks()
+        self._peaks_panel.sigmaChanged.connect(self._on_peaks_sigma_changed)
 
         self._build_menu()
         self._build_toolbar()
@@ -143,11 +179,12 @@ class MainWindow(QtWidgets.QMainWindow):
         sb = self.statusBar()
         sb.setMinimumHeight(28)
         f = sb.font(); f.setPointSize(max(10, f.pointSize() + 1)); sb.setFont(f)
-        sb.showMessage("Готов. Файл → Открыть… (Ctrl+O)")
+        sb.showMessage(tr("Готов. Файл → Открыть… (Ctrl+O)"))
 
         # Задача #40: восстановить геометрию окна и раскладку доков/тулбара из прошлого запуска.
         # Вызывается ПОСЛЕ создания всех доков/тулбара (иначе restoreState не к чему применять).
-        self._settings = QtCore.QSettings(SETTINGS_ORG, SETTINGS_APP)
+        # Задача #106: self._settings уже создан в начале __init__ (нужен для загрузки языка),
+        # повторная инициализация снята.
         self._restore_layout()
 
     def _wire_adjust_panel(self) -> None:
@@ -176,16 +213,38 @@ class MainWindow(QtWidgets.QMainWindow):
         self._settings.setValue("windowState", self.saveState())
         super().closeEvent(event)
 
+    def _register_i18n(self, setter, ru_key: str) -> None:
+        """Задача #106: запомнить виджет в i18n-реестре и сразу применить tr()."""
+        self._i18n_widgets.append((setter, ru_key))
+        setter(tr(ru_key))
+
+    def _on_language_changed(self, code: str) -> None:
+        """Задача #106: реакция на смену языка — сохранить выбор и перерисовать всё зарегистрированное."""
+        self._settings.setValue("interface/language", code)
+        for setter, key in self._i18n_widgets:
+            try:
+                setter(tr(key))
+            except RuntimeError:
+                pass
+        # Задача #111: PeaksPanel имеет собственный retranslate() для заголовков колонок
+        try:
+            self._peaks_panel.retranslate()
+        except (AttributeError, RuntimeError):
+            pass
+
     def _build_menu(self) -> None:
         menu = self.menuBar().addMenu("Файл")
+        self._register_i18n(menu.setTitle, "Файл")   # Задача #106
         act_open = QtGui.QAction("Открыть…", self)
         act_open.setShortcut(QtGui.QKeySequence.Open)
         act_open.triggered.connect(self._open_dialog)
+        self._register_i18n(act_open.setText, "Открыть…")
         menu.addAction(act_open)
         menu.addSeparator()
         act_quit = QtGui.QAction("Выход", self)
         act_quit.setShortcut(QtGui.QKeySequence.Quit)
         act_quit.triggered.connect(self.close)
+        self._register_i18n(act_quit.setText, "Выход")
         menu.addAction(act_quit)
         self._build_stub_menus()   # Задача #75: каркас верхних меню (наполнение позже)
 
@@ -198,23 +257,30 @@ class MainWindow(QtWidgets.QMainWindow):
         spec = [
             ("isotopes", "Изотопы"),
             ("analysis", "Анализ"),
+            ("tools", "Инструменты"),   # Задача #115: список окон-доков
             ("service", "Сервис"),
             ("help", "Помощь"),
             ("about", "О программе"),
         ]
         for key, title in spec:
             m = bar.addMenu(title)
+            self._register_i18n(m.setTitle, title)   # Задача #106: подпись меню через tr()
             if key == "isotopes":
                 # Задача #79: действующая ссылка на окно (док) с изотопами/нуклидами.
                 # toggleViewAction открывает/прячет док, галочкой отражая его видимость.
                 act = self._ndock.toggleViewAction()
-                act.setText("Окно изотопов (нуклиды)")
+                self._register_i18n(act.setText, "Окно изотопов (нуклиды)")
                 m.addAction(act)
             elif key == "analysis":
                 self._build_analysis_menu(m)   # Задача #96: фон и вычитание
+            elif key == "tools":
+                self._build_tools_menu(m)      # Задача #115: окна-доки
+            elif key == "service":
+                self._build_service_menu(m)    # Задача #106: подменю «Язык» (RU/EN)
             else:
                 stub = QtGui.QAction("— наполняется позже —", self)
                 stub.setEnabled(False)   # каркас: действие будет подключено позже
+                self._register_i18n(stub.setText, "— наполняется позже —")
                 m.addAction(stub)
             self._menus[key] = m
 
@@ -224,16 +290,19 @@ class MainWindow(QtWidgets.QMainWindow):
         спектра среза; «Вычет» вычитает фон из всего водопада (3D/2D/срез), отрицательное -> 0."""
         act_sel = QtGui.QAction("Выбор фона…", self)
         act_sel.triggered.connect(self._on_bg_select)
+        self._register_i18n(act_sel.setText, "Выбор фона…")
         m.addAction(act_sel)
         self._act_bg_overlay = QtGui.QAction("Наложение фона", self)
         self._act_bg_overlay.setCheckable(True)
         self._act_bg_overlay.setEnabled(False)   # до выбора фона недоступно
         self._act_bg_overlay.toggled.connect(self._on_bg_overlay_toggled)
+        self._register_i18n(self._act_bg_overlay.setText, "Наложение фона")
         m.addAction(self._act_bg_overlay)
         self._act_bg_subtract = QtGui.QAction("Вычет фона", self)
         self._act_bg_subtract.setCheckable(True)
         self._act_bg_subtract.setEnabled(False)   # до выбора фона недоступно
         self._act_bg_subtract.toggled.connect(self._on_bg_subtract_toggled)
+        self._register_i18n(self._act_bg_subtract.setText, "Вычет фона")
         m.addAction(self._act_bg_subtract)
         m.addSeparator()
         # Задача #104: оверлей мощности дозы (только RadiaCode .rcspg, калибровка RC-103)
@@ -241,14 +310,63 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act_dose.setCheckable(True)
         self._act_dose.setChecked(False)
         self._act_dose.setEnabled(False)
-        self._act_dose.setToolTip("Калибровка дозы доступна только для RadiaCode (.rcspg)")
+        self._register_i18n(self._act_dose.setText, "Мощность дозы (RadiaCode)")
+        self._register_i18n(self._act_dose.setToolTip, "Калибровка дозы доступна только для RadiaCode (.rcspg)")
         self._act_dose.toggled.connect(self._on_dose_toggled)
         m.addAction(self._act_dose)
+        m.addSeparator()
+        # Задача #110: поиск фотопиков (Mariscotti + Currie) на 3D-спектрограмме
+        # (перенесено с #108, где маркеры рисовались на спектре среза).
+        self._act_peaks = QtGui.QAction("Поиск пиков", self)
+        self._act_peaks.setCheckable(True)
+        self._act_peaks.setChecked(False)
+        self._register_i18n(self._act_peaks.setText, "Поиск пиков")
+        self._register_i18n(self._act_peaks.setToolTip,
+                            "Отметить найденные фотопики на 3D-спектрограмме")
+        self._act_peaks.toggled.connect(self._on_peaks_toggled)
+        m.addAction(self._act_peaks)
+
+    def _build_service_menu(self, m) -> None:
+        """Задача #106: «Сервис» → подменю «Язык» с пунктами Русский / English (QActionGroup,
+        эксклюзивный выбор, отмеченный текущий язык). Смена пункта — i18n.set_language(code)."""
+        lang_menu = m.addMenu("Язык")
+        self._register_i18n(lang_menu.setTitle, "Язык")
+        group = QtGui.QActionGroup(self)
+        group.setExclusive(True)
+        cur = i18n.current_language()
+        for code, ru_label in ((i18n.LANG_RU, "Русский"), (i18n.LANG_EN, "English")):
+            act = QtGui.QAction(ru_label, self)
+            act.setCheckable(True)
+            act.setChecked(code == cur)
+            act.triggered.connect(lambda _checked, c=code: i18n.set_language(c))
+            self._register_i18n(act.setText, ru_label)
+            group.addAction(act)
+            lang_menu.addAction(act)
+
+    def _build_tools_menu(self, m) -> None:
+        """Задача #115: меню «Инструменты» — перечень всех окон-доков приложения. Каждый
+        пункт — toggleViewAction соответствующего дока: клик открывает/прячет окно, галочка
+        отражает его видимость (по образцу #79 для окна нуклидов). Окно нуклидов уже есть в
+        меню «Изотопы» — переиспользуется тот же QAction (один action в двух меню)."""
+        for dock, label in (
+            (self._peaks_dock, "Найденные пики"),
+            (self._slices_dock, "Срезы / Сечения / Выборки"),
+            (self._sdock, "Сечения (3D)"),
+            (self._adock, "Регулировки отображения"),
+        ):
+            act = dock.toggleViewAction()
+            self._register_i18n(act.setText, label)
+            m.addAction(act)
+        # окно нуклидов: тот же toggleViewAction, что в «Изотопы» (#79) — без повторной i18n
+        m.addAction(self._ndock.toggleViewAction())
 
     def _build_toolbar(self) -> None:
         tb = self.addToolBar("Вид")
         tb.setObjectName("toolbar_view")   # Задача #40: имя нужно saveState/restoreState
-        tb.addWidget(QtWidgets.QLabel(" Z-шкала: "))
+        self._register_i18n(tb.setWindowTitle, "Вид")   # Задача #106
+        _lab_z = QtWidgets.QLabel(" Z-шкала: ")
+        self._register_i18n(_lab_z.setText, " Z-шкала: ")
+        tb.addWidget(_lab_z)
         self._z_combo = CycleButton()   # Задача #74: клик = следующее значение, колесо = листать
         for key, label in Z_MODES:
             self._z_combo.addItem(label, key)
@@ -399,6 +517,24 @@ class MainWindow(QtWidgets.QMainWindow):
         """Задача #104: переключатель оверлея мощности дозы (RadiaCode .rcspg)."""
         self._slices.set_dose_overlay(on)
 
+    @QtCore.Slot(bool)
+    def _on_peaks_toggled(self, on: bool) -> None:
+        """Задача #110/#111: переключатель поиска фотопиков на 3D-водопаде.
+        При включении также заполняет панель «Найденные пики» (#111)."""
+        self._view3d.set_peak_search(on)
+        self._refresh_peaks_panel()
+
+    @QtCore.Slot(float)
+    def _on_peaks_sigma_changed(self, sigma: float) -> None:
+        """Задача #111/#114: изменение σ из PeaksPanel → пересчитать view3d + обновить панель."""
+        self._view3d.set_peak_sigma(sigma)
+        self._refresh_peaks_panel()
+
+    def _refresh_peaks_panel(self) -> None:
+        """Задача #111: обновить PeaksPanel результатами из view3d._found_peaks()."""
+        peaks = self._view3d._found_peaks()
+        self._peaks_panel.set_peaks(peaks)
+
     def _active_spectrogram(self):
         """Задача #96: активная спектрограмма для 3D/2D/срезов — с вычтенным фоном, если вычет
         включён и фон задан, иначе исходная."""
@@ -416,6 +552,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._slices.set_spectrogram(sg)
         self._heatmap.set_spectrogram(sg)
         self._sections.emit_all()
+        self._refresh_peaks_panel()   # Задача #111: обновить панель пиков после ре-рендера
 
     def _reset_background(self) -> None:
         """Задача #96: сброс фона при загрузке нового файла — снять кривую/вычет и обесточить
@@ -525,9 +662,9 @@ class MainWindow(QtWidgets.QMainWindow):
     @QtCore.Slot()
     def _open_dialog(self) -> None:
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
-            self, "Открыть спектрограмму", "",
-            "Спектрограммы (*.n42 *.xml *.rcspg *.aswf);;N42 / XML (*.n42 *.xml);;"
-            "RadiaCode (*.rcspg);;AtomSpectra (*.aswf);;Все файлы (*)")
+            self, tr("Открыть спектрограмму"), "",
+            tr("Спектрограммы (*.n42 *.xml *.rcspg *.aswf);;N42 / XML (*.n42 *.xml);;"
+               "RadiaCode (*.rcspg);;AtomSpectra (*.aswf);;Все файлы (*)"))
         if path:
             self.open_file(path)
 
@@ -572,7 +709,7 @@ class MainWindow(QtWidgets.QMainWindow):
     @QtCore.Slot(str)
     def _on_failed(self, message: str) -> None:
         self.statusBar().showMessage(f"Ошибка загрузки: {message}")
-        QtWidgets.QMessageBox.critical(self, "Ошибка загрузки", message)
+        QtWidgets.QMessageBox.critical(self, tr("Ошибка загрузки"), message)
 
 def main(argv: list[str] | None = None) -> int:
     """Точка входа. Необязательный первый аргумент — путь к файлу N42 для авто-открытия."""

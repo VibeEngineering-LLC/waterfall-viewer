@@ -5,7 +5,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import numpy as np
 import pytest
 import pyqtgraph.opengl as gl
-from PySide6 import QtWidgets
+from PySide6 import QtCore, QtWidgets
 
 from awf.model.spectrogram import Calibration, Spectrogram
 from awf.ui.zscale import smooth_counts, DEFAULT_SMOOTH
@@ -258,6 +258,43 @@ def test_bg_dialog_inherits_window_theme(app):
     assert dlg.parent() is w                          # источник наследуемого QSS — тема окна
     assert "qlineargradient" in w.styleSheet()
     dlg.deleteLater(); w.close()
+
+
+# ---------- #116/#117: тёмная тема для таблицы пиков и попапов pyqtgraph ----------
+def test_peaks_table_dark_theme_in_qss():
+    """Задача #116: панель «Найденные пики» (#111) — QTableWidget; в теме были правила
+    QTreeView/QTreeWidget/QListView, но НЕ QTableView/QTableWidget → viewport таблицы
+    рисовался дефолтным светлым фоном. Проверяем покрытие таблиц тёмной темой."""
+    from awf.ui.style import APP_QSS
+    assert "QTableView" in APP_QSS and "QTableWidget" in APP_QSS
+    assert "QTableCornerButton::section" in APP_QSS    # угловая кнопка под тему
+    assert "gridline-color" in APP_QSS                 # тёмная сетка ячеек
+
+
+def test_app_level_qss_for_pyqtgraph_popups(app):
+    """Задача #117: контекстные меню pyqtgraph (ViewBoxMenu) — popup БЕЗ QWidget-родителя,
+    поэтому stylesheet окна до них не каскадирует (рисовались системной светлой темой).
+    MainWindow ставит APP_QSS на уровень QApplication — тема достаёт parentless-попапы."""
+    from PySide6 import QtWidgets
+    from awf.ui.main_window import MainWindow
+    from awf.ui.style import APP_QSS
+    w = MainWindow()
+    inst = QtWidgets.QApplication.instance()
+    assert inst is not None and inst.styleSheet() == APP_QSS
+    w.close()
+
+
+def test_peaks_table_viewport_base_dark(app):
+    """Задача #116 (остаток): QSS красит ячейки/заголовок, но ПУСТУЮ область viewport ниже
+    строк и угловую кнопку Qt заливает из палитры (роль Base) — оставались белыми поверх
+    тёмной темы. Панель форсит тёмную Base; проверяем, что палитра таблицы тёмная."""
+    from PySide6 import QtGui
+    from awf.ui.peaks_panel import PeaksPanel
+    p = PeaksPanel()
+    base = p._table.palette().color(QtGui.QPalette.Base)
+    assert base.red() < 60 and base.green() < 60 and base.blue() < 60
+    vp_bg = p._table.viewport().palette().color(p._table.viewport().backgroundRole())
+    assert vp_bg.red() < 60 and vp_bg.green() < 60 and vp_bg.blue() < 60
 
 
 # ---------- #62: тулбар «Вид» и строка статуса — крупнее шрифт и выше ----------
@@ -515,18 +552,26 @@ def test_plane_nuclides_cleared_when_lines_removed(app):
 # ---------- #75: каркас верхних выпадающих меню ----------
 def test_top_menus_skeleton_present(app):
     """Задача #75: в строке меню есть Изотопы/Анализ/Сервис/Помощь/О программе (каркас)."""
-    from awf.ui.main_window import MainWindow
+    from awf.ui.main_window import MainWindow, SETTINGS_ORG, SETTINGS_APP
+    from awf.ui import i18n
+    # Задача #106: тест должен быть автономен от QSettings прошлых запусков (выбор языка).
+    QtCore.QSettings(SETTINGS_ORG, SETTINGS_APP).remove("interface/language")
+    i18n.reset_for_tests()
     w = MainWindow()
     titles = [m.title() for m in w.menuBar().findChildren(QtWidgets.QMenu)]
-    for expected in ("Изотопы", "Анализ", "Сервис", "Помощь", "О программе"):
+    for expected in ("Изотопы", "Анализ", "Инструменты", "Сервис", "Помощь", "О программе"):
         assert expected in titles
-    assert set(w._menus) == {"isotopes", "analysis", "service", "help", "about"}
-    # остальные пункты пока неактивны (каркас); «Изотопы» наполнено в #79, «Анализ» — в #96
+    assert set(w._menus) == {"isotopes", "analysis", "tools", "service", "help", "about"}
+    # остальные пункты пока неактивны (каркас); «Изотопы» наполнено в #79, «Анализ» — в #96,
+    # «Сервис» — в #106 (подменю «Язык»), «Инструменты» — в #115 (toggleViewAction доков).
     for key, m in w._menus.items():
-        if key in ("isotopes", "analysis"):
+        if key in ("isotopes", "analysis", "service", "tools"):
             continue
         acts = m.actions()
         assert acts and all(not a.isEnabled() for a in acts)
+    # Задача #106: «Сервис» содержит подменю «Язык» с двумя активными пунктами Русский/English
+    service_acts = w._menus["service"].actions()
+    assert any(a.text() == "Язык" for a in service_acts)
     # Задача #96: меню «Анализ» наполнено — «Выбор фона…» активен, «Наложение/Вычет» до выбора нет
     analysis_titles = [a.text() for a in w._menus["analysis"].actions()]
     assert "Выбор фона…" in analysis_titles
@@ -639,6 +684,30 @@ def test_isotopes_menu_opens_nuclides_dock(app):
     s0 = act.isChecked()
     act.trigger()
     assert act.isChecked() != s0                      # клик переключил видимость окна
+    act.trigger()
+    assert act.isChecked() == s0                      # повторный клик вернул
+    w.close()
+
+
+# ---------- #115: меню «Инструменты» — перечень окон-доков ----------
+def test_tools_menu_lists_dock_windows(app):
+    """Задача #115: меню «Инструменты» перечисляет все окна-доки; каждый пункт —
+    toggleViewAction соответствующего дока (checkable, переключает видимость окна)."""
+    from awf.ui.main_window import MainWindow
+    w = MainWindow()
+    tools = w._menus["tools"]
+    texts = [a.text() for a in tools.actions()]
+    for label in ("Найденные пики", "Срезы / Сечения / Выборки",
+                  "Сечения (3D)", "Регулировки отображения"):
+        assert label in texts                         # каждое окно перечислено
+    # окно нуклидов тоже в списке (тот же QAction, что в «Изотопы», #79)
+    assert w._ndock.toggleViewAction() in tools.actions()
+    # пункт ведёт на свой док и переключает его видимость
+    act = w._peaks_dock.toggleViewAction()
+    assert act in tools.actions() and act.isCheckable() and act.isEnabled()
+    s0 = act.isChecked()
+    act.trigger()
+    assert act.isChecked() != s0                      # клик переключил окно
     act.trigger()
     assert act.isChecked() == s0                      # повторный клик вернул
     w.close()

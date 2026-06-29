@@ -8,6 +8,12 @@ from awf.ui.zscale import (apply_z_scale, DEFAULT_GAIN, DEFAULT_GAMMA,
                            DEFAULT_CLIP, desaturate_rgba, smooth_counts)
 from awf.ui.colormaps import get_colormap
 from awf.ui.knobs import Knob          # Задача #59: панель сечений в том же knob-стиле
+from awf.analysis.peaks import (            # Задача #110/#114/#112/#120: поиск фотопиков на 3D-водопаде
+    find_peaks, peak_time_mask,
+    default_fwhm_model, fwhm_channels_from_model,
+    auto_calibrate_fwhm_model,             # Задача #120: автокалибровка FWHM(E) под детектор
+    find_transient_peaks,                  # Задача #113: транзиентные (время-локализованные) пики
+)
 
 # Оси секущих плоскостей и их цвета (RGB 0..1). По 2 плоскости (slot 0/1) на ось.
 PLANE_AXES = ("time", "energy", "counts")
@@ -84,6 +90,22 @@ _FLOOR_FRAC = 0.02             # доля высоты рельефа, ниже 
 # Задача #78: верхний предел энергии для вывода и сетки 3D-водопада. Каналы с энергией выше
 # отсекаются ПОСЛЕ LOD-прорежки — и рельеф, и деления оси энергии обрезаются согласованно.
 _MAX_ENERGY_KEV = 3000.0
+# Задача #110: выделение фотопиков на 3D-водопаде. Каждый пик — зелёная линия по гребню рельефа
+# вдоль оси времени (или её части, #112) на энергии пика (на ПОЛЕ спектрограммы, не у ребра);
+# occlusion #95 прячет линию за высоким рельефом.
+# Задача #114: ширина фильтра теперь per-channel из default_fwhm_model() (R=7%@662 кэВ, √-закон).
+# PEAK_FWHM_CHANNELS=8.0 оставлена мёртвой константой для совместимости тестов #110 (check importer).
+PEAK_FWHM_CHANNELS = 8.0                    # мёртвая константа — #114 использует FWHM(E)-модель
+_PEAK_SIGMA_DEFAULT = 3.0                    # Задача #114: дефолтный порог значимости σ Currie L_C
+_PEAK_RAY_RGBA = (0.20, 0.86, 0.20, 1.0)    # зелёный, как маркеры пиков #108
+# Задача #113: транзиентный (оконный) скан жёстче интегрального. На окне срезов
+# меньше статистики -> выше пьедестал шума Currie; без запаса набрались бы ложные.
+# Порог окна = self._peak_sigma + маржа; привязка к _peak_sigma ОБЯЗАТЕЛЬНА для
+# монотонности (больше σ -> не больше пиков). Маржа откалибрована на реальном файле
+# (869 срезов × 8192 кан, scripts/task113_transient_check.py): пик ~186 кэВ в окне
+# [684:756] имеет оконную значимость ~41.5σ, при дефолте σ=3.0 (порог окна 6.0)
+# находится с большим запасом, добавленных транзиентов немного (6 на этом файле).
+_TRANSIENT_SIGMA_MARGIN = 3.0
 
 
 class Waterfall3DView(gl.GLViewWidget):
@@ -168,6 +190,11 @@ class Waterfall3DView(gl.GLViewWidget):
         self._energy_lines = []        # list[(energy_keV, color_str, label)]
         self._ray_items = []           # текущие GLLinePlotItem лучей
         self._plane_nuclide_items = [] # маркеры нуклидов на гранях плоскостей Времени (Задача #67)
+
+        # --- выделение найденных фотопиков на рельефе (Задача #110/#114/#112) ---
+        self._peaks_on = False         # включён ли поиск пиков (зелёные хребты на 3D)
+        self._peak_ridge_items = []    # GLLinePlotItem линий-хребтов по гребню рельефа на пиках
+        self._peak_sigma = _PEAK_SIGMA_DEFAULT   # Задача #114: порог значимости σ; сеттер = set_peak_sigma
 
         # --- подсветка выбранных пиков (Задача 18) ---
         self._highlight_on = False     # режим подсветки: база приглушена, выбранные столбцы ярки
@@ -294,6 +321,7 @@ class Waterfall3DView(gl.GLViewWidget):
         self._rebuild_energy_rays()       # Задача #85: лишь снимает старые рёберные лучи
         self._rebuild_plane_nuclides()    # маркеры изотопов — только на секущих плоскостях
         self._rebuild_bg_sheet()          # Задача #98: «фоновая простыня» под текущий рельеф
+        self._rebuild_peak_ridges()       # Задача #110: выделение фотопиков по гребню рельефа
 
     def _clip_windows(self):
         """Окна обрезки поверхности по осям. Задача #84: каждая ВИДИМАЯ плоскость режет
@@ -377,6 +405,7 @@ class Waterfall3DView(gl.GLViewWidget):
         i0, i1, j0, j1, z_lo, z_hi, ca = self._clip_windows()
         if (i0, i1, j0, j1, z_lo, z_hi, ca) != self._clip_sig:
             self._rebuild_surface()
+            self._rebuild_peak_ridges()   # Задача #121: гребни следуют за окном обрезки
 
     def set_floor_visible(self, visible: bool) -> None:
         """Задача #76: показать/скрыть «подложку» (плоское дно рельефа, фиолетовый прямоугольник).
@@ -778,6 +807,133 @@ class Waterfall3DView(gl.GLViewWidget):
                                  mode="line_strip", antialias=False, glOptions="opaque")
         self.addItem(item)
         self._plane_nuclide_items.append(item)
+
+    # ---------- выделение найденных фотопиков на рельефе (Задача #110/#114/#112) ----------
+    def set_peak_search(self, on: bool) -> None:
+        """Задача #110: вкл/выкл выделение фотопиков (Mariscotti+Currie) на 3D-водопаде."""
+        self._peaks_on = bool(on)
+        self._rebuild_peak_ridges()
+
+    def set_peak_sigma(self, sigma: float) -> None:
+        """Задача #114/#111: сменить порог значимости σ → пересчитать пики и гребни+панель."""
+        self._peak_sigma = float(sigma)
+        if self._peaks_on and self._sg is not None:
+            self._rebuild_peak_ridges()
+
+    def _clear_peak_ridges(self) -> None:
+        for it in self._peak_ridge_items:
+            self.removeItem(it)
+        self._peak_ridge_items = []
+
+    def _found_peaks(self) -> list:
+        """Задача #120/#114: FoundPeak по АВТОКАЛИБРОВАННОЙ FWHM(E)-модели и σ.
+        Модель строится auto_calibrate_fwhm_model() по сильным реальным пикам спектра
+        (откат на default_fwhm_model R=7%@662 кэВ на бедных спектрах). Дефолт-модель
+        системно шире реальной → широкое ядро −G'' занижало значимость Currie L_C и
+        пропускало узкие пики; калибровка сужает ядро под детектор (Задача #120).
+        Сырые counts СУММАРНОГО спектра (full resolution). Задача #113: к интегральным
+        пикам подмешиваются ТРАНЗИЕНТНЫЕ (значимы лишь в узком окне срезов, утоплены в
+        интеграле). Источник истины для #110 и #111."""
+        if self._sg is None:
+            return []
+        counts = np.asarray(self._sg.total_spectrum(), dtype=np.float64)
+        energies = np.asarray(self._sg.energies(), dtype=np.float64)
+        # Задача #120: автокалибровка модели разрешения под реальный детектор (один раз —
+        # ширины едины для интегрального и транзиентного скана: разрешение от времени не зависит).
+        model = auto_calibrate_fwhm_model(counts, energies)
+        widths = fwhm_channels_from_model(model, energies)
+        # Интегральный скан (как было): пики, видимые в СУММАРНОМ по времени спектре.
+        integral = find_peaks(counts, widths, sigma_threshold=self._peak_sigma, energies=energies)
+        # Задача #113: транзиентные (время-локализованные) пики — невидимы в интеграле
+        # (утоплены в шуме), но значимы в узком окне срезов (напр. ~186 кэВ на реальном
+        # файле). Сырые counts 2D (как total_spectrum), те же калиброванные ширины #120,
+        # порог окна = self._peak_sigma + _TRANSIENT_SIGMA_MARGIN (привязка к _peak_sigma
+        # держит монотонность чувствительности: больше σ -> не больше пиков).
+        raw_2d = np.asarray(self._sg.counts, dtype=np.float64)
+        transient = find_transient_peaks(
+            raw_2d, energies, widths, integral,
+            transient_sigma_threshold=self._peak_sigma + _TRANSIENT_SIGMA_MARGIN,
+        )
+        peaks = integral + transient
+        # Задача #119: не искать/не показывать пики за пределом отображения (#78 — 3000 кэВ).
+        # Поиск идёт по полному спектру, но выше _MAX_ENERGY_KEV ни рельеф, ни сетка не
+        # рисуются — значит пик там не нужен (в таблице всплывал «мусорный» 3345 кэВ).
+        return [pk for pk in peaks if float(pk.energy) <= _MAX_ENERGY_KEV]
+
+    def _found_peak_energies(self) -> list:
+        """Задача #114: производное от _found_peaks() — только энергии (кэВ)."""
+        return [float(pk.energy) for pk in self._found_peaks()]
+
+    def _rebuild_peak_ridges(self) -> None:
+        """Задача #110/#112: выделение пиков из _found_peaks(), гребень — только по срезам
+        с присутствием пика (peak_time_mask). Задача #121: гребни обрезаны секущими плоскостями."""
+        self._clear_peak_ridges()
+        cc, nt, nc = self._ch_centers, self._nt, self._nc
+        if not self._peaks_on or self._z_surface is None or cc is None or len(cc) < 2:
+            return
+        if nt < 1 or nc < 1 or self._z_counts is None:
+            return
+        i0, i1, j0, j1, z_lo, z_hi, counts_active = self._clip_windows()  # Задача #121
+        if i0 > i1 or j0 > j1:
+            return
+        emin, emax = float(cc[0]), float(cc[-1])
+        idx = np.arange(nc, dtype=float)
+        for pk in self._found_peaks():
+            e = float(pk.energy)
+            if e < emin or e > emax:
+                continue
+            jc = max(0, min(nc - 1, int(round(float(np.interp(e, cc, idx))))))
+            if jc < j0 or jc > j1:
+                continue
+            self._add_peak_ridge(jc, i0, i1, z_lo, z_hi, counts_active)
+
+    def _add_peak_ridge(self, jc: int, i0: int = 0, i1: int | None = None,
+                        z_lo: float = -np.inf, z_hi: float = np.inf,
+                        counts_active: bool = False) -> None:
+        """Задача #110/#112: гребень на канале jc только в зоне присутствия пика (#112).
+        peak_time_mask → непрерывные True-сегменты → отдельные GLLinePlotItem. Задача #121:
+        window ограничивает гребень окном времени [i0,i1] и (при активной) плоскостью счёта."""
+        nt, nc = self._nt, self._nc
+        if i1 is None:
+            i1 = nt - 1
+        lift = 0.01 * float(self._height_scale)
+        mask = peak_time_mask(self._z_counts, jc)
+        xs_all = np.arange(nt, dtype=np.float64) - nt / 2.0
+        y_val = float(jc) - nc / 2.0
+        zs_raw = self._z_surface[:, jc].astype(np.float64)
+        zs_all = zs_raw + lift
+        window = np.zeros(nt, dtype=bool)        # Задача #121
+        window[max(0, i0):i1 + 1] = True
+        if counts_active:
+            window &= (zs_raw >= z_lo) & (zs_raw <= z_hi)
+        self._draw_ridge_segments(xs_all, y_val, zs_all, mask, window)
+
+    def _draw_ridge_segments(self, xs_all, y_val, zs_all, mask, window=None) -> None:
+        """Задача #112: нарисовать сегменты гребня только там где mask==True.
+        Если маска полностью False (пик постоянно присутствует, нет временнóй изменчивости
+        в данных) — fallback на полный гребень (все срезы), т.к. пик равномерно присутствует
+        во всём файле. Каждый непрерывный True-участок → отдельный GLLinePlotItem."""
+        if not mask.any():
+            # Fallback: пик постоянен во времени (нет временнóй изменчивости в z_counts[:,jc])
+            # → маска не смогла определить присутствие → рисуем весь гребень.
+            mask = np.ones(len(xs_all), dtype=bool)
+        if window is not None:
+            mask = mask & window   # Задача #121: ограничить активными секущими плоскостями
+        changes = np.diff(mask.astype(np.int8), prepend=0, append=0)
+        starts = np.where(changes == 1)[0]
+        ends = np.where(changes == -1)[0]
+        for s, e in zip(starts, ends):
+            if e - s < 1:
+                continue
+            xs = xs_all[s:e].astype(np.float32)
+            ys = np.full(e - s, y_val, dtype=np.float32)
+            zs = zs_all[s:e].astype(np.float32)
+            pos = np.column_stack([xs, ys, zs]).astype(np.float32)
+            item = gl.GLLinePlotItem(pos=pos, color=_PEAK_RAY_RGBA, width=3.0,
+                                     mode="line_strip", antialias=False,
+                                     glOptions="opaque")
+            self.addItem(item)
+            self._peak_ridge_items.append(item)
 
     # ---------- подсветка выбранных пиков (Задача 18) ----------
     def _highlight_mask(self, centers, nc: int):

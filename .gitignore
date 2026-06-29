@@ -36,3 +36,14 @@ awf/data/iaea_cache/
 # Регенерируются скриптом из сети; в библиотеку уже слиты (nuclides.json). Не в git.
 scripts/_missing_candidates.json
 scripts/_missing_report.txt
+
+# Локальные dev-артефакты сессий разработки пиков (#107–#121) — НЕ в публичный репо.
+# proto_peaks3d.py хардкодит локальный путь с IP-источником (PII); _proto_out — его вывод
+# с IP в именах файлов; audit/ и scripts/ollama/_* — служебные черновики/Ollama-генерация.
+audit/
+scripts/_proto_out/
+scripts/proto_peaks3d.py
+tests/test_proto_peaks3d.py
+scripts/_*
+scripts/diag_*
+scripts/ollama/_*

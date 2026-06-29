@@ -104,3 +104,30 @@ def test_dose_none_for_non_rcspg(app):
     p = SlicePanel()
     p.set_spectrogram(_make_sg(source_path="file.n42"))
     assert p._dose is None
+
+
+# ---------- #105: dose curve has a legend entry, toggled with the overlay ----------
+
+def _legend_labels(p):
+    return [lbl.text for _s, lbl in p._legend.items]
+
+
+def test_dose_legend_present_for_rcspg(app):
+    p = SlicePanel()
+    p.set_spectrogram(_make_sg(source_path="scan.rcspg"))
+    assert any("доз" in t.lower() for t in _legend_labels(p))
+
+
+def test_dose_legend_absent_for_n42(app):
+    p = SlicePanel()
+    p.set_spectrogram(_make_sg(source_path="scan.n42"))
+    assert not any("доз" in t.lower() for t in _legend_labels(p))
+
+
+def test_dose_legend_toggles_with_overlay(app):
+    p = SlicePanel()
+    p.set_spectrogram(_make_sg(source_path="scan.rcspg"))
+    p.set_dose_overlay(False)
+    assert not any("доз" in t.lower() for t in _legend_labels(p))
+    p.set_dose_overlay(True)
+    assert any("доз" in t.lower() for t in _legend_labels(p))

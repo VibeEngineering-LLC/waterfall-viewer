@@ -44,6 +44,16 @@ QToolBar QLabel { font-size: 14px; }
 QToolBar QCheckBox { font-size: 14px; spacing: 7px; }
 QToolBar QComboBox { font-size: 14px; padding: 5px 10px; min-height: 28px; }
 QToolBar QPushButton { font-size: 14px; padding: 6px 16px; min-height: 28px; }
+/* Задача #109: кнопка палитры — QToolButton, у неё не было toolbar-правила, поэтому
+   «Viridis» рендерилась дефолтным (мельче и тусклее соседних QLabel/QPushButton).
+   Приводим цвет (#d8dade) и размер шрифта (14px) к остальным контролам тулбара. */
+QToolBar QToolButton {
+    font-size: 14px; color: #d8dade;
+    background: #303338; border: 1px solid #1c1e21; border-radius: 3px;
+    padding: 6px 14px; min-height: 28px;
+}
+QToolBar QToolButton:hover { background: #3a3d42; }
+QToolBar QToolButton:pressed { background: #4a7d4a; color: #ffffff; }
 
 QStatusBar {
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
@@ -172,6 +182,26 @@ QHeaderView::section {
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                 stop:0 #45484d, stop:1 #303338);
     color: #d0d2d6; padding: 3px; border: 1px solid #1c1e21;
+}
+
+/* Задача #116: таблицы (панель «Найденные пики» #111 — QTableWidget). В теме были
+   правила QTreeView/QTreeWidget/QListView, но НЕ QTableView/QTableWidget — поэтому
+   viewport таблицы пиков рисовался дефолтным светлым фоном Qt. Цвета — как у дерева
+   нуклидов; gridline под тёмный фон, угловая кнопка — как секция заголовка. */
+QTableView, QTableWidget {
+    background: #26282b; color: #d0d2d6;
+    border: 1px solid #1c1e21;
+    gridline-color: #1c1e21;
+    alternate-background-color: #2d2f33;
+    selection-background-color: #3d6b3d; selection-color: #ffffff;
+}
+QTableView::item:selected, QTableWidget::item:selected {
+    background: #3d6b3d; color: #ffffff;
+}
+QTableCornerButton::section {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #45484d, stop:1 #303338);
+    border: 1px solid #1c1e21;
 }
 
 QScrollBar:vertical { background: #2a2c30; width: 12px; margin: 0px; }

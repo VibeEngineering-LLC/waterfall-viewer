@@ -11,6 +11,13 @@ from awf.analysis.types import (
     FoundPeak, PeakArea, MdaResult, LineMatch, IdentResult,
 )
 from awf.analysis.spectra import spectrum_from_selection
+from awf.analysis.peaks import (
+    find_peaks, peak_time_mask, snip_baseline,
+    find_transient_peaks,   # Задача #113: транзиентные (время-локализованные) пики
+    # Задача #114: модель разрешения FWHM(E) и per-channel ширина matched-фильтра
+    FwhmModel, default_fwhm_model, fwhm_model_keV,
+    estimate_fwhm_model, fwhm_channels_from_model,
+)
 from awf.analysis.identify import (
     identify_peaks, lookup_by_energy, default_fwhm_keV, get_prior,
 )
@@ -34,6 +41,10 @@ from awf.analysis.cluster import (
 __all__ = [
     "FoundPeak", "PeakArea", "MdaResult", "LineMatch", "IdentResult",
     "spectrum_from_selection",
+    "find_peaks", "peak_time_mask", "snip_baseline", "find_transient_peaks",
+    # Задача #114
+    "FwhmModel", "default_fwhm_model", "fwhm_model_keV",
+    "estimate_fwhm_model", "fwhm_channels_from_model",
     "identify_peaks", "lookup_by_energy", "default_fwhm_keV", "get_prior",
     # Группа V
     "GradientResult", "moving_average", "total_counts_series", "time_gradient", "band_gradient",
