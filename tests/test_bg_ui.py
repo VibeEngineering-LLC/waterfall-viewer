@@ -241,6 +241,23 @@ def test_slice_spectrum_y_floor_log(app):
     assert ymin == pytest.approx(expected)              # лог: пол = log10(min>0)
 
 
+# ---------- #128: нижняя граница оси Y графика «Скорость в полосе» зафиксирована ----------
+
+def test_slice_series_y_floor_zero(app):
+    p = SlicePanel()
+    p.set_spectrogram(_make_sg(ns=6, nc=12))
+    ymin, _ = p._series_plot.getViewBox().state["limits"]["yLimits"]
+    assert ymin == 0.0                                  # профиль ≥0: «0» прибит к низу
+
+
+def test_slice_series_y_floor_survives_reset_zoom(app):
+    p = SlicePanel()
+    p.set_spectrogram(_make_sg(ns=6, nc=12))
+    p.reset_zoom()                                       # #100: autoRange обоих графиков
+    ymin, _ = p._series_plot.getViewBox().state["limits"]["yLimits"]
+    assert ymin == 0.0                                  # лимит липкий, сброс зума не снимает пол
+
+
 # ---------- #102: окно «Цветовая палитра» с превью-градиентами ----------
 
 def test_palette_dialog_lists_all_and_selects(app):

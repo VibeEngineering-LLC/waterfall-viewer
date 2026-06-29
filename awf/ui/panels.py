@@ -474,7 +474,8 @@ class SlicePanel(QtWidgets.QWidget):
         """Задача #89: привязать X-домен графиков к экстенту данных, чтобы они не «уезжали»
         при зуме/панораме. Верхний график — энергия [emin..emax], нижний — время [tmin..tmax];
         панорама не выходит за домен, минимальный зум (макс. отдаление) = полный домен.
-        Y не ограничиваем — у спектра бывает лог-шкала, у профиля масштаб счёта меняется."""
+        Y верхнего графика (спектр) — отдельно в _lock_spectrum_y (#101, лог/лин). Y нижнего
+        графика (профиль) — здесь (#128): он всегда линейный и ≥0, «0» прибит к низу."""
         if self._energies is not None and self._energies.size:
             emin = float(self._energies.min()); emax = float(self._energies.max())
             vb = self._spectrum_plot.getViewBox()
@@ -483,8 +484,14 @@ class SlicePanel(QtWidgets.QWidget):
         if self._times is not None and self._times.size:
             tmin = float(self._times.min()); tmax = float(self._times.max())
             vb = self._series_plot.getViewBox()
-            if vb is not None and tmax > tmin:
-                vb.setLimits(xMin=tmin, xMax=tmax, maxXRange=tmax - tmin)
+            if vb is not None:
+                # Задача #128: профиль (полоса ROI + энергоокно) — счёт/cps ≥ 0, шкала лин.;
+                # фиксируем нижнюю границу Y=0, чтобы отрицательная зона не показывалась и не
+                # «уезжала» при зуме/панораме (верх auto по данным). Дозовый правый ViewBox
+                # независим и не затрагивается.
+                vb.setLimits(yMin=0.0)
+                if tmax > tmin:
+                    vb.setLimits(xMin=tmin, xMax=tmax, maxXRange=tmax - tmin)
 
     def reset_zoom(self) -> None:
         """Задача #100: сброс зума/панорамы графиков среза и времени к полному виду данных.
