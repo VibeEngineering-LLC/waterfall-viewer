@@ -171,6 +171,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._register_i18n(pdock.setWindowTitle, "Найденные пики")
         # Связь: sigma → view3d, view3d._found_peaks() → panel.set_peaks()
         self._peaks_panel.sigmaChanged.connect(self._on_peaks_sigma_changed)
+        # Задача #124: клик по строке пика → подсветка гребня на 3D;
+        # чекбокс «Показать» → видимость гребня этого пика на 3D-спектрограмме.
+        self._peaks_panel.peakSelected.connect(self._view3d.set_peak_highlight)
+        self._peaks_panel.peakVisibilityChanged.connect(self._view3d.set_peak_visible)
 
         self._build_menu()
         self._build_toolbar()
@@ -531,9 +535,18 @@ class MainWindow(QtWidgets.QMainWindow):
         self._refresh_peaks_panel()
 
     def _refresh_peaks_panel(self) -> None:
-        """Задача #111: обновить PeaksPanel результатами из view3d._found_peaks()."""
+        """Задача #111: обновить PeaksPanel результатами из view3d._found_peaks().
+        Задача #123: попутно показать временно́е окно поиска (весь файл: N срезов, T).
+        Задача #127: те же найденные пики скормить модулю идентификации нуклидов."""
         peaks = self._view3d._found_peaks()
         self._peaks_panel.set_peaks(peaks)
+        self._nuclides.show_candidates(peaks)
+        sg = self._sg
+        if sg is not None:
+            total = float(np.asarray(sg.real_time_s, dtype=np.float64).sum())
+            self._peaks_panel.set_window_info(int(sg.n_slices), total)
+        else:
+            self._peaks_panel.set_window_info(None, None)
 
     def _active_spectrogram(self):
         """Задача #96: активная спектрограмма для 3D/2D/срезов — с вычтенным фоном, если вычет

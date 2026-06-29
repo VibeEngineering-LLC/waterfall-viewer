@@ -418,6 +418,9 @@ class SlicePanel(QtWidgets.QWidget):
         self._dose_in_legend = False  # #105: записи дозы в легенде ещё нет
         self._dose_axis.hide()
         self._series_plot.getViewBox().sigResized.connect(self._sync_dose_vb)
+        # Задача #125: двойной клик по любому из графиков → сброс зума/смещения (reset_zoom).
+        self._spectrum_plot.scene().sigMouseClicked.connect(self._on_plot_double_click)
+        self._series_plot.scene().sigMouseClicked.connect(self._on_plot_double_click)
         self._nuclide_lines = []  # текущие вертикальные маркеры энергий нуклидов на спектре
         self._ewin_preset.currentIndexChanged.connect(self._on_ewin_preset)
         self._ewin_lo.editingFinished.connect(self._on_ewin_spin)
@@ -491,6 +494,14 @@ class SlicePanel(QtWidgets.QWidget):
             vb = plot.getViewBox()
             if vb is not None:
                 vb.autoRange()
+
+    def _on_plot_double_click(self, ev) -> None:
+        """Задача #125: двойной клик по графику среза/времени → сброс зума и смещения.
+        Сцена pyqtgraph эмитит sigMouseClicked на каждый клик; ev.double() истинно только
+        на втором клике дабл-клика. Одиночный клик не трогаем (panning/прочее поведение ViewBox)."""
+        if ev.double():
+            self.reset_zoom()
+            ev.accept()
 
     def _plot_spectrum(self, energies, spec_raw, lt_total=None) -> None:
         """Кэшировать сырой спектр (+ живое время окна для cps, Задача #44) и отрисовать."""

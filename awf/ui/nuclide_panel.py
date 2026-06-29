@@ -134,12 +134,32 @@ class NuclidePanel(QtWidgets.QWidget):
         brow.addWidget(self._btn_none)
         root.addLayout(brow)
 
-        # --- панель кандидатов (Задача 12.3 / 11) ---
-        root.addWidget(QtWidgets.QLabel("Кандидаты по выбранному пику"))
+        # --- Задача #127: модуль идентификации нуклидов по НАЙДЕННЫМ пикам ---
+        # Раньше панель называлась «Кандидаты по выбранному пику» и НИКОГДА не получала
+        # пиков (метод show_candidates не вызывался). Теперь main_window кормит её
+        # _found_peaks() из подсистемы поиска (#110/#111) — identify_peaks по библиотеке.
+        irow = QtWidgets.QHBoxLayout()
+        self._ident_title = QtWidgets.QLabel("Идентификация по найденным пикам")
+        irow.addWidget(self._ident_title)
+        irow.addStretch(1)
+        irow.addWidget(QtWidgets.QLabel("мин. увер.:"))
+        self._ident_min_conf = QtWidgets.QDoubleSpinBox()
+        self._ident_min_conf.setRange(0.0, 1.0)
+        self._ident_min_conf.setSingleStep(0.05)
+        self._ident_min_conf.setValue(0.30)
+        self._ident_min_conf.setDecimals(2)
+        self._ident_min_conf.setToolTip(
+            "Порог уверенности: кандидаты ниже порога не показываются (меньше ложных)")
+        irow.addWidget(self._ident_min_conf)
+        root.addLayout(irow)
         self._cand = QtWidgets.QTreeWidget()
         self._cand.setHeaderLabels(["Нуклид", "Уверен.", "Категория", "Линий"])
         self._cand.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         root.addWidget(self._cand, stretch=2)
+        # Задача #127: «идентифицировано N нуклид(ов) по M пик(ам)».
+        self._ident_status = QtWidgets.QLabel("Идентификация: —")
+        self._ident_status.setWordWrap(True)
+        root.addWidget(self._ident_status)
 
         self._status = QtWidgets.QLabel("")
         root.addWidget(self._status)
@@ -150,6 +170,10 @@ class NuclidePanel(QtWidgets.QWidget):
         self._tree.itemChanged.connect(self._on_item_changed)
         self._btn_none.clicked.connect(self.clear_selection)
         self._btn_iaea.clicked.connect(self._on_add_iaea)
+        # Задача #127: порог уверенности → перерисовать кандидатов; клик по кандидату →
+        # отметить нуклид в библиотеке (его линии подсветятся на 3D/2D/срезе через linesChanged).
+        self._ident_min_conf.valueChanged.connect(self._render_candidates)
+        self._cand.itemClicked.connect(self._on_candidate_clicked)
 
         if nuclides is not None:
             self.set_library(nuclides)
@@ -247,33 +271,76 @@ class NuclidePanel(QtWidgets.QWidget):
     def selected_lines(self) -> list:
         return self._collect_lines()
 
-    # ---------- кандидаты (Задача 12.3 / 11) ----------
-    def show_candidates(self, found_peaks, *, min_confidence: float = 0.0) -> None:
-        """Прогнать identify_peaks по текущей библиотеке для переданных найденных пиков и
-        показать кандидатов: имя, уверенность, категория, число совпавших линий + Δ/I по линиям."""
+    # ---------- идентификация по найденным пикам (Задача #127 / 12.3 / 11) ----------
+    def show_candidates(self, found_peaks, *, min_confidence: float = None) -> None:
+        """Задача #127: принять НАЙДЕННЫЕ пики (из подсистемы поиска #110/#111) и показать
+        идентифицированные нуклиды. Порог уверенности берётся из спинбокса панели; если
+        min_confidence передан явно (старый контракт/тесты) — выставляет спинбокс под него."""
         self._found_peaks = list(found_peaks)
+        if min_confidence is not None:
+            self._ident_min_conf.blockSignals(True)
+            self._ident_min_conf.setValue(float(min_confidence))
+            self._ident_min_conf.blockSignals(False)
+        self._render_candidates()
+
+    def _render_candidates(self, *args) -> None:
+        """Задача #127: прогнать identify_peaks по библиотеке для сохранённых найденных пиков
+        и заполнить дерево; порог — из спинбокса; статус — «идентифицировано N по M пикам»."""
         self._cand.clear()
+        n_peaks = len(self._found_peaks)
         if not self._nuclides or not self._found_peaks:
+            self._ident_status.setText("Идентификация: —")
             return
         results = identify_peaks(
-            self._found_peaks, self._nuclides, min_confidence=min_confidence)
+            self._found_peaks, self._nuclides,
+            min_confidence=float(self._ident_min_conf.value()))
         for r in results:
-            top = QtWidgets.QTreeWidgetItem(
-                self._cand,
-                [r.nuclide, f"{r.confidence:.2f}", r.category or "—", str(len(r.matches))])
-            top.setForeground(0, QtGui.QColor(self._color(r.nuclide)))
-            for m in r.matches:
-                QtWidgets.QTreeWidgetItem(
-                    top,
-                    [f"{m.line_energy:.1f} кэВ", f"Δ={m.delta_keV:+.2f}",
-                     f"I={m.intensity_pct:.1f}%", ""])
-            top.setExpanded(True)
+            self._add_candidate_row(r)
         for i in range(self._cand.columnCount()):
             self._cand.resizeColumnToContents(i)
+        self._update_ident_status(len(results), n_peaks)
+
+    def _add_candidate_row(self, r) -> None:
+        """Задача #127: одна строка-кандидат в дереве + дочерние строки линий. UserRole
+        хранит имя нуклида — ключ для клика (отметить в библиотеке → подсветка линий)."""
+        top = QtWidgets.QTreeWidgetItem(
+            self._cand,
+            [r.nuclide, f"{r.confidence:.2f}", r.category or "—", str(len(r.matches))])
+        top.setForeground(0, QtGui.QColor(self._color(r.nuclide)))
+        top.setData(0, QtCore.Qt.UserRole, r.nuclide)
+        for m in r.matches:
+            QtWidgets.QTreeWidgetItem(
+                top,
+                [f"{m.line_energy:.1f} кэВ", f"Δ={m.delta_keV:+.2f}",
+                 f"I={m.intensity_pct:.1f}%", ""])
+        top.setExpanded(True)
+
+    def _update_ident_status(self, n_results: int, n_peaks: int) -> None:
+        """Задача #127: метка «идентифицировано N нуклид(ов) по M пик(ам)»."""
+        self._ident_status.setText(
+            f"Идентификация: {n_results} нуклид(ов) по {n_peaks} пик(ам)")
+
+    def _on_candidate_clicked(self, item, col: int = 0) -> None:
+        """Задача #127: клик по кандидату → отметить нуклид в библиотеке (линии подсветятся
+        на 3D/2D/срезе через linesChanged). Клик по дочерней линии берёт родителя."""
+        name = item.data(0, QtCore.Qt.UserRole)
+        if name is None and item.parent() is not None:
+            name = item.parent().data(0, QtCore.Qt.UserRole)
+        if name:
+            self._check_nuclide(str(name))
+
+    def _check_nuclide(self, name: str) -> None:
+        """Задача #127: отметить нуклид по имени (если не отмечен) и перестроить дерево —
+        линии уходят в linesChanged → подсветка на спектрограммах."""
+        if name in self._checked:
+            return
+        self._checked.add(name)
+        self._rebuild_tree()
 
     def clear_candidates(self) -> None:
         self._found_peaks = []
         self._cand.clear()
+        self._ident_status.setText("Идентификация: —")
 
     # ---------- IAEA (Задача 12.4) ----------
     def _on_add_iaea(self) -> None:

@@ -98,6 +98,9 @@ _MAX_ENERGY_KEV = 3000.0
 PEAK_FWHM_CHANNELS = 8.0                    # мёртвая константа — #114 использует FWHM(E)-модель
 _PEAK_SIGMA_DEFAULT = 3.0                    # Задача #114: дефолтный порог значимости σ Currie L_C
 _PEAK_RAY_RGBA = (0.20, 0.86, 0.20, 1.0)    # зелёный, как маркеры пиков #108
+# Задача #124: подсветка выбранного пика (клик по строке в панели «Найденные пики») —
+# яркая малиновая линия, заведомо отличимая и от зелёных хребтов, и от палитр рельефа.
+_PEAK_HILITE_RGBA = (1.0, 0.20, 0.90, 1.0)
 # Задача #113: транзиентный (оконный) скан жёстче интегрального. На окне срезов
 # меньше статистики -> выше пьедестал шума Currie; без запаса набрались бы ложные.
 # Порог окна = self._peak_sigma + маржа; привязка к _peak_sigma ОБЯЗАТЕЛЬНА для
@@ -195,6 +198,12 @@ class Waterfall3DView(gl.GLViewWidget):
         self._peaks_on = False         # включён ли поиск пиков (зелёные хребты на 3D)
         self._peak_ridge_items = []    # GLLinePlotItem линий-хребтов по гребню рельефа на пиках
         self._peak_sigma = _PEAK_SIGMA_DEFAULT   # Задача #114: порог значимости σ; сеттер = set_peak_sigma
+        # Задача #124: пер-пиковая видимость и подсветка по энергии-ключу (round(E,3)).
+        # Ключ по энергии связывает строку панели и гребень без хрупкой привязки к индексу:
+        # _found_peaks() детерминирован при фикс. σ/данных, потому энергии стабильны между
+        # вызовами «заполнить панель» и «перестроить гребни».
+        self._peak_hidden_keys = set()   # энергии-ключи пиков со снятым чекбоксом (скрыты)
+        self._peak_highlight_key = None  # энергия-ключ подсвеченного пика (или None)
 
         # --- подсветка выбранных пиков (Задача 18) ---
         self._highlight_on = False     # режим подсветки: база приглушена, выбранные столбцы ярки
@@ -820,6 +829,35 @@ class Waterfall3DView(gl.GLViewWidget):
         if self._peaks_on and self._sg is not None:
             self._rebuild_peak_ridges()
 
+    @staticmethod
+    def _peak_key(energy) -> float:
+        """Задача #124: ключ пика по энергии — round до 3 знаков (кэВ). Стабилен между
+        детерминированными вызовами _found_peaks() при фиксированных σ/данных."""
+        return round(float(energy), 3)
+
+    def set_peak_visible(self, energy, visible: bool) -> None:
+        """Задача #124: показать/скрыть гребень конкретного пика (чекбокс в панели «Найденные
+        пики»). Ключ по энергии; перестраивает гребни, если поиск пиков включён."""
+        key = self._peak_key(energy)
+        if visible:
+            self._peak_hidden_keys.discard(key)
+        else:
+            self._peak_hidden_keys.add(key)
+        if self._peaks_on and self._sg is not None:
+            self._rebuild_peak_ridges()
+
+    def set_peak_highlight(self, energy) -> None:
+        """Задача #124: подсветить (выделить малиновым) гребень пика по энергии — реакция на
+        клик по строке панели. energy=None снимает подсветку. Перестраивает гребни."""
+        self._peak_highlight_key = None if energy is None else self._peak_key(energy)
+        if self._peaks_on and self._sg is not None:
+            self._rebuild_peak_ridges()
+
+    def clear_peak_overrides(self) -> None:
+        """Задача #124: сбросить пер-пиковые скрытия и подсветку (новый набор пиков)."""
+        self._peak_hidden_keys = set()
+        self._peak_highlight_key = None
+
     def _clear_peak_ridges(self) -> None:
         for it in self._peak_ridge_items:
             self.removeItem(it)
@@ -882,14 +920,19 @@ class Waterfall3DView(gl.GLViewWidget):
             e = float(pk.energy)
             if e < emin or e > emax:
                 continue
+            key = self._peak_key(e)                       # Задача #124
+            if key in self._peak_hidden_keys:             # чекбокс снят — гребень скрыт
+                continue
             jc = max(0, min(nc - 1, int(round(float(np.interp(e, cc, idx))))))
             if jc < j0 or jc > j1:
                 continue
-            self._add_peak_ridge(jc, i0, i1, z_lo, z_hi, counts_active)
+            emphasize = (self._peak_highlight_key is not None
+                         and key == self._peak_highlight_key)   # клик по строке
+            self._add_peak_ridge(jc, i0, i1, z_lo, z_hi, counts_active, emphasize)
 
     def _add_peak_ridge(self, jc: int, i0: int = 0, i1: int | None = None,
                         z_lo: float = -np.inf, z_hi: float = np.inf,
-                        counts_active: bool = False) -> None:
+                        counts_active: bool = False, emphasize: bool = False) -> None:
         """Задача #110/#112: гребень на канале jc только в зоне присутствия пика (#112).
         peak_time_mask → непрерывные True-сегменты → отдельные GLLinePlotItem. Задача #121:
         window ограничивает гребень окном времени [i0,i1] и (при активной) плоскостью счёта."""
@@ -898,6 +941,15 @@ class Waterfall3DView(gl.GLViewWidget):
             i1 = nt - 1
         lift = 0.01 * float(self._height_scale)
         mask = peak_time_mask(self._z_counts, jc)
+        if not mask.any():
+            # Задача #126: строгая маска присутствия (#112) обнулилась — пик слабый/
+            # интегрально-значимый/транзиентный, не прошёл Currie-гейты. РАНЬШЕ гребень
+            # тогда рисовался на ВСЮ ось времени (продлевался на пустое место). Берём
+            # РЕЛАКСИРОВАННУЮ маску: тот же net над фоном плеч + сглаживание, но без
+            # абсолютного и колоночного гейтов — только относительный порог (0.15·max),
+            # т.е. гребень ограничен зоной реального подъёма над фоном, не пустыми срезами.
+            mask = peak_time_mask(self._z_counts, jc,
+                                  noise_factor=0.0, min_peak_over_bg=0.0)
         xs_all = np.arange(nt, dtype=np.float64) - nt / 2.0
         y_val = float(jc) - nc / 2.0
         zs_raw = self._z_surface[:, jc].astype(np.float64)
@@ -906,19 +958,20 @@ class Waterfall3DView(gl.GLViewWidget):
         window[max(0, i0):i1 + 1] = True
         if counts_active:
             window &= (zs_raw >= z_lo) & (zs_raw <= z_hi)
-        self._draw_ridge_segments(xs_all, y_val, zs_all, mask, window)
+        self._draw_ridge_segments(xs_all, y_val, zs_all, mask, window, emphasize)
 
-    def _draw_ridge_segments(self, xs_all, y_val, zs_all, mask, window=None) -> None:
-        """Задача #112: нарисовать сегменты гребня только там где mask==True.
-        Если маска полностью False (пик постоянно присутствует, нет временнóй изменчивости
-        в данных) — fallback на полный гребень (все срезы), т.к. пик равномерно присутствует
-        во всём файле. Каждый непрерывный True-участок → отдельный GLLinePlotItem."""
-        if not mask.any():
-            # Fallback: пик постоянен во времени (нет временнóй изменчивости в z_counts[:,jc])
-            # → маска не смогла определить присутствие → рисуем весь гребень.
-            mask = np.ones(len(xs_all), dtype=bool)
+    def _draw_ridge_segments(self, xs_all, y_val, zs_all, mask, window=None,
+                             emphasize: bool = False) -> None:
+        """Задача #112/#126: нарисовать сегменты гребня только там где mask==True.
+        Маску (строгую #112 или релаксированную #126) формирует _add_peak_ridge. Прежний
+        фолбэк «при пустой маске рисовать ВЕСЬ гребень» убран (#126) — именно он и продлевал
+        линию пика на пустые срезы; пустая маска здесь → гребень не рисуется (в столбце нет
+        подъёма над фоном — рисовать нечего). Каждый непрерывный True-участок → GLLinePlotItem."""
         if window is not None:
             mask = mask & window   # Задача #121: ограничить активными секущими плоскостями
+        # Задача #124: подсвеченный пик — малиновый и толще, прочие — зелёные как раньше.
+        color = _PEAK_HILITE_RGBA if emphasize else _PEAK_RAY_RGBA
+        width = 6.0 if emphasize else 3.0
         changes = np.diff(mask.astype(np.int8), prepend=0, append=0)
         starts = np.where(changes == 1)[0]
         ends = np.where(changes == -1)[0]
@@ -929,7 +982,7 @@ class Waterfall3DView(gl.GLViewWidget):
             ys = np.full(e - s, y_val, dtype=np.float32)
             zs = zs_all[s:e].astype(np.float32)
             pos = np.column_stack([xs, ys, zs]).astype(np.float32)
-            item = gl.GLLinePlotItem(pos=pos, color=_PEAK_RAY_RGBA, width=3.0,
+            item = gl.GLLinePlotItem(pos=pos, color=color, width=width,
                                      mode="line_strip", antialias=False,
                                      glOptions="opaque")
             self.addItem(item)

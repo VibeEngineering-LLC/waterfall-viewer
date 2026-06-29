@@ -180,6 +180,32 @@ def test_slice_reset_zoom_restores_full_view(app):
     assert sx1 - sx0 > 1.5 and tx1 - tx0 > 1.5              # вид шире узкого зума 1.0
 
 
+# ---------- #125: сброс зума/смещения по двойному клику ----------
+
+def test_slice_double_click_resets_zoom(app):
+    """#125: двойной клик по графику среза/времени → reset_zoom; одиночный — нет."""
+    p = SlicePanel()
+    calls = []
+    p.reset_zoom = lambda: calls.append(1)                  # шпион вместо метода
+
+    class _Ev:
+        def __init__(self, dbl):
+            self._d = dbl
+
+        def double(self):
+            return self._d
+
+        def accept(self):
+            pass
+
+    p._on_plot_double_click(_Ev(False))                     # одиночный клик не сбрасывает
+    assert calls == []
+    # сигнал сцены обоих графиков с дабл-кликом -> reset_zoom (проверка проводки)
+    p._spectrum_plot.scene().sigMouseClicked.emit(_Ev(True))
+    p._series_plot.scene().sigMouseClicked.emit(_Ev(True))
+    assert calls == [1, 1]
+
+
 # ---------- #98: «фоновая простыня» на 3D-водопаде ----------
 
 def test_view3d_bg_sheet_toggle(app):

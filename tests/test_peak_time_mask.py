@@ -169,5 +169,31 @@ def test_real_transient_stays_a_single_mid_segment():
     assert mask.mean() < 0.5, "транзиент не покрывает всю ось времени"
 
 
+# ---------- #126: релаксированная маска для гребня 3D (вместо «весь гребень») ----------
+
+def test_relaxed_mask_bounds_weak_peak_strict_rejects():
+    """#126: слабый пик (net < фон столбца) СТРОГАЯ маска (#112) отвергает целиком
+    (Currie-колоночный гейт) → раньше гребень рисовался на ВСЮ ось (пустое место).
+    Релаксированная маска (noise_factor=0, min_peak_over_bg=0) ограничена зоной
+    подъёма: .any() True, не .all(), ядро покрыто, хвосты пусты."""
+    z = _column_peak(range(10, 20), amp=20.0, bg=50.0)       # net≈20 < фон 50
+    strict = peak_time_mask(z, PEAK_CH)
+    assert not strict.any(), "сценарий #126: строгая маска должна обнулиться"
+    relaxed = peak_time_mask(z, PEAK_CH, noise_factor=0.0, min_peak_over_bg=0.0)
+    assert relaxed.any(), "релакс-маска не пуста — гребень рисуется в зоне подъёма"
+    assert not relaxed.all(), "не вся ось (именно это и был баг продления на пустое)"
+    assert relaxed[13:17].all(), "ядро подъёма покрыто"
+    assert not relaxed[:5].any() and not relaxed[26:].any(), "хвосты (пусто) исключены"
+    assert _segments(relaxed) == 1, "один непрерывный сегмент, не пунктир"
+
+
+def test_relaxed_mask_empty_column_stays_empty():
+    """#126: ровный столбец без подъёма над фоном → даже релаксированная маска пуста
+    (net_max<=0). Edit B: пустая маска → гребень НЕ рисуется (рисовать нечего)."""
+    z = np.full((NT, NC), BG, dtype=np.float64)              # подъёма нет нигде
+    relaxed = peak_time_mask(z, PEAK_CH, noise_factor=0.0, min_peak_over_bg=0.0)
+    assert not relaxed.any(), "нет подъёма над фоном → маска пуста → гребня нет"
+
+
 def test_export_is_same_object():
     assert peak_time_mask is _direct

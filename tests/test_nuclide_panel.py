@@ -154,3 +154,90 @@ def test_add_nuclide_replaces_not_duplicates(app):
     # повторное добавление заменяет, не дублирует
     p.add_nuclide(Nuclide(name="Po-210", lines=g))
     assert _leaf_names(p._tree).count("Po-210") == 1
+
+# ---------- Задача #127: идентификация по найденным пикам ----------
+
+def _strong_peaks():
+    # сильные пики: Cs-137 (662), K-40 (1460), Co-60 (1173+1332)
+    return [_fp(661.66), _fp(1460.8), _fp(1173.2, 800.0), _fp(1332.5, 720.0)]
+
+
+def test_show_candidates_uses_spinbox_default_threshold(app):
+    # #127: без явного min_confidence порог берётся из спинбокса (дефолт 0.30)
+    p = NuclidePanel(default_library())
+    assert abs(p._ident_min_conf.value() - 0.30) < 1e-9
+    p.show_candidates(_strong_peaks())
+    assert abs(p._ident_min_conf.value() - 0.30) < 1e-9  # спинбокс не сдвинут
+    names = [p._cand.topLevelItem(i).text(0)
+             for i in range(p._cand.topLevelItemCount())]
+    for expected in ("Cs-137", "K-40", "Co-60"):
+        assert expected in names
+
+
+def test_ident_status_reports_counts(app):
+    # #127: статус «идентифицировано N нуклид(ов) по M пик(ам)»
+    p = NuclidePanel(default_library())
+    peaks = _strong_peaks()
+    p.show_candidates(peaks, min_confidence=0.5)
+    txt = p._ident_status.text()
+    assert "Идентификация:" in txt
+    assert f"по {len(peaks)} пик" in txt
+    n_top = p._cand.topLevelItemCount()
+    assert f"{n_top} нуклид" in txt
+
+
+def test_clear_candidates_resets_status(app):
+    # #127: очистка возвращает статус к прочерку
+    p = NuclidePanel(default_library())
+    p.show_candidates(_strong_peaks(), min_confidence=0.5)
+    assert "нуклид" in p._ident_status.text()
+    p.clear_candidates()
+    assert p._ident_status.text() == "Идентификация: —"
+
+
+def test_empty_peaks_status_dash(app):
+    # #127: пустой список пиков -> прочерк, дерево пусто
+    p = NuclidePanel(default_library())
+    p.show_candidates([])
+    assert p._cand.topLevelItemCount() == 0
+    assert p._ident_status.text() == "Идентификация: —"
+
+
+def test_click_candidate_checks_nuclide_and_highlights(app):
+    # #127: клик по кандидату -> нуклид отмечен в библиотеке, linesChanged эмитнут
+    p = NuclidePanel(default_library())
+    emitted = []
+    p.linesChanged.connect(lambda lines: emitted.append(lines))
+    p.show_candidates(_strong_peaks(), min_confidence=0.5)
+    cs = next(p._cand.topLevelItem(i)
+              for i in range(p._cand.topLevelItemCount())
+              if p._cand.topLevelItem(i).text(0) == "Cs-137")
+    p._on_candidate_clicked(cs)
+    assert "Cs-137" in p._checked
+    assert emitted and len(emitted[-1]) >= 1
+    releaf = _find_leaf(p._tree, "Cs-137")
+    assert releaf.checkState(0) == QtCore.Qt.Checked
+
+
+def test_click_child_line_uses_parent_nuclide(app):
+    # #127: клик по дочерней строке (линии) отмечает родительский нуклид
+    p = NuclidePanel(default_library())
+    p.show_candidates(_strong_peaks(), min_confidence=0.5)
+    co = next(p._cand.topLevelItem(i)
+              for i in range(p._cand.topLevelItemCount())
+              if p._cand.topLevelItem(i).text(0) == "Co-60")
+    assert co.childCount() >= 1
+    p._on_candidate_clicked(co.child(0))
+    assert "Co-60" in p._checked
+
+
+def test_threshold_change_rerenders_and_filters(app):
+    # #127: повышение порога не увеличивает число кандидатов (valueChanged -> re-render)
+    p = NuclidePanel(default_library())
+    p.show_candidates(_strong_peaks())
+    p._ident_min_conf.setValue(0.0)
+    count_low = p._cand.topLevelItemCount()
+    p._ident_min_conf.setValue(0.95)
+    count_high = p._cand.topLevelItemCount()
+    assert count_low >= 1
+    assert count_high <= count_low
