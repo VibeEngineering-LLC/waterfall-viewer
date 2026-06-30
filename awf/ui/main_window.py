@@ -9,6 +9,7 @@ from awf.io.aswf_loader import load_aswf
 from awf.io.nuclide_lib import default_library
 from awf.ui.view3d import Waterfall3DView, SectionControls
 from awf.ui.panels import HeatmapPanel, SlicePanel
+from awf.analysis.peaks import auto_calibrate_fwhm_model   # Задача #130: модель FWHM(E) для идентификации
 from awf.ui.analytics_panel import AnalyticsPanel
 from awf.ui.background_dialog import BackgroundDialog   # Задача #96
 from awf.model.background import (background_from_range, background_from_spectrogram,
@@ -18,6 +19,8 @@ from awf.ui.colormaps import COLORMAPS
 from awf.ui.palette_dialog import PaletteDialog
 from awf.ui.nuclide_panel import NuclidePanel
 from awf.ui.peaks_panel import PeaksPanel   # Задача #111: панель «Найденные пики»
+from awf.ui.segments_panel import SegmentsPanel   # Задача #131: панель «Сегментация по времени»
+from awf.analysis.segment import segment_by_time, identify_segments   # Задача #131
 from awf.ui.knobs import AdjustPanel
 from awf.ui.cyclebutton import CycleButton   # Задача #74: переключатель-перебор вместо QComboBox
 from awf.ui.style import APP_QSS
@@ -176,6 +179,22 @@ class MainWindow(QtWidgets.QMainWindow):
         self._peaks_panel.peakSelected.connect(self._view3d.set_peak_highlight)
         self._peaks_panel.peakVisibilityChanged.connect(self._view3d.set_peak_visible)
 
+        # Задача #131: панель «Сегментация по времени» — авто-сегменты записи + посегментная
+        # идентификация нуклидов. Док рядом с «Найденными пиками» (та же левая стопка вкладок).
+        self._segments_panel = SegmentsPanel()
+        self._segments_panel.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        segdock = QtWidgets.QDockWidget("Сегментация по времени", self)
+        segdock.setObjectName("dock_segments")    # Задача #40: имя нужно saveState/restoreState
+        segdock.setWidget(self._segments_panel)
+        segdock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
+        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, segdock)
+        self.tabifyDockWidget(pdock, segdock)
+        self._segments_dock = segdock
+        self._register_i18n(segdock.setWindowTitle, "Сегментация по времени")
+        # клик по нуклиду в дереве сегментов → отметить его в библиотеке (подсветка линий)
+        self._segments_panel.recomputeRequested.connect(self._on_segment_recompute)
+        self._segments_panel.nuclideSelected.connect(self._nuclides._check_nuclide)
+
         self._build_menu()
         self._build_toolbar()
         # Задача #62: строка статуса была скучена — задаём минимальную высоту и шрифт в коде
@@ -233,6 +252,11 @@ class MainWindow(QtWidgets.QMainWindow):
         # Задача #111: PeaksPanel имеет собственный retranslate() для заголовков колонок
         try:
             self._peaks_panel.retranslate()
+        except (AttributeError, RuntimeError):
+            pass
+        # Задача #131: SegmentsPanel — собственный retranslate() заголовков/кнопки/статуса
+        try:
+            self._segments_panel.retranslate()
         except (AttributeError, RuntimeError):
             pass
 
@@ -329,6 +353,16 @@ class MainWindow(QtWidgets.QMainWindow):
                             "Отметить найденные фотопики на 3D-спектрограмме")
         self._act_peaks.toggled.connect(self._on_peaks_toggled)
         m.addAction(self._act_peaks)
+        m.addSeparator()
+        # Задача #131: авто-сегментация записи по времени + посегментная идентификация нуклидов.
+        # Слабые источники (урановое стекло, K-40) тонут в интегральном спектре, но всплывают
+        # в своём временном сегменте.
+        self._act_segments = QtGui.QAction("Сегментация по времени…", self)
+        self._register_i18n(self._act_segments.setText, "Сегментация по времени…")
+        self._register_i18n(self._act_segments.setToolTip,
+                            "Разбить запись по времени и идентифицировать нуклиды в каждом сегменте")
+        self._act_segments.triggered.connect(self._on_segments_action)
+        m.addAction(self._act_segments)
 
     def _build_service_menu(self, m) -> None:
         """Задача #106: «Сервис» → подменю «Язык» с пунктами Русский / English (QActionGroup,
@@ -354,6 +388,7 @@ class MainWindow(QtWidgets.QMainWindow):
         меню «Изотопы» — переиспользуется тот же QAction (один action в двух меню)."""
         for dock, label in (
             (self._peaks_dock, "Найденные пики"),
+            (self._segments_dock, "Сегментация по времени"),   # Задача #131
             (self._slices_dock, "Срезы / Сечения / Выборки"),
             (self._sdock, "Сечения (3D)"),
             (self._adock, "Регулировки отображения"),
@@ -540,13 +575,42 @@ class MainWindow(QtWidgets.QMainWindow):
         Задача #127: те же найденные пики скормить модулю идентификации нуклидов."""
         peaks = self._view3d._found_peaks()
         self._peaks_panel.set_peaks(peaks)
-        self._nuclides.show_candidates(peaks)
         sg = self._sg
+        # Задача #130: та же авто-модель FWHM(E) (#120), что и у детектора пиков, — окно
+        # матчинга идентификации по РЕАЛЬНОЙ ширине детектора, а не по грубому дефолту.
+        fwhm_model = None
+        if sg is not None:
+            counts = np.asarray(sg.total_spectrum(), dtype=np.float64)
+            energies = np.asarray(sg.energies(), dtype=np.float64)
+            fwhm_model = auto_calibrate_fwhm_model(counts, energies)
+        self._nuclides.show_candidates(peaks, fwhm_model=fwhm_model)
         if sg is not None:
             total = float(np.asarray(sg.real_time_s, dtype=np.float64).sum())
             self._peaks_panel.set_window_info(int(sg.n_slices), total)
         else:
             self._peaks_panel.set_window_info(None, None)
+
+    @QtCore.Slot(float)
+    def _on_segment_recompute(self, pen_factor: float = 2.0) -> None:
+        """Задача #131: пересчитать сегментацию записи по времени + посегментную ID нуклидов.
+        Модель FWHM(E) строится раз по суммарному спектру (разрешение от времени не зависит)
+        и переиспользуется во всех сегментах."""
+        sg = self._sg
+        if sg is None:
+            self._segments_panel.clear_segments()
+            return
+        counts = np.asarray(sg.total_spectrum(), dtype=np.float64)
+        energies = np.asarray(sg.energies(), dtype=np.float64)
+        fwhm_model = auto_calibrate_fwhm_model(counts, energies)
+        segs = segment_by_time(sg, pen_factor=float(pen_factor))
+        sidents = identify_segments(sg, self._nuclides.library(), segs, fwhm_model=fwhm_model)
+        self._segments_panel.set_segments(sidents)
+
+    def _on_segments_action(self) -> None:
+        """Задача #131: пункт меню «Сегментация по времени…» — показать док и пересчитать."""
+        self._segments_dock.show()
+        self._segments_dock.raise_()
+        self._segments_panel._on_recompute()   # эмит recomputeRequested(pen_factor)
 
     def _active_spectrogram(self):
         """Задача #96: активная спектрограмма для 3D/2D/срезов — с вычтенным фоном, если вычет

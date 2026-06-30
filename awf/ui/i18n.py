@@ -84,6 +84,20 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "с": "s",
         "мин": "min",
         "ч": "h",
+        # Задача #131: панель «Сегментация по времени» и её строки
+        "Сегментация по времени": "Time segmentation",
+        "Сегментация по времени…": "Time segmentation…",
+        "Разбить запись по времени и идентифицировать нуклиды в каждом сегменте":
+            "Split the record over time and identify nuclides in each segment",
+        "Сегментировать": "Segment",
+        "Сегментов": "Segments",
+        "Сегмент": "Segment",
+        "кэВ": "keV",
+        "нуклиды не идентифицированы": "no nuclides identified",
+        "Сегмент / Нуклид": "Segment / Nuclide",
+        "Время / линия": "Time / line",
+        "Увер. / счёт": "Confid. / count",
+        "Категория / Δ": "Category / Δ",
         # Меню «Сервис → Язык»
         "Язык": "Language",
         "Русский": "Russian",

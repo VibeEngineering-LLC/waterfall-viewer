@@ -45,5 +45,8 @@ scripts/_proto_out/
 scripts/proto_peaks3d.py
 tests/test_proto_peaks3d.py
 scripts/_*
+# Диагностические скрипты сессий #114/#130 — грузят реальные .aswf через argv (PII), dev-only.
+# ВАЖНО: каталог пишется со слешем (scripts/diag/), а не scripts/diag_* — иначе паттерн не ловит подпапку.
 scripts/diag_*
+scripts/diag/
 scripts/ollama/_*

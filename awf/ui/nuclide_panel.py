@@ -74,6 +74,9 @@ class NuclidePanel(QtWidgets.QWidget):
         self._color_by_name: dict = {}
         self._checked: set = set()
         self._found_peaks: list = []
+        # Задача #130: модель FWHM(E) детектора для окна матчинга идентификации;
+        # main_window прокидывает авто-калиброванную (#120), иначе грубый дефолт.
+        self._ident_fwhm_model = None
         self._fetch_thread = None
 
         root = QtWidgets.QVBoxLayout(self)
@@ -272,11 +275,17 @@ class NuclidePanel(QtWidgets.QWidget):
         return self._collect_lines()
 
     # ---------- идентификация по найденным пикам (Задача #127 / 12.3 / 11) ----------
-    def show_candidates(self, found_peaks, *, min_confidence: float = None) -> None:
+    def show_candidates(self, found_peaks, *, min_confidence: float = None,
+                        fwhm_model=None) -> None:
         """Задача #127: принять НАЙДЕННЫЕ пики (из подсистемы поиска #110/#111) и показать
         идентифицированные нуклиды. Порог уверенности берётся из спинбокса панели; если
-        min_confidence передан явно (старый контракт/тесты) — выставляет спинбокс под него."""
+        min_confidence передан явно (старый контракт/тесты) — выставляет спинбокс под него.
+
+        Задача #130: fwhm_model(E)->FWHM(E) — модель ширины детектора для окна матчинга
+        (main_window прокидывает авто-калиброванную #120); None → грубый дефолт."""
         self._found_peaks = list(found_peaks)
+        if fwhm_model is not None:
+            self._ident_fwhm_model = fwhm_model
         if min_confidence is not None:
             self._ident_min_conf.blockSignals(True)
             self._ident_min_conf.setValue(float(min_confidence))
@@ -291,9 +300,13 @@ class NuclidePanel(QtWidgets.QWidget):
         if not self._nuclides or not self._found_peaks:
             self._ident_status.setText("Идентификация: —")
             return
+        # Задача #130: apply_priors=True — давить ложные кандидаты (осколочные/медицинские/
+        # космогенные) априорами правдоподобия; fwhm_model — реальная ширина детектора (#120).
         results = identify_peaks(
             self._found_peaks, self._nuclides,
-            min_confidence=float(self._ident_min_conf.value()))
+            fwhm_model=self._ident_fwhm_model,
+            min_confidence=float(self._ident_min_conf.value()),
+            apply_priors=True)
         for r in results:
             self._add_candidate_row(r)
         for i in range(self._cand.columnCount()):

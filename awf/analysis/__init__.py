@@ -37,6 +37,15 @@ from awf.analysis.cluster import (
     ClusterResult, kmeans, cluster, segments,
     is_available as cluster_available,
 )
+# Задача #131: авто-сегментация по времени + посегментная идентификация
+from awf.analysis.segment import (
+    TimeSegment, SegmentIdent, segment_by_time, identify_segments,
+)
+# Задача #133: цепочечное (decay-chain) равновесие Ra-226 / Th-232
+from awf.analysis.chain_equilibrium import (
+    ChainGroupResult, ChainResult,
+    check_ra226_chain, check_th232_chain, analyze_chains, identify_with_chains,
+)
 
 __all__ = [
     "FoundPeak", "PeakArea", "MdaResult", "LineMatch", "IdentResult",
@@ -52,4 +61,9 @@ __all__ = [
     "ProjectionResult", "feature_matrix", "project", "pca", "projection_available",
     "DeconvolutionResult", "deconvolve_multiplet",
     "ClusterResult", "kmeans", "cluster", "segments", "cluster_available",
+    # Задача #131
+    "TimeSegment", "SegmentIdent", "segment_by_time", "identify_segments",
+    # Задача #133
+    "ChainGroupResult", "ChainResult",
+    "check_ra226_chain", "check_th232_chain", "analyze_chains", "identify_with_chains",
 ]

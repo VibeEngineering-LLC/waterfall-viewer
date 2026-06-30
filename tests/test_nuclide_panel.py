@@ -115,7 +115,9 @@ def test_clear_selection(app):
 def test_candidates_correct_first(app):
     p = NuclidePanel(default_library())
     peaks = [_fp(661.66), _fp(1460.8), _fp(1173.2, 800.0), _fp(1332.5, 720.0)]
-    p.show_candidates(peaks, min_confidence=0.5)
+    # Задача #130: приоритеты демотируют техногенные/осколочные нуклиды (~0.5);
+    # порог снижен 0.5→0.30 (продакшн-дефолт), природный K-40 (~0.999) доминирует
+    p.show_candidates(peaks, min_confidence=0.30)
     names = [p._cand.topLevelItem(i).text(0)
              for i in range(p._cand.topLevelItemCount())]
     assert names, "кандидаты не построены"
@@ -208,7 +210,8 @@ def test_click_candidate_checks_nuclide_and_highlights(app):
     p = NuclidePanel(default_library())
     emitted = []
     p.linesChanged.connect(lambda lines: emitted.append(lines))
-    p.show_candidates(_strong_peaks(), min_confidence=0.5)
+    # Задача #130: порог 0.5→0.30 — Cs-137 с приоритетом ~0.4999 теперь ниже 0.5
+    p.show_candidates(_strong_peaks(), min_confidence=0.30)
     cs = next(p._cand.topLevelItem(i)
               for i in range(p._cand.topLevelItemCount())
               if p._cand.topLevelItem(i).text(0) == "Cs-137")
@@ -222,7 +225,8 @@ def test_click_candidate_checks_nuclide_and_highlights(app):
 def test_click_child_line_uses_parent_nuclide(app):
     # #127: клик по дочерней строке (линии) отмечает родительский нуклид
     p = NuclidePanel(default_library())
-    p.show_candidates(_strong_peaks(), min_confidence=0.5)
+    # Задача #130: порог 0.5→0.30 — Co-60 с приоритетом ~0.4997 теперь ниже 0.5
+    p.show_candidates(_strong_peaks(), min_confidence=0.30)
     co = next(p._cand.topLevelItem(i)
               for i in range(p._cand.topLevelItemCount())
               if p._cand.topLevelItem(i).text(0) == "Co-60")
