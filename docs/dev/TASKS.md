@@ -1543,6 +1543,32 @@ Currie-гейты, остаётся только относительный по
 (`autoRange`, #100). 2 теста (`test_slice_series_y_floor_zero` — пол=0 после загрузки;
 `test_slice_series_y_floor_survives_reset_zoom` — пол держится после сброса зума). **Полный pytest — 506 passed.**
 
+**#129 — зелёные гребни пиков 3D снова тянутся на пустое поле (рецидив #112/#126)**
+(`awf/analysis/peaks.py`, `awf/ui/view3d.py`, `tests/test_peak_time_mask.py`): оператор
+«гребни снова на всю ось». Диагностика показала: релаксированный фолбэк из #126
+(`peak_time_mask(z, jc, noise_factor=0.0, min_peak_over_bg=0.0)`) — НЕ редкий edge-case, а
+ОСНОВНОЙ путь рендера гребней (даже для крупных легитимных пиков строгий колоночный
+Currie-гейт `net_max < min_peak_over_bg·bg_level` спуска́ется, если фон по боковым каналам
+(`_shoulder_baseline`) завышен относительно локального фона именно этого пика — подтверждено
+на собственной фикстуре `test_peaks_ui._make_sg()`). При `noise_factor=0.0` порог вырождается
+в чистый относительный `net_s≥0.15·max` — на РЕАЛЬНОМ пуассоновском шуме (не на детерминированных
+`np.tile`-фикстурах старых тестов) это регулярно даёт покрытие, близкое к 100 % оси. Фикс —
+новый опциональный параметр `peak_time_mask(..., abs_floor=False)`: при `abs_floor=True` порог
+считается НЕ от нуля, а от `floor=median(нижней/фоновой половины net_s)` — `thr_abs=floor+
+noise_factor·σ_noise`; `abs_floor=False` (дефолт) — поведение байт-в-байт как раньше (не ломает
+инвариант «стабильная слабая линия почти сплошная», где `floor` был бы неверен). Вызов в
+`_add_peak_ridge` (фолбэк) переведён на `noise_factor=6.0, min_peak_over_bg=0.0, abs_floor=True`
+(6.0 подобран численно по seed-развёртке синтетического шумного транзиента — даёт локализованный
+сегмент, не покрывает всю ось). Второй раунд: epsilon-защита `sigma_noise=max(σ,1e-9·max)` в
+паре с `abs_floor=True` ломала идеально плоские/детерминированные столбцы (реальный MAD=0) —
+`thr_abs` инфинитезимально превышал `floor`, и `net_s`, сидящий РОВНО на `floor`, не проходил
+`>=`. Фикс: epsilon-защита применяется только при `abs_floor=False`; при `abs_floor=True`
+используется НЕОБРЕЗАННЫЙ MAD (при истинном нуле `thr_abs==floor` точно, `net_s>=floor`
+выполняется тривиально). +2 регрессионных теста: `test_129_noisy_narrow_transient_relaxed_mask_not_full_axis`
+(20 seed-ов пуассоновского шума с узким транзиентом — ни один не даёт покрытие >90% оси),
+`test_129_flat_deterministic_column_not_broken_by_abs_floor` (плоский столбец без шума проходит
+целиком под `abs_floor=True`). **Полный pytest — 532 passed.**
+
 **#130 — неверная идентификация нуклидов (движок скоринга V4)** (`awf/analysis/identify.py`,
 `awf/ui/nuclide_panel.py`, `awf/ui/main_window.py`, `tests/test_nuclide_panel.py`): на реальном
 файле (ториевый TIG-электрод Th-232 + фон + урановое стекло U-238/U-235 + K-40) панель сообщала
@@ -1634,6 +1660,78 @@ retention≈0.3, Pb-210 информационна (не ломает конси
 одиночная линия→отложено, smoke `identify_with_chains([], [])→([], [])`. UI-пометка линий «член
 цепочки X» (часть шага 3 плана порта) — отдельная UI-задача под визуальное подтверждение оператора,
 осознанно отложена. **Полный pytest — 530 passed** (было 522 + 8).
+
+**#134 — вычет фона некорректен, когда фон = самому спектру (должен уходить в 0)**
+(`awf/model/background.py` — `subtract_background`; тесты `tests/test_background.py`,
+`tests/test_bg_ui.py`). **Диагностика на реальном файле оператора** (256 срезов × 8191 канал,
+Σсчёт 2 522 742, Σlive 15360 с; путь через argv, gitignored `scripts/diag/bg134_selfsub.py`):
+при фон=весь файл интеграл остатка обязан сокращаться в ноль поканально
+(`Σ_t (counts − bg_cps·lt) = total_counts − bg_cps·total_lt = 0`), но `np.clip(sub, 0, None)`
+в `subtract_background` **асимметрично** разрушал сокращение — положительные срезовые остатки
+(срезы выше средней скорости) выживали, отрицательные (ниже средней) прибивались к 0 → ложный
+**+18.60 %** положительный интеграл (469219 из 2522742) вместо 0. **Корень:** поканальный фон —
+это скорость (cps), знаковый остаток `counts − bg_cps·lt` — единственная форма, при которой
+интеграл по времени точно сокращается; клип брал только положительную «половину» шумовых
+флуктуаций вокруг средней. **Фикс:** убран `np.clip(sub, 0.0, None, out=sub)` — вычтенная
+спектрограмма хранит **знаковый** остаток. **Почему это безопасно для видов:**
+`zscale._base_transform` уже делает `np.maximum(a, 0)` для всех режимов (lin/sqrt/log) — 3D-рельеф
+и 2D-карта гасят отрицательные ячейки на этапе ОТОБРАЖЕНИЯ, поэтому визуально не меняются; а
+интегральный (суммарный по времени) спектр среза считается из сырых `counts` и теперь корректно
+уходит в ~0. Grep подтвердил — иной код на неотрицательность вычтенных `counts` не опирался.
+Знаковый остаток и статистически корректнее в общем случае (отдельный лёгкий фон-файл): снимает
+восходящее смещение клипа. **Overlay** (наложение кривой фона) при фон=весь файл **совпадает с
+самим спектром по построению** (`bg_cps·Σlt ≡ Σcounts`) — правки не требовал, только тест-замок.
+**Тесты:** `test_background.py` — `test_subtract_clips_negatives_to_zero`→`test_subtract_keeps_signed_net`
+(знаковый −2, не клип к 0), +`test_self_subtraction_integrates_to_zero` (диапазон-фон, интеграл≈0,
+отрицательные присутствуют), +`test_self_subtraction_via_file_path_integrates_to_zero`
+(`background_from_spectrogram`, интеграл≈0), +`test_overlay_equals_spectrum_when_bg_is_whole_file`;
+`test_bg_ui.py::test_mainwindow_subtract_reduces_waterfall` — старый assert `(counts>=0).all()`
+заменён на инвариант #134 (интеграл≈0 + знаковость). Диагностика после фикса: остаток **−0.00 %**
+(обе ветки). **Полный pytest — 535 passed** (было 530 + 3 нетто-новых, 2 переписаны на месте).
+
+**#REL-1..#REL-4 — гигиена релиза на GitHub** (по внешнему план-ревью «Задача: исправить 4 падающих
+теста и дефекты упаковки/CI»; оператор уточнил: это анализ состояния **чистого GitHub-релиза**, НЕ
+локального рабочего дерева). **Корень расхождения «4 failed vs 535 passed»:** на чистом клоне публичного
+репо `scipy` отсутствует в `requirements.txt`, а `sample_data/*.n42` gitignored → 4 падения тестов, где
+scipy — жёсткая зависимость (`awf/analysis/peaks.py:88` `curve_fit`, `awf/analysis/deconvolve.py:61`
+`lsq_linear`) + 3 skip (нет sample-файла, `tests/test_data_layer.py` `requires_sample`). Локально
+(scipy 1.17.1 + sample) те же тесты дают 535 passed.
+
+- **#REL-1** (готово): `scipy>=1.13` добавлен в `requirements.txt` с комментарием-обоснованием
+  (curve_fit/lsq_linear). Смягчён fallback-ассерт `tests/test_fwhm_calibration.py:104`:
+  `assert model.b < 0.99 * _DEF_B` (запас 1% страхует ветку БЕЗ scipy, где auto-калибровка FWHM(E) не
+  сходится и `b == _DEF_B`, а не строго меньше). Полный pytest локально — 535 passed.
+
+- **#REL-2** (готово): новый `pyproject.toml` (PEP 621, `setuptools>=68`, `wheel`). `name`,
+  `dynamic=["version"]` из `attr = "awf.__version__"` (=0.1.0), `requires-python>=3.12`, зависимости —
+  зеркало `requirements.txt`, `optional-dependencies.dev=["pytest>=8.0"]`, `[project.gui-scripts]
+  atomspectra = "awf.ui.main_window:main"`, `packages=[awf, awf.model, awf.io, awf.ui, awf.analysis]`,
+  `[tool.setuptools.package-data] awf=["data/*.json"]` + `include-package-data=false`. **Разгадка
+  «73 CSV в wheel»:** setuptools при сборке pip из НЕ-git временной копии не читает `.gitignore` и
+  сметает физически присутствующий `awf/data/iaea_cache/*.csv` (я нагенерил их фетчером при разработке).
+  Но `git ls-files awf/data/iaea_cache/` = **0** (gitignored, в репо не попадал) → wheel из чистого клона
+  их не содержит физически. **Честная проверка:** сборка wheel из staging-каталога только с
+  git-tracked файлами (симуляция чистого клона + новый pyproject/CI) → `iaea csv in wheel: 0`,
+  `nuclides.json` + `nuclide_categories.json` присутствуют, entry-point `[gui_scripts]
+  atomspectra = awf.ui.main_window:main`, 41 py-модуль. Заявление «iaea_cache в дистрибутив не входит» —
+  проверено.
+
+- **#REL-3** (готово): `.github/workflows/tests.yml`. `ubuntu-latest`, matrix `python: [3.12, 3.13]` +
+  `include: 3.14 experimental:true`; шаги `checkout@v4` → `setup-python@v5` → apt
+  `libegl1 libgl1 libxkbcommon0 libdbus-1-3` (headless-PySide6 даже с offscreen) → `pip install .[dev]` →
+  `pytest -q` c `continue-on-error: ${{ matrix.experimental || false }}` и env `QT_QPA_PLATFORM=offscreen`,
+  `PYTHONIOENCODING=utf-8`. YAML провалидирован. `.gitignore` дополнен `*.egg-info/` (артефакт сборки).
+
+- **#REL-4** (готово): перенос AI-артефактов в `docs/dev/` через `git mv` (оператор через
+  AskUserQuestion выбрал расширенный scope — **и `KNOWN_ISSUES.md` тоже**): `CLAUDE.md`→`docs/dev/CLAUDE_NOTES.md`,
+  `TASKS.md`, `IMPLEMENTATION_PLAN.md`, `KNOWN_ISSUES.md`, `_specs/` → `docs/dev/`. В корне создана тонкая
+  заглушка-указатель `CLAUDE.md` (сохраняет автозагрузку Claude Code + критичные инварианты: §24 push-гейт,
+  §12 зоны, offscreen/utf-8 для pytest, scipy hard-dep, §5 русский). Ссылки на `KNOWN_ISSUES.md` в
+  `README.md` (1) и `INSTALL.md` (2) поправлены на `docs/dev/KNOWN_ISSUES.md`. Код на переносимые файлы не
+  ссылается (grep по репо чист). `awf.__version__` резолвится (0.1.0). **Полный pytest после переноса —
+  535 passed** (перенос .md-файлов на тесты не влияет, подтверждено).
+
+**Push НЕ выполнялся — гейт оператора (§24, публичный `VibeEngineering-LLC/atomspectra-waterfall-viewer`).**
 
 **Задача 26 — Вкладка «Аналитика»** (`awf/ui/analytics_panel.py` + `main_window.py`): `AnalyticsPanel`
 (2D-скаттер проекций, по одному `ScatterPlotItem` на кластер для легенды; каждая точка несёт индекс
