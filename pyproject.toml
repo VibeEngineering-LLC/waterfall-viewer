@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atomspectra-waterfall-viewer"
+dynamic = ["version"]
+description = "Просмотр и анализ waterfall-спектрограмм гамма-спектрометра (AtomSpectra/RadiaCode/N42)"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+dependencies = [
+    "numpy>=2.0",
+    "scipy>=1.13",
+    "lxml>=5.0",
+    "PySide6>=6.6",
+    "pyqtgraph>=0.13.3",
+    "PyOpenGL>=3.1.7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.gui-scripts]
+atomspectra = "awf.ui.main_window:main"
+
+[tool.setuptools]
+packages = ["awf", "awf.model", "awf.io", "awf.ui", "awf.analysis"]
+# По умолчанию setuptools' include-package-data=True: при сборке pip из НЕ-git временной
+# копии .gitignore не читается и в дистрибутив сметается ВСЁ содержимое пакетов (в т.ч.
+# регенерируемый data/iaea_cache/*.csv). Выключаем — включаем строго по package-data ниже.
+include-package-data = false
+
+[tool.setuptools.dynamic]
+version = { attr = "awf.__version__" }
+
+[tool.setuptools.package-data]
+# iaea_cache (CSV) намеренно gitignored/регенерируемый — в дистрибутив не входит; ядро идентификации = nuclides.json
+awf = ["data/*.json"]

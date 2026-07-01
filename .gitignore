@@ -22,6 +22,9 @@ build/
 dist/
 *.spec
 
+# Сборка пакета (pip wheel / setuptools build)
+*.egg-info/
+
 # IDE / прочее
 .vscode/
 .idea/
