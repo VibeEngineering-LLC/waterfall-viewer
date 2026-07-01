@@ -90,6 +90,9 @@ _FLOOR_FRAC = 0.02             # доля высоты рельефа, ниже 
 # Задача #78: верхний предел энергии для вывода и сетки 3D-водопада. Каналы с энергией выше
 # отсекаются ПОСЛЕ LOD-прорежки — и рельеф, и деления оси энергии обрезаются согласованно.
 _MAX_ENERGY_KEV = 3000.0
+# Задача #135: k критического уровня Currie для «простыни» фона (тот же k, что в гашении
+# вычета #136 — background.gate_significant_net): простыня = фон + k·σ, прорежённый max-LOD.
+_BG_SHEET_K = 3.0
 # Задача #110: выделение фотопиков на 3D-водопаде. Каждый пик — зелёная линия по гребню рельефа
 # вдоль оси времени (или её части, #112) на энергии пика (на ПОЛЕ спектрограммы, не у ребра);
 # occlusion #95 прячет линию за высоким рельефом.
@@ -459,11 +462,21 @@ class Waterfall3DView(gl.GLViewWidget):
         e_full = np.asarray(self._sg.energies(), dtype=np.float64)
         if e_full.size != bg.size:
             return
-        bg_b = np.interp(self._ch_centers, e_full, bg) * self._bg_unit_factor()
+        # Задача #135: простыня на КРИТИЧЕСКОМ уровне Currie (фон + k·σ, тот же k, что в гашении
+        # вычета #136), прорежённом тем же max-LOD, что рельеф — согласовано с вычетом (ниже
+        # простыни поверхность неотличима от фона). При фон=образец поднимается к «полу» поверхности.
+        lt = np.asarray(self._sg.live_time_s, dtype=np.float64)
+        lam = np.asarray(bg, dtype=np.float64)[None, :] * lt[:, None]    # ожид. counts фона на ячейку
+        crit = lam + _BG_SHEET_K * np.sqrt(np.maximum(lam, 0.0))         # критуровень Currie, counts
+        if self._unit == "cps":
+            crit = crit / np.maximum(lt[:, None], 1e-9)                  # -> cps, как рельеф
+        crit_lod, _t, _c = self._sg.downsample(self._max_time, self._max_chan,
+                                               method="max", data=crit)
+        col_crit = np.asarray(crit_lod, dtype=np.float64)[:, :self._nc].max(axis=0)
         vals = np.asarray(self._z_counts, dtype=np.float64).ravel()
         hts = np.asarray(self._z_surface, dtype=np.float64).ravel()
         order = np.argsort(vals)
-        bg_h = np.interp(bg_b, vals[order], hts[order]).astype(np.float32)
+        bg_h = np.interp(col_crit, vals[order], hts[order]).astype(np.float32)
         self._add_bg_sheet(bg_h)
 
     def _add_bg_sheet(self, bg_h) -> None:

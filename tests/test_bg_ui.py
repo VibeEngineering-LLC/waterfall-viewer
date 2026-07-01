@@ -225,6 +225,31 @@ def test_view3d_bg_sheet_toggle(app):
     assert v._bg_sheet is None                          # выключили -> простыня снята
 
 
+def test_view3d_bg_sheet_currie_raised(app):
+    # #135: при фон=образец «простыня» встаёт на критуровень Currie (bg + kσ), а не тонет на
+    # среднем фоне. Эталон — тот же max-LOD и та же карта value->height, но БЕЗ критнадбавки:
+    # критуровневая простыня обязана лежать не ниже средней и строго выше в целом.
+    from awf.ui.view3d import Waterfall3DView
+    from awf.model.background import background_from_range
+    v = Waterfall3DView()
+    sg = _make_sg(ns=16, nc=24)
+    v.set_spectrogram(sg)
+    bg = background_from_range(sg, 0, sg.n_slices)       # фон = весь файл (самофон)
+    cap = {}
+    v._add_bg_sheet = lambda h: cap.__setitem__("h", np.asarray(h, dtype=float))
+    v.set_background_sheet(bg)
+    v.set_background_sheet_visible(True)
+    h_crit = cap["h"]
+    mean_field = bg[None, :] * np.ones((sg.n_slices, 1))  # cps, без критнадбавки (default unit=cps)
+    lod, _t, _c = sg.downsample(v._max_time, v._max_chan, method="max", data=mean_field)
+    col_mean = np.asarray(lod, dtype=float)[:, :v._nc].max(axis=0)
+    vals = np.asarray(v._z_counts, dtype=float).ravel(); hts = np.asarray(v._z_surface, dtype=float).ravel()
+    o = np.argsort(vals)
+    h_mean = np.interp(col_mean, vals[o], hts[o])
+    assert h_crit.size == v._nc
+    assert np.all(h_crit >= h_mean - 1e-6) and np.median(h_crit) > np.median(h_mean)
+
+
 # ---------- #101: нижняя граница оси Y графика спектра зафиксирована ----------
 
 def test_slice_spectrum_y_floor_linear(app):

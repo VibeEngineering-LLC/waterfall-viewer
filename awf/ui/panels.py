@@ -7,6 +7,7 @@ from awf.ui.zscale import (apply_z_scale, DEFAULT_GAIN, DEFAULT_GAMMA, DEFAULT_C
 from awf.ui.colormaps import get_colormap
 from awf.analysis.peakmap import DEFAULT_WINDOWS
 from awf.model.dose import dose_rate_series  # Задача #104: мощность дозы (RadiaCode)
+from awf.model.background import background_window_like  # Задача #139: сырой фон, «лохматый как образец»
 
 # Задача #110: поиск фотопиков перенесён на 3D-водопад (awf/ui/view3d.py) — раньше (#108) маркеры
 # рисовались здесь, на спектре среза; оператор попросил вести поиск на 3D-спектрограмме.
@@ -345,6 +346,7 @@ class SlicePanel(QtWidgets.QWidget):
         self._series_section_items = []  # маркеры сечений Времени на графике отсчётов (Задача #42)
         self._ewin_active = None  # (e_lo,e_hi) активного энергоокна временного профиля (Задача 19)
         self._bg_cps = None       # поканальный фон cps (Задача #96), длина = n_channels
+        self._bg_raw = None       # Задача #139: (counts_блок, lt_блок) сырого фонового окна | None
         self._bg_overlay = False  # наложение кривой фона на спектр среза (Задача #96)
         self._dose = None         # np.ndarray дозы по срезам (Задача #104)
         self._dose_unit = "mSv/h" # единицы дозы (Задача #104): 'mSv/h' | 'uSv/h'
@@ -634,9 +636,13 @@ class SlicePanel(QtWidgets.QWidget):
         if self._raw_ewin is not None:
             self._ewin_curve.setData(self._raw_ewin[0], self._series_to_unit(self._raw_ewin[1]))
 
-    def set_background(self, bg_cps) -> None:
-        """Задача #96: задать поканальный фон (cps) для наложения; None — снять. Перерисовать."""
+    def set_background(self, bg_cps, raw=None) -> None:
+        """Задача #96: задать поканальный фон (cps) для наложения; None — снять. Перерисовать.
+        Задача #139: raw = (counts_блок, lt_блок) сырого фонового окна (range-источник) для
+        «лохматого» оверлея; None — оверлей падает на гладкий bg_cps (file-источник)."""
         self._bg_cps = None if bg_cps is None else np.asarray(bg_cps, dtype=np.float64).ravel()
+        self._bg_raw = None if raw is None else (np.asarray(raw[0], dtype=np.float64),
+                                                 np.asarray(raw[1], dtype=np.float64).ravel())
         self._render_spectrum()
 
     def set_background_overlay(self, on: bool) -> None:
@@ -655,7 +661,12 @@ class SlicePanel(QtWidgets.QWidget):
         if not self._bg_overlay or bg is None or bg.size != e.size:
             self._bg_curve.setData([], [])
             return
-        disp = bg if self._unit == "cps" else bg * float(lt_total or 0.0)
+        if self._bg_raw is not None:                      # Задача #139: «лохматый» сырой фон
+            cnt, lt = self._bg_raw
+            raw = background_window_like(cnt, lt, lt_total)   # сырые отсчёты за живое время окна образца
+            disp = raw / float(lt_total) if (self._unit == "cps" and lt_total) else raw
+        else:
+            disp = bg if self._unit == "cps" else bg * float(lt_total or 0.0)
         disp = np.asarray(smooth_counts(disp, self._smooth, axis=-1), dtype=np.float64)
         if self._spec_log:
             disp = np.where(disp > 0.0, disp, np.nan)

@@ -6,7 +6,8 @@ import pytest
 
 from awf.model.spectrogram import Calibration, Spectrogram
 from awf.model.background import (background_from_range, background_from_spectrogram,
-                                  subtract_background)
+                                  subtract_background, gate_significant_net,
+                                  background_window_like)
 
 
 def _sg(counts, coeffs=(0.0, 1.0), live=None, real=None):
@@ -123,3 +124,137 @@ def test_file_zero_live_time_raises():
     target = _sg(np.zeros((1, 2), dtype=np.float64))
     with pytest.raises(ValueError):
         background_from_spectrogram(bg_sg, target)
+
+
+# ---------- #136: значимостное гашение нетто (самовычет читается как ноль, как в BecqMoni) ----------
+
+def test_gate_zeros_subthreshold_noise():
+    # Задача #136: нетто в пределах счётной статистики (|net| < kσ, σ≈√(bg·lt)) гасится в ноль.
+    # base=40, отклонения ±3 при σ≈√40≈6.3, 3σ≈19 => весь нетто-шум уходит в 0 (самовычет=ноль).
+    # Столбцы отклонений суммируются в 0 => bg=ровно 40/канал, net=отклонение.
+    base = np.full((4, 3), 40.0)
+    dev = np.array([[3, -2, 1], [-3, 2, -1], [2, -3, 3], [-2, 3, -3]], dtype=np.float64)
+    sg = _sg(base + dev, live=[1.0, 1.0, 1.0, 1.0])
+    bg = background_from_range(sg, 0, sg.n_slices)          # ≈40 cps/канал
+    sub = subtract_background(sg, bg)
+    gated = gate_significant_net(sub, bg, k=3.0)
+    assert np.count_nonzero(gated.counts) == 0             # весь нетто-шум погашен в ноль
+
+
+def test_gate_keeps_significant_net():
+    # Задача #136: значимый нетто-пик (|net| ≫ kσ) переживает гашение; фоновая ячейка (net=0) гаснет.
+    base = np.full((3, 3), 40.0)
+    base[1, 1] += 200.0                                     # яркий транзиент: срез 1, канал 1
+    sg = _sg(base, live=[1.0, 1.0, 1.0])
+    bg = background_from_range(sg, 0, sg.n_slices)
+    sub = subtract_background(sg, bg)
+    gated = gate_significant_net(sub, bg, k=3.0)
+    assert gated.counts[1, 1] > 0.0                        # значимый нетто пережил гашение
+    assert gated.counts[0, 0] == 0.0                       # канал 0 стационарен (net=0) => 0
+
+
+def test_gate_returns_new_spectrogram_without_mutating():
+    # гашение отдаёт НОВУЮ спектрограмму; исходный знаковый вычет (модель среза, #134) не трогаем.
+    sg = _sg(np.array([[10, 1], [2, 9]], dtype=np.float64), live=[1.0, 1.0])
+    bg = background_from_range(sg, 0, sg.n_slices)
+    sub = subtract_background(sg, bg)
+    before = sub.counts.copy()
+    gated = gate_significant_net(sub, bg, k=3.0)
+    assert gated is not sub
+    assert np.array_equal(sub.counts, before)              # исходный вычет не мутирован
+
+
+def test_gate_length_mismatch_raises():
+    sg = _sg(np.array([[1.0, 1.0]]))
+    sub = subtract_background(sg, np.array([0.0, 0.0]))
+    with pytest.raises(ValueError):
+        gate_significant_net(sub, np.array([1.0, 2.0, 3.0]))
+# ---------- #137: посегментно усреднённый нетто (образец и фон сглажены одинаково) ----------
+
+def _seg(t_lo, t_hi):
+    # лёгкий TimeSegment: region_averaged_net читает только .t_lo/.t_hi
+    from awf.analysis.segment import TimeSegment
+    return TimeSegment(t_lo, t_hi, 0.0, 0.0, 0.0, 0)
+
+
+def test_region_averaged_self_subtract_is_exact_zero():
+    # Задача #137: фон = весь файл, один участок стабильности на всю запись => образец,
+    # усреднённый по участку, тождественно равен фону => нетто ≡ 0 поканально (точный ноль,
+    # без гейта 3σ). Именно это оператор проверял в BecqMoni: вычет одинаковых спектров = ноль.
+    from awf.model.background import region_averaged_net
+    counts = np.array([[10, 1], [2, 9], [6, 5], [0, 3]], dtype=np.float64)
+    sg = _sg(counts, live=[1.0, 2.0, 1.0, 3.0])
+    bg = background_from_range(sg, 0, sg.n_slices)
+    out = region_averaged_net(sg, bg, [_seg(0, sg.n_slices)])
+    assert np.allclose(out.counts, 0.0, atol=1e-9)          # самовычет = точный ноль везде
+
+
+def test_region_averaged_preserves_per_region_integral():
+    # Задача #137: усреднение перераспределяет отсчёты РАВНОМЕРНО (по live-time) внутри участка,
+    # но интеграл нетто по участку сохраняется точно = Σ(counts − bg·lt) — знаковая модель #134.
+    from awf.model.background import region_averaged_net
+    counts = np.array([[10, 1], [2, 9], [6, 5], [0, 3]], dtype=np.float64)
+    sg = _sg(counts, live=[1.0, 2.0, 1.0, 3.0])
+    bg = background_from_range(sg, 0, sg.n_slices)
+    out = region_averaged_net(sg, bg, [_seg(0, 2), _seg(2, 4)])   # два участка
+    signed = subtract_background(sg, bg)                          # эталон интеграла (#134)
+    for lo, hi in [(0, 2), (2, 4)]:
+        assert np.allclose(out.counts[lo:hi].sum(axis=0),
+                           signed.counts[lo:hi].sum(axis=0), atol=1e-9)
+
+
+def test_region_averaged_is_smooth_within_region():
+    # Задача #137: внутри участка все срезы показывают ОДНУ форму спектра (net_rate·lt) —
+    # образец сглажен так же, как фон; убирает картину «фон гладкий, образец шумный».
+    from awf.model.background import region_averaged_net
+    counts = np.array([[10, 1], [2, 9], [6, 5]], dtype=np.float64)
+    sg = _sg(counts, live=[1.0, 2.0, 3.0])
+    bg = np.array([1.0, 1.0])                                # произвольный фон (не весь файл): net≠0
+    out = region_averaged_net(sg, bg, [_seg(0, 3)])
+    rate = out.counts / np.asarray(sg.live_time_s)[:, None]  # cps/канал каждого среза
+    assert np.allclose(rate[0], rate[1]) and np.allclose(rate[1], rate[2])   # одинаковая форма
+    assert not np.allclose(rate[0], 0.0)                     # форма нетривиальна (net_rate≠0)
+
+
+def test_region_averaged_length_mismatch_raises():
+    from awf.model.background import region_averaged_net
+    sg = _sg(np.array([[1.0, 1.0]]))
+    with pytest.raises(ValueError):
+        region_averaged_net(sg, np.array([1.0, 2.0, 3.0]), [_seg(0, 1)])
+
+
+# ---------- #139: сырой фон, «лохматый как образец» (совпадение статистики по live-time) ----------
+
+def test_bg_window_full_range_equals_raw_sum():
+    # tgt = полное живое время фона => Σ сырых отсчётов (полный пуассонов шум, «лохматый»)
+    counts = np.array([[10, 0], [2, 8], [6, 4]], dtype=np.float64)
+    win = background_window_like(counts, np.array([1.0, 1.0, 1.0]), 3.0)
+    assert np.allclose(win, [18.0, 12.0])              # Σ по времени, без усреднения
+
+
+def test_bg_window_scales_to_target_live_time():
+    # tgt=1 покрывается первым срезом; масштаб ровно к tgt (коэффициент 1.0)
+    counts = np.array([[10, 0], [4, 8]], dtype=np.float64)
+    win = background_window_like(counts, np.array([1.0, 1.0]), 1.0)
+    assert np.allclose(win, [10.0, 0.0])               # первый срез, без усреднения
+
+
+def test_bg_window_matches_sample_window():
+    # ключевой инвариант #139: фон=образцу и окно совпадает => оверлей == сырому образцу
+    counts = np.array([[10, 3], [2, 9], [6, 5], [0, 7]], dtype=np.float64)
+    lt = np.array([1.0, 1.0, 1.0, 1.0])
+    smp = counts[0:2].sum(axis=0)                       # «образец»: сырое окно [0:2]
+    win = background_window_like(counts[0:2], lt[0:2], 2.0)
+    assert np.allclose(win, smp)                        # совпали (фон не сглажен)
+
+
+def test_bg_window_zero_target_returns_raw_sum():
+    counts = np.array([[5, 1], [3, 2]], dtype=np.float64)
+    win = background_window_like(counts, np.array([1.0, 1.0]), 0.0)
+    assert np.allclose(win, [8.0, 3.0])                # tgt<=0 => Σ сырых (fallback)
+
+
+def test_bg_window_bad_shape_raises():
+    with pytest.raises(ValueError):
+        background_window_like(np.array([1.0, 2.0]), np.array([1.0]), 1.0)
+
