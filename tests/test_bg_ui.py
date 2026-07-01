@@ -86,7 +86,12 @@ def test_mainwindow_subtract_reduces_waterfall(app):
     w._on_bg_subtract_toggled(True)                    # вычет включён
     assert float(w._slices._sg.counts.sum()) < orig    # 3D/2D/срезы — на вычтенных данных
     assert float(w._heatmap._sg.counts.sum()) < orig
-    assert (w._slices._sg.counts >= 0).all()           # отрицательные клипнуты к 0
+    # Задача #134: остаток ЗНАКОВЫЙ (клип к 0 убран). Фон = весь диапазон => интегральный
+    # (суммарный по времени) спектр сокращается в ~0 поканально; отрицательные ячейки есть
+    # в модели и гасятся к 0 лишь на отображении (zscale._base_transform).
+    integrated = w._slices._sg.counts.sum(axis=0)
+    assert np.allclose(integrated, 0.0, atol=1e-6)     # точное сокращение при фон=спектр
+    assert (w._slices._sg.counts < 0).any()            # знаковость: отрицательные присутствуют
     w._on_bg_subtract_toggled(False)                   # выключение -> исходный водопад
     assert float(w._slices._sg.counts.sum()) == pytest.approx(orig)
     w.close()

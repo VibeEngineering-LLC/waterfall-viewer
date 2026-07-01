@@ -7,8 +7,12 @@
   * отдельный файл — суммарная скорость; при иной калибровке интерполируется по спектральной
     плотности (cps/кэВ) и пересчитывается на ширину каналов целевой спектрограммы.
 
-Вычитание идёт на уровне отсчётов: counts[t,ch] - bg_cps[ch]*live_time[t], клип к 0 — поэтому
-и в режиме «отсчёты», и в режиме cps все виды показывают корректно вычтенный сигнал.
+Вычитание идёт на уровне отсчётов: counts[t,ch] - bg_cps[ch]*live_time[t]. Остаток ЗНАКОВЫЙ
+(без клипа к 0, Задача #134) — только так интеграл по времени сокращается точно: когда фон =
+самому спектру, Σ_t (counts − bg_cps·lt) = total_counts − bg_cps·total_lt = 0 поканально.
+Отрицательные ячейки гасятся к нулю уже на этапе ОТОБРАЖЕНИЯ (zscale._base_transform →
+np.maximum(a,0)), поэтому 3D/2D-виды выглядят как прежде, а суммарный (интегральный) спектр
+среза корректно уходит в ноль.
 """
 from __future__ import annotations
 
@@ -60,15 +64,17 @@ def background_from_spectrogram(bg_sg, target_sg) -> np.ndarray:
 
 
 def subtract_background(sg, bg_cps) -> Spectrogram:
-    """Новая спектрограмма с вычтенным фоном: counts[t,ch] - bg_cps[ch]*live_time[t], клип к 0
-    (Задача #96). Калибровка и временные оси сохраняются; вычет в отсчётах => виды и в counts,
-    и в cps показывают корректный остаток."""
+    """Новая спектрограмма с вычтенным фоном: counts[t,ch] - bg_cps[ch]*live_time[t] (Задача #96).
+    Остаток ЗНАКОВЫЙ, без клипа к 0 (Задача #134): поканальный клип асимметрично разрушал
+    сокращение и оставлял ложный ~18 % положительный остаток при фон=спектр (должно быть 0).
+    Без клипа Σ_t остаток = total_counts − bg_cps·total_lt = 0 поканально при фон=весь файл.
+    Калибровка/временные оси сохраняются; отрицательные ячейки гасятся к 0 на отображении
+    (zscale._base_transform), поэтому 3D/2D-виды не меняются, а интегральный спектр уходит в 0."""
     bg = np.asarray(bg_cps, dtype=np.float64).ravel()
     if bg.size != sg.n_channels:
         raise ValueError("subtract_background: длина bg_cps != числу каналов")
     lt = np.asarray(sg.live_time_s, dtype=np.float64)
     sub = sg.counts.astype(np.float64) - bg[None, :] * lt[:, None]
-    np.clip(sub, 0.0, None, out=sub)
     return Spectrogram(counts=sub, calibration=sg.calibration,
                        time_offsets_s=sg.time_offsets_s, real_time_s=sg.real_time_s,
                        live_time_s=sg.live_time_s, t0_iso=sg.t0_iso, source_path=sg.source_path)
