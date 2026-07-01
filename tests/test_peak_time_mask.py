@@ -195,5 +195,34 @@ def test_relaxed_mask_empty_column_stays_empty():
     assert not relaxed.any(), "нет подъёма над фоном → маска пуста → гребня нет"
 
 
+def test_129_noisy_narrow_transient_relaxed_mask_not_full_axis():
+    """Задача #129 (рецидив #112/#126): узкий слабый транзиент в РЕАЛЬНОМ пуассоновском
+    шуме — релаксированная маска гребня 3D (noise_factor=6.0, abs_floor=True, как вызывает
+    view3d._add_peak_ridge) не должна растягиваться на всю ось времени (это и был баг
+    рецидива), а локализоваться у истинного окна присутствия. Проверка по seed-ам 1..20."""
+    nt, nc, ch = 300, 64, 30
+    lo, hi = 123, 155
+    bg_level = 300.0
+    full_axis_hits = 0
+    for seed in range(1, 21):
+        rng = np.random.default_rng(seed)
+        z = rng.poisson(bg_level, size=(nt, nc)).astype(np.float64)
+        z[lo:hi, ch] += rng.poisson(15.0, size=hi - lo)
+        mask = peak_time_mask(z, ch, noise_factor=6.0, min_peak_over_bg=0.0, abs_floor=True)
+        if mask.mean() > 0.9:
+            full_axis_hits += 1
+    assert full_axis_hits == 0, f"{full_axis_hits}/20 seed дали почти-сплошную маску (рецидив #129)"
+
+
+def test_129_flat_deterministic_column_not_broken_by_abs_floor():
+    """Задача #129 (epsilon-регрессия): идеально плоский/детерминированный столбец
+    (реальный MAD=0, как в тестах test_peaks_ui.py на np.tile-фикстурах) не должен
+    ломаться под abs_floor=True — epsilon-защита порога не должна давать thr_abs>floor
+    для данных без единой крупицы шума."""
+    z = _column_peak(range(NT), amp=200.0)   # присутствует во всех срезах, шума нет
+    mask = peak_time_mask(z, PEAK_CH, noise_factor=6.0, min_peak_over_bg=0.0, abs_floor=True)
+    assert mask.all(), "плоский столбец без шума должен пройти порог целиком (thr_abs==floor)"
+
+
 def test_export_is_same_object():
     assert peak_time_mask is _direct

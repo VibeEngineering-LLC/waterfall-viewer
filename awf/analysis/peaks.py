@@ -407,6 +407,7 @@ def peak_time_mask(
     smooth_sigma: Optional[float] = None,  # σ гаусс-сглаживания net (None → авто от nt)
     close_len: Optional[int] = None,    # заращивать разрывы ≤ close_len (None → авто от nt)
     min_len: int = _PTM_MIN_LEN,        # убрать сегменты < min_len (binary opening)
+    abs_floor: bool = False,            # Задача #129: считать thr_abs от floor, не от нуля
 ) -> np.ndarray:
     """
     Маска присутствия фотопика по времени для обрезки 3D-хребта (Задача #112).
@@ -424,7 +425,16 @@ def peak_time_mask(
     (2) Currie-подобный АБСОЛЮТНЫЙ порог над ФОНОМ (нулём net, baseline уже вычтен):
         net_s ≥ noise_factor·σ_noise, где σ_noise=1.4826·центрированный MAD нижней половины
         сглаж. net (фоновая/спадовая зона) — чистый шум, а не уровень сигнала. Устойчивее
-        хрупкого относит. rel_threshold·max(net); rel_threshold оставлен лёгким относит.полом;
+        хрупкого относит. rel_threshold·max(net); rel_threshold оставлен лёгким относит.полом.
+        abs_floor=True (Задача #129) добавляет к порогу floor=медиану той же нижней
+        половины: net уже прошёл clip(...,0,None), поэтому даже чистый шум ректифицирован
+        в положительный пол, а не ноль (реализация Пуассона не бывает <0). Для СТАБИЛЬНОЙ
+        линии (сигнал есть во всех срезах) нижняя половина — часть самого́ плато, а не
+        истинный фон, и floor-поправка НЕДОПУСТИМА (ложно режет стабильный сигнал) — потому
+        она НЕ включена по умолчанию и применяется только там, где столбцовый Currie-гейт
+        (min_peak_over_bg) уже снят (релакс-фолбэк _add_peak_ridge для узкого транзиента,
+        не прошедшего строгий гейт): noise_factor=0 там давал thr_abs≈0, а ректифицированный
+        шумовой пол уже выше — маска ложно покрывала почти всю ось (баг #129);
     (3) морфология: binary closing заращивает разрывы ≤ close_len (стабильная линия →
         почти сплошная маска), opening убирает сегменты < min_len (одиночный выброс гаснет).
     Транзиент длиной ≥ min_len переживает обе операции (границы сдвиг ≤ полуокна).
@@ -481,9 +491,15 @@ def peak_time_mask(
     low = net_s[net_s <= med_s]                              # фоновая/спадовая часть
     if low.size < 2:
         low = net_s
+    floor = float(np.median(low)) if abs_floor else 0.0      # Задача #129 (см. docstring)
     sigma_noise = 1.4826 * float(np.median(np.abs(low - np.median(low))))
-    sigma_noise = max(sigma_noise, 1e-9 * net_s_max)         # защита от нулевого MAD
-    thr_abs = noise_factor * sigma_noise
+    if not abs_floor:
+        sigma_noise = max(sigma_noise, 1e-9 * net_s_max)     # легаси-защита порога от нуля
+    # (abs_floor=True: НЕ подмешивать epsilon — иначе идеально плоский/детерминированный
+    # столбец (реальный MAD=0, напр. тест test_peak_search_marks_three_peaks) даёт
+    # thr_abs=floor+ε>floor, и net_s (везде РОВНО floor) строго не проходит cond_abs.
+    # Без epsilon при sigma_noise=0 получаем thr_abs=floor, net_s>=floor выполняется.)
+    thr_abs = floor + noise_factor * sigma_noise
     cond_abs = net_s >= thr_abs
     cond_rel = net_s >= rel_threshold * net_s_max  # лёгкий относит. пол (доля от max)
     raw = cond_abs & cond_rel
