@@ -99,8 +99,9 @@ def test_auto_calibrate_b_positive():
     spec, energies = _narrow_spectrum(true_b)
     model = auto_calibrate_fwhm_model(spec, energies)
     assert model.b > 0.0
-    # b калиброван у́же дефолта (узкие пики)
-    assert model.b < _DEF_B
+    # b калиброван у́же дефолта (узкие пики); запас 1% страхует fallback-ветку без
+    # scipy, где auto-калибровка не сходится и b==_DEF_B (Задача #REL-1)
+    assert model.b < 0.99 * _DEF_B
 
 
 def test_auto_calibrate_short_energies_returns_default():
