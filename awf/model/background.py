@@ -36,6 +36,25 @@ def background_from_range(sg, t_lo: int, t_hi: int) -> np.ndarray:
     return gross / lt
 
 
+def background_window_like(bg_counts, bg_lt, target_lt) -> np.ndarray:
+    """Задача #139: сырой фоновый спектр той же статистики, что окно образца. Суммируем сырые
+    отсчёты фонового блока за живое время target_lt (окно образца) → совпадающий пуассонов шум."""
+    counts = np.asarray(bg_counts, dtype=np.float64)
+    lt = np.asarray(bg_lt, dtype=np.float64).ravel()
+    if counts.ndim != 2 or counts.shape[0] == 0 or lt.size != counts.shape[0]:
+        raise ValueError("background_window_like: неверная форма фонового блока")
+    tgt = float(target_lt or 0.0)
+    total = float(lt.sum())
+    if tgt <= 0.0 or total <= 0.0:
+        return counts.sum(axis=0)
+    if tgt >= total:
+        return counts.sum(axis=0) * (tgt / total)
+    k = min(int(np.searchsorted(np.cumsum(lt), tgt, side="left")) + 1, counts.shape[0])
+    win = counts[:k, :].sum(axis=0)
+    win_lt = float(lt[:k].sum())
+    return win * (tgt / win_lt) if win_lt > 0.0 else win
+
+
 def _channel_widths(energies) -> np.ndarray:
     """Ширина каналов по энергии (кэВ/канал) через градиент монотонной шкалы энергий."""
     e = np.asarray(energies, dtype=np.float64)
@@ -78,3 +97,60 @@ def subtract_background(sg, bg_cps) -> Spectrogram:
     return Spectrogram(counts=sub, calibration=sg.calibration,
                        time_offsets_s=sg.time_offsets_s, real_time_s=sg.real_time_s,
                        live_time_s=sg.live_time_s, t0_iso=sg.t0_iso, source_path=sg.source_path)
+
+
+def gate_significant_net(sub_sg, bg_cps, k: float = 3.0) -> Spectrogram:
+    """Значимостное гашение нетто для ОТОБРАЖЕНИЯ 3D/2D-водопада (Задача #136): ячейки,
+    статистически неотличимые от нуля (|net| < k·σ, σ≈√(bg·lt) — критический уровень Currie),
+    обнуляются. При фон=весь файл нетто каждого среза — пуассонов счётный шум √N (сокращается
+    только в интеграле по времени), поэтому гаснет ~весь водопад: самовычет читается как ноль,
+    как вычет одинаковых спектров в BecqMoni. Реальный значимый нетто-пик (|net| ≫ kσ) переживает.
+    Это ОТДЕЛЬНАЯ копия для 3D/2D; знаковую модель среза (#134, интегральный спектр = точный ноль)
+    не трогаем. Возвращает новую Spectrogram; вход не мутируется."""
+    net = np.asarray(sub_sg.counts, dtype=np.float64)
+    bg = np.asarray(bg_cps, dtype=np.float64).ravel()
+    if bg.size != sub_sg.n_channels:
+        raise ValueError("gate_significant_net: длина bg_cps != числу каналов")
+    lt = np.asarray(sub_sg.live_time_s, dtype=np.float64)
+    sigma = np.sqrt(np.maximum(bg[None, :] * lt[:, None], 1.0))
+    gated = np.where(np.abs(net) >= float(k) * sigma, net, 0.0)
+    return Spectrogram(counts=gated, calibration=sub_sg.calibration,
+                       time_offsets_s=sub_sg.time_offsets_s, real_time_s=sub_sg.real_time_s,
+                       live_time_s=sub_sg.live_time_s, t0_iso=sub_sg.t0_iso,
+                       source_path=sub_sg.source_path)
+
+def region_averaged_net(sg, bg_cps, segments) -> Spectrogram:
+    """Задача #137: посегментно усреднённый нетто для 3D/2D-водопада (режим «усреднённый вычет»).
+
+    Корень #137: на водопаде образец (одиночный срез) — пуассонов счётный шум √N, а фон bg_cps·lt
+    сглажен (среднее по всему файлу); «способ отображения разный», отсюда и вычет разный. Здесь
+    образец усредняется ТАК ЖЕ, как фон, но внутри каждого УЧАСТКА СТАБИЛЬНОСТИ (segment_by_time,
+    #131): avg_smp_i[ch] = Σ_{t∈Ri} counts / Σ_{t∈Ri} lt (cps/канал). Нетто участка
+    net_rate_i = avg_smp_i − bg_cps (обе стороны — скорости, «одинаковый способ»); каждый срез
+    t∈Ri получает net_rate_i·lt[t] — образец и фон сглажены одинаково.
+
+    Свойства: (1) шум усреднён честно, поэтому гейт 3σ (#136) в этом режиме не нужен; (2) интеграл
+    нетто по КАЖДОМУ участку сохраняется точно: Σ_{Ri} out = Σ_{Ri}(counts − bg·lt) — знаковая
+    модель среза (#134) не нарушена; (3) при фон=весь файл и одном стационарном участке
+    avg_smp≡bg_cps ⇒ out≡0 поканально: самовычет одинаковых спектров = точный ноль (как BecqMoni).
+    Возвращает новую Spectrogram; вход не мутируется."""
+    bg = np.asarray(bg_cps, dtype=np.float64).ravel()
+    if bg.size != sg.n_channels:
+        raise ValueError("region_averaged_net: длина bg_cps != числу каналов")
+    counts = np.asarray(sg.counts, dtype=np.float64)
+    lt = np.asarray(sg.live_time_s, dtype=np.float64)
+    out = np.zeros_like(counts)
+    for seg in segments:
+        lo = max(0, int(seg.t_lo)); hi = min(sg.n_slices, int(seg.t_hi))
+        if hi <= lo:
+            continue
+        lt_sum = float(lt[lo:hi].sum())
+        if lt_sum <= 0.0:
+            continue
+        avg_smp = counts[lo:hi, :].sum(axis=0) / lt_sum       # cps/канал: образец, усреднённый по участку
+        net_rate = avg_smp - bg                                # cps/канал: нетто (образец − фон)
+        out[lo:hi, :] = net_rate[None, :] * lt[lo:hi, None]    # обратно в отсчёты по live-time среза
+    return Spectrogram(counts=out, calibration=sg.calibration,
+                       time_offsets_s=sg.time_offsets_s, real_time_s=sg.real_time_s,
+                       live_time_s=sg.live_time_s, t0_iso=sg.t0_iso, source_path=sg.source_path)
+

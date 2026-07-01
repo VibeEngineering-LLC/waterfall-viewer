@@ -13,7 +13,7 @@ from awf.analysis.peaks import auto_calibrate_fwhm_model   # Задача #130: 
 from awf.ui.analytics_panel import AnalyticsPanel
 from awf.ui.background_dialog import BackgroundDialog   # Задача #96
 from awf.model.background import (background_from_range, background_from_spectrogram,
-                                  subtract_background)
+                                  subtract_background)   # #138: прямой поканальный вычет сырых данных
 from awf.ui.zscale import Z_MODES
 from awf.ui.colormaps import COLORMAPS
 from awf.ui.palette_dialog import PaletteDialog
@@ -83,6 +83,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Задача #96: фон и вычитание. _bg_cps — поканальная скорость фона (cps), выровненная по
         # энергии текущего файла; _bg_subtract/_bg_overlay — состояние пунктов меню «Анализ».
         self._bg_cps = None
+        self._bg_raw = None        # Задача #139: (counts_блок, lt_блок) сырого фонового окна (range-источник)
         self._bg_subtract = False
         self._bg_overlay = False
 
@@ -522,7 +523,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.warning(self, "Выбор фона", f"{type(exc).__name__}: {exc}")
             return
         self._bg_cps = bg
-        self._slices.set_background(bg)
+        self._slices.set_background(bg, self._bg_raw)   # Задача #139: сырой блок для «лохматого» оверлея
         self._view3d.set_background_sheet(bg)              # Задача #98: «простыня» фона на 3D
         self._act_bg_overlay.setEnabled(True)
         self._act_bg_subtract.setEnabled(True)
@@ -530,11 +531,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.statusBar().showMessage("Фон выбран. Доступны «Наложение» и «Вычет».")
 
     def _compute_background(self, spec):
-        """Задача #96: спецификация диалога -> поканальный фон (cps), выровненный по текущему файлу."""
+        """Задача #96: спецификация диалога -> поканальный фон (cps), выровненный по текущему файлу.
+        Задача #139: для range-источника сташим сырой блок отсчётов+живого времени (self._bg_raw),
+        по нему оверлей окна срезов строит фон, «лохматый как образец» (background_window_like)."""
         if spec and spec[0] == "range":
+            lo = max(0, int(spec[1])); hi = min(self._sg.n_slices, int(spec[2]))
+            self._bg_raw = (np.asarray(self._sg.counts[lo:hi], dtype=np.float64),
+                            np.asarray(self._sg.live_time_s, dtype=np.float64)[lo:hi])
             return background_from_range(self._sg, spec[1], spec[2])
         if spec and spec[0] == "file":
             bg_sg = load_spectrogram(spec[1]).trimmed_channels(1)
+            self._bg_raw = None      # #139: иная калибровка -> сырой матч не строим (оверлей = гладкий bg_cps)
             return background_from_spectrogram(bg_sg, self._sg)
         raise ValueError("неизвестный источник фона")
 
@@ -621,8 +628,13 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _redistribute(self) -> None:
         """Задача #96: раздать активную спектрограмму в 3D/2D/срезы (аналитика — всегда на
-        исходных данных). Порядок как в _on_loaded: срезы -> карта (она шлёт roiChanged)."""
-        sg = self._active_spectrogram()
+        исходных данных). Порядок как в _on_loaded: срезы -> карта (она шлёт roiChanged).
+
+        Задача #138 (решение оператора: «вычитай сырые данные поканально, ничего не усредняй»):
+        3D, 2D и срезы получают ОДНУ И ТУ ЖЕ активную спектрограмму — прямой знаковый поканальный
+        вычет сырых данных (subtract_background, #134). Посегментное усреднение (#137) и гейт 3σ
+        (#136) из проводки 3D/2D убраны: способ отображения везде одинаков, вычет — как есть."""
+        sg = self._active_spectrogram()               # #138: поканальный вычет #134 (или сырые данные)
         if sg is None:
             return
         self._view3d.set_spectrogram(sg)
@@ -635,6 +647,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """Задача #96: сброс фона при загрузке нового файла — снять кривую/вычет и обесточить
         пункты меню «Наложение/Вычет фона» (на новых данных старый фон бессмыслен)."""
         self._bg_cps = None
+        self._bg_raw = None                # Задача #139: снять сырой фоновый блок
         self._bg_subtract = False
         self._bg_overlay = False
         self._slices.set_background(None)
