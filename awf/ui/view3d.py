@@ -7,6 +7,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from awf.ui.zscale import (apply_z_scale, DEFAULT_GAIN, DEFAULT_GAMMA,
                            DEFAULT_CLIP, desaturate_rgba, smooth_counts)
 from awf.ui.colormaps import get_colormap
+from awf.model.background import background_window_like   # Задача #140: сырое фоновое окно простыни
 from awf.ui.knobs import Knob          # Задача #59: панель сечений в том же knob-стиле
 from awf.analysis.peaks import (            # Задача #110/#114/#112/#120: поиск фотопиков на 3D-водопаде
     find_peaks, peak_time_mask,
@@ -90,9 +91,8 @@ _FLOOR_FRAC = 0.02             # доля высоты рельефа, ниже 
 # Задача #78: верхний предел энергии для вывода и сетки 3D-водопада. Каналы с энергией выше
 # отсекаются ПОСЛЕ LOD-прорежки — и рельеф, и деления оси энергии обрезаются согласованно.
 _MAX_ENERGY_KEV = 3000.0
-# Задача #135: k критического уровня Currie для «простыни» фона (тот же k, что в гашении
-# вычета #136 — background.gate_significant_net): простыня = фон + k·σ, прорежённый max-LOD.
-_BG_SHEET_K = 3.0
+# Задача #140: критуровень Currie для простыни (#135, _BG_SHEET_K) отменён решением оператора
+# «простыня фона и образец должны строиться одинаково» — простыня строится как рельеф, без надбавок.
 # Задача #110: выделение фотопиков на 3D-водопаде. Каждый пик — зелёная линия по гребню рельефа
 # вдоль оси времени (или её части, #112) на энергии пика (на ПОЛЕ спектрограммы, не у ребра);
 # occlusion #95 прячет линию за высоким рельефом.
@@ -174,6 +174,7 @@ class Waterfall3DView(gl.GLViewWidget):
         self._bg_cps_full = None      # поканальный фон cps (полное разрешение), None — нет фона
         self._bg_sheet_on = False     # видна ли простыня (пункт «Наложение фона», #96/#98)
         self._bg_sheet = None         # GLSurfacePlotItem простыни (или None)
+        self._bg_sheet_raw = None     # Задача #140: (counts_блок, lt_блок) сырого фонового окна | None
 
         # --- геометрия последнего рендера (для позиционирования плоскостей) ---
         self._nt = 0
@@ -429,11 +430,15 @@ class Waterfall3DView(gl.GLViewWidget):
         if self._z_surface is not None:
             self._rebuild_surface()
 
-    def set_background_sheet(self, bg_cps) -> None:
+    def set_background_sheet(self, bg_cps, raw=None) -> None:
         """Задача #98: задать поканальный фон (cps, полное разрешение) для «простыни» на 3D;
-        None — снять. Видимость управляет set_background_sheet_visible («Наложение фона»)."""
+        None — снять. Видимость управляет set_background_sheet_visible («Наложение фона»).
+        Задача #140: raw = (counts_блок, lt_блок) сырого фонового окна (range-источник) —
+        простыня строится из него тем же способом, что рельеф; None — гладкий bg_cps."""
         self._bg_cps_full = (None if bg_cps is None
                              else np.asarray(bg_cps, dtype=np.float64).ravel())
+        self._bg_sheet_raw = None if raw is None else (np.asarray(raw[0], dtype=np.float64),
+                                                       np.asarray(raw[1], dtype=np.float64).ravel())
         self._rebuild_bg_sheet()
 
     def set_background_sheet_visible(self, on: bool) -> None:
@@ -441,18 +446,11 @@ class Waterfall3DView(gl.GLViewWidget):
         self._bg_sheet_on = bool(on)
         self._rebuild_bg_sheet()
 
-    def _bg_unit_factor(self) -> float:
-        """Задача #98: множитель перевода фона cps в единицы рельефа. cps -> 1.0; counts ->
-        медианное живое время среза (рельеф counts зависит от LT — приближение для простыни)."""
-        if self._unit == "cps" or self._sg is None:
-            return 1.0
-        lt = np.asarray(self._sg.live_time_s, dtype=np.float64)
-        pos = lt[lt > 0.0]
-        return float(np.median(pos)) if pos.size else 1.0
-
     def _rebuild_bg_sheet(self) -> None:
-        """Задача #98: «простыня» фона — полупрозрачный лист на высоте рельефа, отвечающей bg(E),
-        постоянный по времени. Высота = интерполяция bg в реализованное value->height рельефа."""
+        """Задача #98/#140: «простыня» фона — полупрозрачный лист, ПОСТРОЕННЫЙ ТЕМ ЖЕ СПОСОБОМ,
+        что рельеф-образец (решение оператора #140: «они должны строиться одинаково»): сырое
+        фоновое окно -> тот же LOD/сглаживание -> та же карта value->height. Постоянна по времени;
+        при фон=образец идёт сквозь рельеф в пределах пуассонова шума, а не над ним."""
         if self._bg_sheet is not None:
             self.removeItem(self._bg_sheet); self._bg_sheet = None
         bg = None if self._bg_cps_full is None else np.asarray(self._bg_cps_full, dtype=np.float64)
@@ -462,21 +460,28 @@ class Waterfall3DView(gl.GLViewWidget):
         e_full = np.asarray(self._sg.energies(), dtype=np.float64)
         if e_full.size != bg.size:
             return
-        # Задача #135: простыня на КРИТИЧЕСКОМ уровне Currie (фон + k·σ, тот же k, что в гашении
-        # вычета #136), прорежённом тем же max-LOD, что рельеф — согласовано с вычетом (ниже
-        # простыни поверхность неотличима от фона). При фон=образец поднимается к «полу» поверхности.
+        # Задача #140 («строить одинаково»): значение канала — СЫРОЙ фоновый спектр за живое
+        # время одного среза (background_window_like, как оверлей #139), без критуровня Currie
+        # (#135 отменён) и без max-агрегации по времени; каналы биннируются тем же max-LOD,
+        # сглаживаются тем же smooth, высота — по той же карте value->height, что рельеф.
+        # Фон-файл с иной калибровкой сырого блока не имеет — гладкий bg_cps (fallback, как #139).
         lt = np.asarray(self._sg.live_time_s, dtype=np.float64)
-        lam = np.asarray(bg, dtype=np.float64)[None, :] * lt[:, None]    # ожид. counts фона на ячейку
-        crit = lam + _BG_SHEET_K * np.sqrt(np.maximum(lam, 0.0))         # критуровень Currie, counts
-        if self._unit == "cps":
-            crit = crit / np.maximum(lt[:, None], 1e-9)                  # -> cps, как рельеф
-        crit_lod, _t, _c = self._sg.downsample(self._max_time, self._max_chan,
-                                               method="max", data=crit)
-        col_crit = np.asarray(crit_lod, dtype=np.float64)[:, :self._nc].max(axis=0)
+        pos = lt[lt > 0.0]
+        lt_ref = float(np.median(pos)) if pos.size else 1.0
+        if self._bg_sheet_raw is not None:
+            win = background_window_like(self._bg_sheet_raw[0], self._bg_sheet_raw[1], lt_ref)
+            val = win / lt_ref if self._unit == "cps" else win
+        else:
+            val = bg if self._unit == "cps" else bg * lt_ref
+        field = np.ones((self._sg.n_slices, 1)) * np.asarray(val, dtype=np.float64)[None, :]
+        lod, _t, _c = self._sg.downsample(self._max_time, self._max_chan,
+                                          method="max", data=field)
+        col = np.asarray(lod, dtype=np.float64)[0, :self._nc]
+        col = np.asarray(smooth_counts(col, self._smooth, axis=-1), dtype=np.float64)
         vals = np.asarray(self._z_counts, dtype=np.float64).ravel()
         hts = np.asarray(self._z_surface, dtype=np.float64).ravel()
         order = np.argsort(vals)
-        bg_h = np.interp(col_crit, vals[order], hts[order]).astype(np.float32)
+        bg_h = np.interp(col, vals[order], hts[order]).astype(np.float32)
         self._add_bg_sheet(bg_h)
 
     def _add_bg_sheet(self, bg_h) -> None:

@@ -1833,6 +1833,58 @@ Currie, σ=√(bg·lt)); при самовычете гаснет ~весь во
 `test_bg_window_zero_target_returns_raw_sum`, `test_bg_window_bad_shape_raises`. **Полный pytest —
 549 passed** (544 + 5). Ждёт визуального подтверждения оператора.
 
+**#140 — простыня фона 3D строится иначе, чем рельеф-образец: строить одинаково**
+(`awf/ui/view3d.py` — переписан `_rebuild_bg_sheet`, `set_background_sheet(bg_cps, raw=None)`,
+удалены `_BG_SHEET_K` (#135 отменён) и dead-code `_bg_unit_factor`; `awf/ui/main_window.py` —
+проводка `self._bg_raw`; `tests/test_bg_ui.py` — тест #135 заменён). **Директива оператора:**
+«сравнивай и построение простыни фона и образца. Они должны строиться одинаково». **Корень
+(Phase 1):** `_rebuild_bg_sheet` расходился с пайплайном рельефа (`set_spectrogram`) в 4 местах:
+(1) вход — гладкий усреднённый `bg_cps` вместо сырых отсчётов; (2) критуровень Currie
+`+k·√(bg·lt)` (#135) — систематическая надбавка, которой у рельефа нет; (3) `max(axis=0)` по
+времени поверх max-LOD (двойной max); (4) нет пользовательского `smooth_counts`. При фон=образец
+простыня принципиально не совпадала с рельефом — висела над ним. **Фикс:** простыня строится тем
+же способом, что рельеф: сырое окно `background_window_like(bg_counts, bg_lt, lt_ref)` (#139,
+`lt_ref` = медианное положительное live-time среза) → cps=`win/lt_ref` | counts=`win` →
+постоянная по времени матрица → тот же `downsample(method="max")` → строка `[0,:nc]` → тот же
+`smooth_counts` → та же карта value→height (`_z_counts`→`_z_surface`). Критуровень #135 отменён
+решением оператора; file-источник фона (сырого блока нет — иная калибровка) — fallback на гладкий
+`bg_cps` (как #139). Семантика: при фон=образец простыня идёт сквозь рельеф в пределах пуассонова
+шума, а не над ним. Тест `test_view3d_bg_sheet_currie_raised` → `test_view3d_bg_sheet_built_like_relief`
+(высоты == эталонному прогону того же пайплайна, atol=1e-5). **Полный pytest — 549 passed**
+(1 тест заменён, число не изменилось). Ждёт визуального подтверждения оператора.
+
+**#141 — фон из файла-источника сглажен на 3D и в срезах: при совпадающей энергосетке брать сырой блок**
+(`awf/ui/main_window.py` — ветка file в `_compute_background`; `tests/test_bg_ui.py` +2 теста).
+**Оператор (2 скриншота):** «Ничего не исправлено. Фон сглажен и на 3d и в окне срезы. Исправляй.
+Фон должен выглядеть так же как образец - это один и тот же исходный файл!» **Корень (Phase 1):**
+#139/#140 подключили сырой блок `_bg_raw` только для **range**-источника; ветка **file** ставила
+`self._bg_raw = None` безусловно (страховка «иная калибровка» из #139) → оба потребителя
+(`_slices.set_background(bg, raw)` и `_view3d.set_background_sheet(bg, raw)`) получали None →
+гладкий fallback `bg_cps` везде. Оператор же выбирает фоном тот же файл → сетка идентична,
+сырой блок валиден поканально. **Фикс:** в file-ветке после `load_spectrogram(...).trimmed_channels(1)`
+сравнить энергосетку с целевой (`e_bg.size == e_t.size and np.allclose(e_bg, e_t)`; цель тоже
+`trimmed_channels(1)` при загрузке — сетки симметричны): совпала → `self._bg_raw =
+(bg_sg.counts, bg_sg.live_time_s)` (лохматый фон в срезах #139 и на простыне #140), иная → None.
+Тесты: `test_compute_background_file_same_grid_stashes_raw` (monkeypatch `load_spectrogram`,
+тот же спектр → `_bg_raw` не None, форма = целевой), `test_compute_background_file_other_grid_raw_none`
+(иное число каналов → None). **Полный pytest — 551 passed** (549 + 2). Ждёт визуального
+подтверждения оператора.
+
+**#142 — тумблеры видимости элементов наложения фона на тулбаре «Вид»**
+(`awf/ui/main_window.py` — `_build_toolbar` +2 чекбокса, `_on_bg_overlay_toggled` + новый
+`_apply_bg_overlay_visibility`, `_reset_background`, `_on_reset_display`; `awf/ui/i18n.py` +2 строки;
+`tests/test_bg_ui.py` +1 тест). **Оператор:** «Сделай кнопку "показть/отключить" простыню образца
+и спетра среза в режиме наложения образца и фона»; уточнено (AskUserQuestion): **два независимых
+тумблера**, размещение — **тулбар «Вид»**. Чекбоксы «Простыня фона» (3D) и «Фон среза» (кривая
+фона в окне среза): по умолчанию checked+disabled, активны только при включённом «Наложение фона»
+(меню Анализ). Видимость элемента = `_bg_overlay AND чекбокс`, единая точка —
+`_apply_bg_overlay_visibility()`; выключение режима гасит оба элемента и тумблеры (состояние
+чекбоксов сохраняется). `_reset_background` возвращает тумблеры в дефолт (checked, disabled,
+blockSignals); кнопка «Сброс» (#51) ставит оба checked. i18n: "Простыня фона"→"Background sheet",
+"Фон среза"→"Slice background". Тест `test_bg_overlay_visibility_toggles` — независимость
+тумблеров + гашение при выключении режима. **Полный pytest — 552 passed** (551 + 1). Ждёт
+визуального подтверждения оператора.
+
 **Задача 26 — Вкладка «Аналитика»** (`awf/ui/analytics_panel.py` + `main_window.py`): `AnalyticsPanel`
 (2D-скаттер проекций, по одному `ScatterPlotItem` на кластер для легенды; каждая точка несёт индекс
 среза). Сигнал `sliceClicked(i)` → `MainWindow._on_analytics_slice` → `SlicePanel.show_time_slice` +
