@@ -6,10 +6,10 @@ from awf.ui.zscale import (
 
 
 def _expected_log(x):
-    # Эталон истинного log10 с авто-порогом (Задача #54): floor = 1-й перцентиль ненулевых.
+    # Эталон истинного log10 с авто-порогом (#54); Задача #167: floor = 10-й перцентиль pos.
     nn = np.maximum(np.asarray(x, dtype=np.float64), 0.0)
     pos = nn[nn > 0.0]
-    floor = float(np.percentile(pos, 1.0))
+    floor = float(np.percentile(pos, 10.0))
     return np.log10(np.maximum(nn, floor) / floor)
 
 
@@ -43,6 +43,20 @@ def test_log_not_degenerate_for_subunit_cps():
     # средне-слабый канал (0.2 cps) в логе поднят заметно выше, чем в линейной шкале
     # (нижний канал-дно = floor уходит в 0 — это отсечение шума, не «вырождение»)
     assert lg_n[1] - lin_n[1] > 0.1
+
+
+def test_log_floor_uses_percentile_10_robust_to_low_outliers():
+    """Задача #167: floor лог-режима — 10-й перцентиль pos (не 1-й), устойчив к выбросам вниз.
+    Модель ε-нормировки #156: НЭ-полка сжимается ×~0.5 → распределение положительных значений
+    получает «хвост вниз» (5-10% каналов). Percentile-1 уползал бы за ними, log-диапазон
+    log10(max/floor) рос непропорционально, простыня 3D поднималась. Percentile-10 отсекает
+    эти 10% выбросов — floor стабилен."""
+    x = np.array([0.1] * 10 + [10.0] * 90, dtype=np.float64)
+    out = apply_z_scale(x, "log")
+    floor_p10 = float(np.percentile(x, 10.0))
+    expected = np.log10(np.maximum(x, floor_p10) / floor_p10).astype(np.float32)
+    assert np.allclose(out, expected, rtol=1e-5)
+    assert floor_p10 > 1.0                       # #167: не улетел на 0.1 (что дал бы percentile-1)
 
 
 def test_returns_float32():

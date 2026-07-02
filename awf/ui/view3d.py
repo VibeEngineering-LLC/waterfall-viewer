@@ -62,6 +62,23 @@ def _surface_shading(z_surface, intensity):
     return ((1.0 - intensity) + intensity * shade).astype(np.float32)
 
 
+def _floor_shift_linear(z_disp):
+    """Задача #168 (итер.2): «обрезай отрицательные пики». Первая итерация обнуляла низкие
+    значения ниже percentile-10 → воронки 0-count каналов только УСИЛИЛИСЬ (контраст с
+    поднятой ε-нормировкой простынёй #156 стал резче). Правильный жест: floor как СДВИГ ВНИЗ
+    с клипом к нулю — `max(x - floor, 0)`. Каналы ≤ floor садятся ровно на Z=0 (плоскость
+    основания без воронок), настоящие пики поднимаются над ней. Простыня не задирается —
+    она гарантированно уходит в 0. Sqrt/log не трогаем: у log свой floor из #167, sqrt
+    сжимает динамику."""
+    pos = z_disp[z_disp > 0.0]
+    if pos.size == 0:
+        return z_disp
+    floor = float(np.percentile(pos, 10.0))
+    if not (floor > 0.0):
+        return z_disp
+    return np.maximum(z_disp - floor, 0.0).astype(z_disp.dtype, copy=False)
+
+
 def _fmt_count(v: float) -> str:
     """Подпись деления оси счёта: целое для крупных значений, дробное для малых cps (Задача #44)."""
     a = abs(float(v))
@@ -319,6 +336,12 @@ class Waterfall3DView(gl.GLViewWidget):
         # 2) Z-шкала контраста, затем нормировка для высоты и цвета (защита от нулевого максимума)
         z_disp = apply_z_scale(z_counts, self._z_mode, gain=self._gain,
                                gamma=self._gamma, clip=self._clip)
+        # Задача #168 (итер.2): floor-сдвиг для лин режима — обрезаем «отрицательные пики»
+        # (провалы 0-count каналов на фоне поднятой ε-нормировкой #156 простыни). floor =
+        # percentile-10 положительных; каналы ≤ floor садятся ровно на Z=0, пики поднимаются
+        # над плоскостью. Симметрично #167 log-floor.
+        if self._z_mode == "linear":
+            z_disp = _floor_shift_linear(z_disp)
         zmax = float(z_disp.max()) if z_disp.size else 0.0
         zn = z_disp / zmax if zmax > 0 else z_disp
         # 3) геометрия: X,Y — индексы; высота Z — рельеф (нормированные counts, масштаб ~ четверть
