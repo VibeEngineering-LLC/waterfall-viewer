@@ -84,3 +84,30 @@ def test_axis_labels_rebuild_on_zscale_change(app):
     assert len(v._axis_items) == n0            # ровно перестроены, не задвоены
     v.set_z_scale("sqrt")
     assert len(v._axis_items) == n0
+
+
+def test_floor_shift_linear_baseline_and_peaks():
+    """Задача #168 (итер.2): floor-сдвиг обрезает «простыню» вниз к Z=0 и приподнимает
+    пики. floor=percentile-10 положительных. Распределение 90 полки + 10 пиков —
+    percentile-10 = 5.0 (idx=9 в sorted = 5.0). Полка 5→0, пики 100→95."""
+    from awf.ui.view3d import _floor_shift_linear
+    z = np.array([5.0] * 90 + [100.0] * 10, dtype=np.float32)
+    out = _floor_shift_linear(z)
+    assert (out[:90] == 0.0).all()
+    assert np.allclose(out[90:], 95.0)
+
+
+def test_floor_shift_linear_zero_channels_stay_at_zero():
+    """0-count каналы сидят на Z=0, не «проваливаются» — ключ жалобы #168."""
+    from awf.ui.view3d import _floor_shift_linear
+    z = np.array([0.0, 0.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0], dtype=np.float32)
+    out = _floor_shift_linear(z)
+    assert (out[:2] == 0.0).all()
+    assert (out >= 0.0).all()
+
+
+def test_floor_shift_linear_degenerate_no_crash():
+    """Пустой массив и все-нули: не крашится."""
+    from awf.ui.view3d import _floor_shift_linear
+    assert _floor_shift_linear(np.zeros(5, dtype=np.float32)).sum() == 0
+    assert _floor_shift_linear(np.array([], dtype=np.float32)).size == 0
