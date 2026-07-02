@@ -86,12 +86,10 @@ def test_mainwindow_subtract_reduces_waterfall(app):
     w._on_bg_subtract_toggled(True)                    # вычет включён
     assert float(w._slices._sg.counts.sum()) < orig    # 3D/2D/срезы — на вычтенных данных
     assert float(w._heatmap._sg.counts.sum()) < orig
-    # Задача #134: остаток ЗНАКОВЫЙ (клип к 0 убран). Фон = весь диапазон => интегральный
-    # (суммарный по времени) спектр сокращается в ~0 поканально; отрицательные ячейки есть
-    # в модели и гасятся к 0 лишь на отображении (zscale._base_transform).
-    integrated = w._slices._sg.counts.sum(axis=0)
-    assert np.allclose(integrated, 0.0, atol=1e-6)     # точное сокращение при фон=спектр
-    assert (w._slices._sg.counts < 0).any()            # знаковость: отрицательные присутствуют
+    # Задача #147 (усиливает #134): фон = весь диапазон -> range-ветка сташит сырой блок
+    # _bg_raw той же формы -> поячеечный вычет: остаток — ТОЧНЫЙ ноль в каждой ячейке
+    # (раньше знаковый пуассонов остаток, ноль лишь в интеграле по времени).
+    assert np.allclose(w._slices._sg.counts, 0.0, atol=1e-9)   # самовычет = ноль поячеечно
     w._on_bg_subtract_toggled(False)                   # выключение -> исходный водопад
     assert float(w._slices._sg.counts.sum()) == pytest.approx(orig)
     w.close()
@@ -226,28 +224,28 @@ def test_view3d_bg_sheet_toggle(app):
 
 
 def test_view3d_bg_sheet_built_like_relief(app):
-    # #140: простыня строится тем же способом, что рельеф: сырое фоновое окно (#139),
-    # без критуровня Currie (#135 отменён), без max по времени; та же карта value->height.
+    # #144: простыня — полноценный рельеф, ТЕМ ЖЕ пайплайном что рельеф-образец:
+    # сырое поле фона (при raw-совпадении = counts/lt) -> sg.downsample(method="max")
+    # -> обрезка _MAX_ENERGY_KEV -> smooth_counts. В _add_bg_sheet приходит 2D-матрица
+    # (nt, nc), равная LOD-max от сырого поля (форма и значения совпадают).
     from awf.ui.view3d import Waterfall3DView
-    from awf.model.background import background_from_range, background_window_like
+    from awf.ui.zscale import smooth_counts
+    from awf.model.background import background_from_range
     v = Waterfall3DView()
     sg = _make_sg(ns=16, nc=24)
     v.set_spectrogram(sg)
     bg = background_from_range(sg, 0, sg.n_slices)
     cap = {}
-    v._add_bg_sheet = lambda h: cap.__setitem__("h", np.asarray(h, dtype=float))
+    v._add_bg_sheet = lambda z: cap.__setitem__("z", np.asarray(z, dtype=float))
     v.set_background_sheet(bg, (sg.counts, sg.live_time_s))     # фон = весь файл (самофон)
     v.set_background_sheet_visible(True)
     lt = np.asarray(sg.live_time_s, dtype=float)
-    lt_ref = float(np.median(lt[lt > 0.0]))
-    val = background_window_like(sg.counts, sg.live_time_s, lt_ref) / lt_ref   # unit=cps
-    field = np.ones((sg.n_slices, 1)) * val[None, :]
+    safe = np.where(lt > 0.0, lt, np.inf)
+    field = np.asarray(sg.counts, dtype=float) / safe[:, None]  # unit=cps, raw-совпадение
     lod, _t, _c = sg.downsample(v._max_time, v._max_chan, method="max", data=field)
-    col = np.asarray(lod, dtype=float)[0, :v._nc]
-    vals = np.asarray(v._z_counts, dtype=float).ravel(); hts = np.asarray(v._z_surface, dtype=float).ravel()
-    o = np.argsort(vals)
-    assert cap["h"].size == v._nc
-    assert np.allclose(cap["h"], np.interp(col, vals[o], hts[o]), atol=1e-5)
+    exp = smooth_counts(np.asarray(lod, dtype=float), v._smooth, axis=1)[:, :v._nc]
+    assert cap["z"].shape == (exp.shape[0], v._nc)
+    assert np.allclose(cap["z"], exp, atol=1e-6)
 
 
 # ---------- #141: фон из файла-источника — сырой блок при совпадающей энергосетке ----------
@@ -299,6 +297,23 @@ def test_bg_overlay_visibility_toggles(app):
     assert not w._bg_sheet_check.isEnabled() and not w._bg_curve_check.isEnabled()
     w._bg_sheet_check.setChecked(True); w._bg_curve_check.setChecked(True)
     assert not w._view3d._bg_sheet_on and not w._slices._bg_overlay   # без режима — скрыто
+    w.close()
+
+
+# ---------- #143: тумблер «Простыня образца» (основной 3D-рельеф) ----------
+
+def test_surface_visibility_toggle(app):
+    # #143: чекбокс «Простыня образца» скрывает основной GLSurfacePlotItem рельефа.
+    w = MainWindow()
+    assert w._surface_check.isChecked() and w._surface_check.isEnabled()
+    assert w._view3d._surface_on                        # дефолт — видима
+    w._sg = _make_sg(ns=10, nc=16)
+    w._view3d.set_spectrogram(w._sg)
+    assert w._view3d._surface is not None                # рельеф построен
+    w._surface_check.setChecked(False)                   # скрыли простыню образца
+    assert not w._view3d._surface_on and w._view3d._surface is None
+    w._surface_check.setChecked(True)                    # вернули
+    assert w._view3d._surface_on and w._view3d._surface is not None
     w.close()
 
 
@@ -354,3 +369,132 @@ def test_palette_dialog_lists_all_and_selects(app):
     assert dlg.selected_key() == "turbo" and got == ["turbo"]
     assert dlg._rows["turbo"].property("selected") is True
     assert dlg._rows["insight"].property("selected") is False
+
+
+# ---------- #145: раздельный стиль простыни образца и фона ----------
+
+def test_sheet_styles_independent(app):
+    # #145: стиль простыни образца и фона выбирается раздельно (палитра/однотонный/каркас)
+    w = MainWindow()
+    w._sg = _make_sg(ns=10, nc=16)
+    w._view3d.set_spectrogram(w._sg)
+    w._view3d.set_background_sheet(np.ones(w._sg.n_channels), (w._sg.counts, w._sg.live_time_s))
+    w._view3d.set_background_sheet_visible(True)
+    assert w._view3d._surface_style == "palette" and w._view3d._bg_style == "palette"
+    w._bg_style_combo.setCurrentIndex(2)                     # фон -> каркас
+    assert w._view3d._bg_sheet.opts["drawEdges"] and not w._view3d._bg_sheet.opts["drawFaces"]
+    assert w._view3d._surface_style == "palette"             # образец не тронут
+    w._smp_style_combo.setCurrentIndex(1)                    # образец -> однотонный
+    assert w._view3d._surface_style == "solid" and w._view3d._surface is not None
+    assert w._view3d._bg_style == "wire"                     # фон не тронут
+    w._on_reset_display()
+    assert w._view3d._surface_style == "palette" and w._view3d._bg_style == "palette"
+    w.close()
+
+
+# ---------- #146: «Подложка» гасит дно обеих простыней ----------
+
+def test_floor_toggle_hides_bg_sheet_floor(app):
+    # #146: тумблер «Подложка» (#76) гасит дно и у простыни фона;
+    # у «каркаса» рёбра без per-vertex alpha — дно вырезается NaN-ом.
+    from awf.ui.view3d import Waterfall3DView
+    v = Waterfall3DView()
+    v.set_floor_visible(True)                       # #150: дефолт теперь выкл — включаем явно
+    v.set_spectrogram(_make_sg(ns=12, nc=20))
+    v.set_background_sheet(np.full(20, 1e-9))       # фон ~0 -> вся простыня «дно»
+    v.set_background_sheet_visible(True)
+    assert v._bg_sheet._meshdata.vertexColors()[:, 3].min() > 0.0   # подложка вкл — видна
+    v.set_floor_visible(False)                      # выключили «Подложку»
+    assert v._bg_sheet._meshdata.vertexColors()[:, 3].max() == 0.0  # дно фона погашено
+    v.set_bg_sheet_style("wire")
+    assert np.isnan(v._bg_sheet._meshdata.vertexes()[:, 2]).all()   # каркас: дно вырезано
+    v.set_floor_visible(True)                       # вернули — рёбра снова с координатами
+    assert not np.isnan(v._bg_sheet._meshdata.vertexes()[:, 2]).any()
+
+
+# ---------- #147: вычет совпадающих простыней — точный ноль ----------
+
+def test_active_spectrogram_passes_raw_block(app):
+    # #147: _active_spectrogram передаёт _bg_raw в subtract_background —
+    # при фон=тот же файл вычет поячеечно нулевой (как совпадающие простыни).
+    from awf.model.background import background_from_range
+    w = MainWindow()
+    w._sg = _make_sg(ns=8, nc=12)
+    w._bg_cps = background_from_range(w._sg, 0, w._sg.n_slices)
+    w._bg_raw = (np.asarray(w._sg.counts, dtype=np.float64),
+                 np.asarray(w._sg.live_time_s, dtype=np.float64))
+    w._bg_subtract = True
+    assert np.allclose(w._active_spectrogram().counts, 0.0, atol=1e-12)
+    w._bg_raw = None                                # без сырого блока — прежний путь
+    assert (w._active_spectrogram().counts != 0).any()
+    w.close()
+
+
+# ---------- #148: фоновый участок выбирается секущими плоскостями Времени ----------
+
+def test_bg_dialog_plane_range_prefill(app):
+    # #148: plane_range задан -> поля срезов предзаполнены ближайшими срезами,
+    # кнопка «Из сечений» активна, accept отдаёт полуоткрытый [lo, hi).
+    dlg = BackgroundDialog(20, time_offsets=np.arange(20.0) * 2.0,
+                           plane_range=(6.0, 24.0))   # срезы t=0,2,..38
+    assert dlg._planes_btn.isEnabled()
+    assert dlg._lo.value() == 3 and dlg._hi.value() == 13   # 6.0->№3, 24.0->№12 (+1)
+    dlg._on_accept()
+    assert dlg.result_spec() == ("range", 3, 13)
+
+
+def test_bg_dialog_no_planes_disabled(app):
+    # #148: плоскости Времени не заданы -> кнопка неактивна, дефолт — весь диапазон.
+    dlg = BackgroundDialog(20, time_offsets=np.arange(20.0))
+    assert not dlg._planes_btn.isEnabled()
+    assert dlg._lo.value() == 0 and dlg._hi.value() == 20
+
+
+def test_view3d_time_plane_range(app):
+    # #148: time_plane_range — None без видимых плоскостей Времени; невидимый слот -> край
+    # оси (семантика #84); результат отсортирован (t0 <= t1).
+    from awf.ui.view3d import Waterfall3DView
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(ns=12, nc=20))
+    assert v.time_plane_range() is None                     # плоскости выключены
+    v.set_plane("time", 0, 0.25, True)                      # только нижняя граница
+    t0, t1 = v.time_plane_range()
+    assert t0 == v.plane_value("time", 0.25)[0]
+    assert t1 == float(v._t_centers[-1])                    # слот 1 невидим -> край оси
+    v.set_plane("time", 1, 0.1, True)                       # верхний слот НИЖЕ нижнего
+    t0, t1 = v.time_plane_range()
+    assert t0 <= t1                                          # диапазон отсортирован
+    assert t0 == v.plane_value("time", 0.1)[0]
+
+
+def test_view3d_time_plane_range_lod_bins_cover_raw_edges(app):
+    # #151: LOD-бины рельефа шире сырых срезов -> диапазон плоскостей должен возвращать
+    # КРАЯ крайних бинов в сырых срезах (не центры), иначе крайний сырой срез выпадает
+    # из выборки фона и после вычета остаётся «гребнем» у плоскости сечения.
+    from awf.ui.view3d import Waterfall3DView
+    v = Waterfall3DView()
+    sg = _make_sg(ns=8, nc=12)
+    v.set_spectrogram(sg, max_time=4, max_chan=12)          # LOD-бин = 2 сырых среза
+    v.set_plane("time", 0, 0.0, True)
+    v.set_plane("time", 1, 1.0, True)
+    t0, t1 = v.time_plane_range()
+    t_raw = np.asarray(sg.time_offsets_s, dtype=np.float64)
+    assert t0 == float(t_raw[0])
+    assert t1 == float(t_raw[-1])                            # не центр последнего бина
+
+
+# ---------- #149: фон под-диапазона транслируется на всю шкалу времени ----------
+
+def test_compute_background_range_tiles_raw_to_full_scale(app):
+    # #149: под-диапазон [lo:hi) -> _bg_raw полной формы (тайлинг), не (hi-lo, nc);
+    # срезы внутри участка — клоны самих себя, снаружи — циклические копии участка.
+    w = MainWindow()
+    w._sg = _make_sg(ns=12, nc=20)
+    lo, hi = 4, 8
+    w._compute_background(("range", lo, hi))
+    cnt, lt = w._bg_raw
+    assert cnt.shape == w._sg.counts.shape and lt.size == w._sg.n_slices
+    assert np.array_equal(cnt[lo:hi], w._sg.counts[lo:hi])   # внутри — сами себя
+    assert np.array_equal(cnt[0], w._sg.counts[lo])          # (0-4)%4=0 -> начало блока
+    assert np.array_equal(cnt[hi], w._sg.counts[lo])         # цикл сразу после участка
+    w.close()

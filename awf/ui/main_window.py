@@ -13,7 +13,8 @@ from awf.analysis.peaks import auto_calibrate_fwhm_model   # Задача #130: 
 from awf.ui.analytics_panel import AnalyticsPanel
 from awf.ui.background_dialog import BackgroundDialog   # Задача #96
 from awf.model.background import (background_from_range, background_from_spectrogram,
-                                  subtract_background)   # #138: прямой поканальный вычет сырых данных
+                                  subtract_background,   # #138: прямой поканальный вычет сырых данных
+                                  tile_background_block)  # #149: трансляция сырого блока на шкалу
 from awf.ui.zscale import Z_MODES
 from awf.ui.colormaps import COLORMAPS
 from awf.ui.palette_dialog import PaletteDialog
@@ -443,10 +444,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self._hl_check.toggled.connect(self._on_highlight_toggled)
         tb.addWidget(self._hl_check)
         self._floor_check = QtWidgets.QCheckBox("Подложка")  # Задача #76: дно рельефа (фиолет. прямоугольник)
-        self._floor_check.setChecked(True)
+        self._floor_check.setChecked(False)   # Задача #150: по умолчанию подложка выключена
         self._floor_check.setToolTip("Показать/скрыть подложку (плоское дно рельефа)")
         self._floor_check.toggled.connect(self._on_floor_toggled)
         tb.addWidget(self._floor_check)
+        # Задача #143: тумблер «Простыня образца» — основной 3D-рельеф спектрограммы.
+        self._surface_check = QtWidgets.QCheckBox("Простыня образца")
+        self._surface_check.setChecked(True)
+        self._surface_check.setToolTip("Показать/скрыть простыню образца (основной 3D-рельеф)")
+        self._surface_check.toggled.connect(self._on_surface_toggled)
+        self._register_i18n(self._surface_check.setText, "Простыня образца")
+        tb.addWidget(self._surface_check)
         # Задача #142: по-элементная видимость наложения фона (активны в режиме «Наложение фона»)
         self._bg_sheet_check = QtWidgets.QCheckBox("Простыня фона")
         self._bg_sheet_check.setChecked(True)
@@ -462,6 +470,25 @@ class MainWindow(QtWidgets.QMainWindow):
         self._bg_curve_check.toggled.connect(lambda _on: self._apply_bg_overlay_visibility())
         self._register_i18n(self._bg_curve_check.setText, "Фон среза")
         tb.addWidget(self._bg_curve_check)
+        # Задача #145: раздельный стиль простыни образца и фона (палитра/однотонный/каркас)
+        _lab_ss = QtWidgets.QLabel("  Стиль обр.: ")
+        self._register_i18n(_lab_ss.setText, "  Стиль обр.: ")
+        tb.addWidget(_lab_ss)
+        self._smp_style_combo = CycleButton()
+        for label, key in (("Палитра", "palette"), ("Однотонный", "solid"), ("Каркас", "wire")):
+            self._smp_style_combo.addItem(label, key)
+        self._smp_style_combo.setToolTip("Стиль простыни образца")
+        self._smp_style_combo.currentIndexChanged.connect(self._on_surface_style_changed)
+        tb.addWidget(self._smp_style_combo)
+        _lab_bs = QtWidgets.QLabel("  Стиль фона: ")
+        self._register_i18n(_lab_bs.setText, "  Стиль фона: ")
+        tb.addWidget(_lab_bs)
+        self._bg_style_combo = CycleButton()
+        for label, key in (("Палитра", "palette"), ("Однотонный", "solid"), ("Каркас", "wire")):
+            self._bg_style_combo.addItem(label, key)
+        self._bg_style_combo.setToolTip("Стиль простыни фона")
+        self._bg_style_combo.currentIndexChanged.connect(self._on_bg_style_changed)
+        tb.addWidget(self._bg_style_combo)
         # Изолинии (Задача 20) ВРЕМЕННО отключены в UI: вернём после реализации поиска,
         # идентификации пиков и подгонки их чистыми гауссианами. Механизм контуров в
         # HeatmapPanel (set_contours_enabled / set_contour_levels) сохранён и покрыт тестами;
@@ -485,9 +512,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self._tunit_combo.setCurrentIndex(0)  # Задача #64: единицы времени — секунды (дефолт)
         self._axes_check.setChecked(True)     # оси видимы
         self._hl_check.setChecked(False)      # подсветка выкл
-        self._floor_check.setChecked(True)    # Задача #76: подложка видима (дефолт)
+        self._floor_check.setChecked(False)   # Задача #150: подложка скрыта (дефолт; было вкл #76)
+        self._surface_check.setChecked(True)  # Задача #143: простыня образца видима (дефолт)
         self._bg_sheet_check.setChecked(True)  # Задача #142: элементы наложения видимы (дефолт)
         self._bg_curve_check.setChecked(True)
+        self._smp_style_combo.setCurrentIndex(0)  # Задача #145: стили простыней — палитра (дефолт)
+        self._bg_style_combo.setCurrentIndex(0)
         # Задача #55: регулировки (усиление/гамма/отсечка/сглаживание/освещение) живут на
         # панели-рукоятках; сброс к дефолтам + включение всех рядов/общего — одним вызовом.
         self._adjust.reset_all()
@@ -501,6 +531,21 @@ class MainWindow(QtWidgets.QMainWindow):
     def _on_floor_toggled(self, on: bool) -> None:
         """Задача #76: показать/скрыть подложку (плоское дно рельефа, фиолетовый прямоугольник)."""
         self._view3d.set_floor_visible(on)
+
+    @QtCore.Slot(bool)
+    def _on_surface_toggled(self, on: bool) -> None:
+        """Задача #143: показать/скрыть простыню образца (основной 3D-рельеф)."""
+        self._view3d.set_surface_visible(on)
+
+    @QtCore.Slot(int)
+    def _on_surface_style_changed(self, _idx: int) -> None:
+        """Задача #145: стиль простыни образца (палитра/однотонный/каркас)."""
+        self._view3d.set_surface_style(self._smp_style_combo.currentData() or "palette")
+
+    @QtCore.Slot(int)
+    def _on_bg_style_changed(self, _idx: int) -> None:
+        """Задача #145: стиль простыни фона (палитра/однотонный/каркас)."""
+        self._view3d.set_bg_sheet_style(self._bg_style_combo.currentData() or "palette")
 
     @QtCore.Slot(int)
     def _on_time_unit_changed(self, _idx: int) -> None:
@@ -531,7 +576,9 @@ class MainWindow(QtWidgets.QMainWindow):
         if self._sg is None:
             self.statusBar().showMessage("Сначала откройте файл, затем выбирайте фон.")
             return
-        dlg = BackgroundDialog(self._sg.n_slices, self._sg.time_offsets_s, self)
+        # Задача #148: диапазон между секущими плоскостями Времени предзаполняет поля срезов
+        dlg = BackgroundDialog(self._sg.n_slices, self._sg.time_offsets_s, self,
+                               plane_range=self._view3d.time_plane_range())
         if dlg.exec() != QtWidgets.QDialog.Accepted:
             return
         try:
@@ -553,8 +600,12 @@ class MainWindow(QtWidgets.QMainWindow):
         по нему оверлей окна срезов строит фон, «лохматый как образец» (background_window_like)."""
         if spec and spec[0] == "range":
             lo = max(0, int(spec[1])); hi = min(self._sg.n_slices, int(spec[2]))
-            self._bg_raw = (np.asarray(self._sg.counts[lo:hi], dtype=np.float64),
-                            np.asarray(self._sg.live_time_s, dtype=np.float64)[lo:hi])
+            # Задача #149: сырые срезы участка транслируются (копируются) на всю шкалу времени;
+            # фаза lo — срезы внутри участка клонируют сами себя (самовычет участка = 0, #147).
+            self._bg_raw = tile_background_block(
+                self._sg.counts[lo:hi],
+                np.asarray(self._sg.live_time_s, dtype=np.float64)[lo:hi],
+                self._sg.n_slices, phase=lo)
             return background_from_range(self._sg, spec[1], spec[2])
         if spec and spec[0] == "file":
             bg_sg = load_spectrogram(spec[1]).trimmed_channels(1)
@@ -564,8 +615,9 @@ class MainWindow(QtWidgets.QMainWindow):
             e_bg = np.asarray(bg_sg.energies(), dtype=np.float64)
             e_t = np.asarray(self._sg.energies(), dtype=np.float64)
             if e_bg.size == e_t.size and np.allclose(e_bg, e_t):
-                self._bg_raw = (np.asarray(bg_sg.counts, dtype=np.float64),
-                                np.asarray(bg_sg.live_time_s, dtype=np.float64))
+                # Задача #149: файл-фон другой длины по времени -> транслируем на шкалу цели
+                self._bg_raw = tile_background_block(
+                    bg_sg.counts, bg_sg.live_time_s, self._sg.n_slices)
             else:
                 self._bg_raw = None
             return background_from_spectrogram(bg_sg, self._sg)
@@ -657,9 +709,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _active_spectrogram(self):
         """Задача #96: активная спектрограмма для 3D/2D/срезов — с вычтенным фоном, если вычет
-        включён и фон задан, иначе исходная."""
+        включён и фон задан, иначе исходная. Задача #147: сырой блок _bg_raw — поячеечный вычет
+        (при самовычете точный ноль в каждой ячейке, как совпадающие простыни)."""
         if self._bg_subtract and self._bg_cps is not None and self._sg is not None:
-            return subtract_background(self._sg, self._bg_cps)
+            return subtract_background(self._sg, self._bg_cps, self._bg_raw)
         return self._sg
 
     def _redistribute(self) -> None:

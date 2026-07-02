@@ -7,7 +7,7 @@ import pytest
 from awf.model.spectrogram import Calibration, Spectrogram
 from awf.model.background import (background_from_range, background_from_spectrogram,
                                   subtract_background, gate_significant_net,
-                                  background_window_like)
+                                  background_window_like, tile_background_block)
 
 
 def _sg(counts, coeffs=(0.0, 1.0), live=None, real=None):
@@ -124,6 +124,28 @@ def test_file_zero_live_time_raises():
     target = _sg(np.zeros((1, 2), dtype=np.float64))
     with pytest.raises(ValueError):
         background_from_spectrogram(bg_sg, target)
+
+
+# ---------- #147: сырой блок -> поячеечный вычет (самовычет = точный ноль в каждой ячейке) ----------
+
+def test_self_subtraction_raw_block_exact_zero_per_cell():
+    # #147: bg_raw = тот же файл -> counts − bg_counts·(lt/bg_lt) — ноль ПОЯЧЕЕЧНО,
+    # а не только в интеграле по времени (усреднённый bg_cps оставляет пуассонов остаток).
+    counts = np.array([[10, 1], [2, 9], [6, 5], [0, 3]], dtype=np.float64)
+    sg = _sg(counts, live=[1.0, 2.0, 1.0, 3.0])
+    bg_cps = background_from_range(sg, 0, sg.n_slices)
+    raw = (counts.copy(), np.array([1.0, 2.0, 1.0, 3.0]))
+    out = subtract_background(sg, bg_cps, raw)
+    assert np.allclose(out.counts, 0.0, atol=1e-12)          # точный ноль в каждой ячейке
+    assert (subtract_background(sg, bg_cps).counts != 0).any()   # усреднённый путь — не ноль
+
+
+def test_subtract_raw_block_shape_mismatch_falls_back():
+    # #147: блок под-диапазона (форма != sg.counts) -> прежний путь через средний bg_cps
+    sg = _sg(np.array([[10, 5], [10, 5]], dtype=np.float64), live=[1.0, 2.0])
+    raw = (np.array([[10.0, 5.0]]), np.array([1.0]))
+    out = subtract_background(sg, np.array([1.0, 0.0]), raw)
+    assert np.allclose(out.counts, [[9, 5], [8, 5]])         # как без raw (см. тест выше)
 
 
 # ---------- #136: значимостное гашение нетто (самовычет читается как ноль, как в BecqMoni) ----------
@@ -257,4 +279,43 @@ def test_bg_window_zero_target_returns_raw_sum():
 def test_bg_window_bad_shape_raises():
     with pytest.raises(ValueError):
         background_window_like(np.array([1.0, 2.0]), np.array([1.0]), 1.0)
+
+
+def test_tile_full_range_phase0_is_identity():
+    # Задача #149: блок = вся шкала, phase=0 -> тождественная копия
+    counts = np.arange(12.0).reshape(4, 3)
+    lt = np.array([1.0, 2.0, 3.0, 4.0])
+    tc, tl = tile_background_block(counts, lt, 4, phase=0)
+    assert np.array_equal(tc, counts) and np.array_equal(tl, lt)
+
+
+def test_tile_subrange_clones_itself_inside_and_cycles_outside():
+    # Задача #149: участок [lo:hi) клонирует сам себя (самовычет=0, #147), снаружи — циклически
+    counts = np.arange(20.0).reshape(10, 2)
+    lo, hi = 3, 6
+    tc, tl = tile_background_block(counts[lo:hi], np.arange(10.0)[lo:hi], 10, phase=lo)
+    assert np.array_equal(tc[lo:hi], counts[lo:hi])     # внутри — сами себя
+    assert np.array_equal(tc[0], counts[lo])            # (0-3)%3=0 -> первый срез блока
+    assert np.array_equal(tc[6], counts[lo])            # (6-3)%3=0 -> цикл после участка
+    assert tc.shape == (10, 2) and tl.shape == (10,)
+
+
+def test_tile_bad_shape_raises():
+    with pytest.raises(ValueError):
+        tile_background_block(np.zeros((0, 3)), np.zeros(0), 5)   # пустой блок
+    with pytest.raises(ValueError):
+        tile_background_block(np.zeros((2, 3)), np.zeros(3), 5)   # lt не по срезам
+
+
+def test_tile_subtract_bg_region_is_exact_zero():
+    # Задача #149: вычет тайлированного фона обнуляет участок [lo:hi) точно, поканально
+    rng = np.random.default_rng(5)
+    sg = _sg(rng.poisson(9.0, (8, 4)).astype(np.float64))
+    lo, hi = 2, 5
+    raw = tile_background_block(sg.counts[lo:hi], sg.live_time_s[lo:hi], 8, phase=lo)
+    bg_cps = background_from_range(sg, lo, hi)
+    net = subtract_background(sg, bg_cps, bg_raw=raw)
+    assert np.all(net.counts[lo:hi] == 0.0)             # самовычет участка — точный ноль
+    outside = np.delete(net.counts, np.s_[lo:hi], axis=0)
+    assert np.any(outside != 0.0)                       # вне участка — реальная разность
 

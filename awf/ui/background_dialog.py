@@ -5,15 +5,17 @@
 """
 from __future__ import annotations
 
+import numpy as np
 from PySide6 import QtWidgets
 
 
 class BackgroundDialog(QtWidgets.QDialog):
-    def __init__(self, n_slices: int, time_offsets=None, parent=None):
+    def __init__(self, n_slices: int, time_offsets=None, parent=None, plane_range=None):
         super().__init__(parent)
         self.setWindowTitle("Выбор фона")
         self._n = int(n_slices)
         self._times = time_offsets
+        self._plane_range = plane_range   # Задача #148: (t0, t1) с секущих плоскостей Времени
         self._path = None
         self._spec = None
         root = QtWidgets.QVBoxLayout(self)
@@ -29,6 +31,12 @@ class BackgroundDialog(QtWidgets.QDialog):
         self._lo.valueChanged.connect(self._update_hint)
         self._hi.valueChanged.connect(self._update_hint)
         row.addWidget(self._lo); row.addWidget(QtWidgets.QLabel("–")); row.addWidget(self._hi)
+        # Задача #148: перенести диапазон с секущих плоскостей Времени 3D в поля срезов
+        self._planes_btn = QtWidgets.QPushButton("Из сечений")
+        self._planes_btn.setToolTip("Диапазон между секущими плоскостями Времени (3D)")
+        self._planes_btn.setEnabled(self._plane_range is not None and self._times is not None)
+        self._planes_btn.clicked.connect(self._apply_planes)
+        row.addWidget(self._planes_btn)
         row.addStretch(1)
         root.addLayout(row)
         self._hint = QtWidgets.QLabel("")
@@ -48,7 +56,21 @@ class BackgroundDialog(QtWidgets.QDialog):
         bb.accepted.connect(self._on_accept)
         bb.rejected.connect(self.reject)
         root.addWidget(bb)
+        if self._planes_btn.isEnabled():
+            self._apply_planes()   # Задача #148: плоскости Времени видимы -> сразу их диапазон
         self._update_hint()
+
+    def _apply_planes(self) -> None:
+        """Задача #148: поля срезов <- ближайшие к позициям секущих плоскостей Времени срезы.
+        [lo, hi) полуоткрытый: hi = ближайший срез к верхней плоскости + 1 (включительно)."""
+        if self._plane_range is None or self._times is None or self._n <= 0:
+            return
+        t = np.asarray(self._times, dtype=np.float64)[:self._n]
+        lo = int(np.argmin(np.abs(t - float(self._plane_range[0]))))
+        hi = int(np.argmin(np.abs(t - float(self._plane_range[1])))) + 1
+        self._lo.setValue(lo)
+        self._hi.setValue(max(lo + 1, hi))
+        self._rb_range.setChecked(True)
 
     def _update_hint(self) -> None:
         lo = self._lo.value(); hi = self._hi.value()

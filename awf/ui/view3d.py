@@ -91,6 +91,11 @@ _FLOOR_FRAC = 0.02             # доля высоты рельефа, ниже 
 # Задача #78: верхний предел энергии для вывода и сетки 3D-водопада. Каналы с энергией выше
 # отсекаются ПОСЛЕ LOD-прорежки — и рельеф, и деления оси энергии обрезаются согласованно.
 _MAX_ENERGY_KEV = 3000.0
+
+# Задача #145: цвета «однотонного»/«каркасного» стиля простыней; конвенция окна срезов:
+# образец — голубой, фон — оранжевый.
+_SHEET_RGB_SMP = (0.45, 0.65, 0.95)
+_SHEET_RGB_BG = (1.0, 0.55, 0.15)
 # Задача #140: критуровень Currie для простыни (#135, _BG_SHEET_K) отменён решением оператора
 # «простыня фона и образец должны строиться одинаково» — простыня строится как рельеф, без надбавок.
 # Задача #110: выделение фотопиков на 3D-водопаде. Каждый пик — зелёная линия по гребню рельефа
@@ -149,6 +154,9 @@ class Waterfall3DView(gl.GLViewWidget):
         self.setBackgroundColor(pg.mkColor(15, 15, 20))
         self.setCameraPosition(distance=300, elevation=35, azimuth=-60)
         self._surface = None          # текущий GLSurfacePlotItem (или None)
+        self._surface_on = True       # Задача #143: тумблер видимости рельефа-«простыни образца»
+        self._surface_style = "palette"  # Задача #145: стиль простыни образца (palette|solid|wire)
+        self._bg_style = "palette"       # Задача #145: стиль простыни фона (palette|solid|wire)
         self._sg = None               # последняя спектрограмма (для смены Z-шкалы)
         self._z_mode = "log"          # текущая Z-шкала рельефа/цвета
         self._gain = DEFAULT_GAIN      # регулировка контраста (Задача 16)
@@ -168,7 +176,7 @@ class Waterfall3DView(gl.GLViewWidget):
         self.addItem(self._grid)
         self._grid_items = []         # линии координатной сетки/рамки (Задача #63/#68)
         self._time_unit = "с"         # единицы оси времени: с | мин | ч (Задача #64)
-        self._floor_visible = True    # Задача #76: видна ли «подложка» (плоское дно рельефа)
+        self._floor_visible = False   # Задача #76: видна ли «подложка»; #150: дефолт — скрыта
         # Задача #98: «фоновая простыня» — полупрозрачная поверхность на высоте рельефа, отвечающей
         # фону bg(энергия), постоянная во времени; показывает уровень фона над/под водопадом.
         self._bg_cps_full = None      # поканальный фон cps (полное разрешение), None — нет фона
@@ -375,6 +383,12 @@ class Waterfall3DView(gl.GLViewWidget):
         индексов; счёт — обнуление alpha вне высотного слоя + translucent."""
         if self._z_surface is None or self._colors_full is None:
             return
+        # Задача #143: тумблер «Простыня образца» на тулбаре «Вид» скрывает рельеф.
+        if not self._surface_on:
+            if self._surface is not None:
+                self.removeItem(self._surface)
+                self._surface = None
+            return
         nt, nc = self._nt, self._nc
         i0, i1, j0, j1, z_lo, z_hi, counts_active = self._clip_windows()
         self._clip_sig = (i0, i1, j0, j1, z_lo, z_hi, counts_active)
@@ -397,15 +411,24 @@ class Waterfall3DView(gl.GLViewWidget):
         if not self._floor_visible:
             floor = zsub <= _FLOOR_FRAC * float(self._height_scale)
             csub[..., 3] = np.where(floor, 0.0, csub[..., 3])
+            # Задача #146: у «каркаса» рёбра не имеют per-vertex alpha — дно вырезается NaN-ом
+            if self._surface_style == "wire":
+                zsub = zsub.copy()
+                zsub[floor] = np.nan
+        # Задача #145: стиль «однотонный» — перекрас в цвет образца (голубой), полупрозрачно.
+        if self._surface_style == "solid":
+            self._apply_solid_style(csub, _SHEET_RGB_SMP, 0.45)
         colors_flat = csub.reshape(-1, 4)
         if self._surface is not None:
             self.removeItem(self._surface)
             self._surface = None
         surf = gl.GLSurfacePlotItem(x=xs, y=ys, z=zsub, colors=colors_flat,
-                                    shader=None, computeNormals=False, smooth=False)
-        # translucent нужен, когда alpha значимы: обрезка по счёту (IV-R3) или скрытое дно (#76);
-        # иначе opaque (быстрее, без сортировки прозрачности).
-        translucent = counts_active or not self._floor_visible
+                                    shader=None, computeNormals=False, smooth=False,
+                                    **self._sheet_style_kwargs(self._surface_style, _SHEET_RGB_SMP))
+        # translucent нужен, когда alpha значимы: обрезка по счёту (IV-R3), скрытое дно (#76)
+        # или нестандартный стиль (#145); иначе opaque (быстрее, без сортировки прозрачности).
+        translucent = (counts_active or not self._floor_visible
+                       or self._surface_style != "palette")
         surf.setGLOptions("translucent" if translucent else "opaque")
         surf.translate(-nt / 2.0, -nc / 2.0, 0.0)
         self.addItem(surf)
@@ -429,6 +452,7 @@ class Waterfall3DView(gl.GLViewWidget):
         self._floor_visible = visible
         if self._z_surface is not None:
             self._rebuild_surface()
+        self._rebuild_bg_sheet()   # Задача #146: дно простыни фона следует за тем же тумблером
 
     def set_background_sheet(self, bg_cps, raw=None) -> None:
         """Задача #98: задать поканальный фон (cps, полное разрешение) для «простыни» на 3D;
@@ -440,6 +464,35 @@ class Waterfall3DView(gl.GLViewWidget):
         self._bg_sheet_raw = None if raw is None else (np.asarray(raw[0], dtype=np.float64),
                                                        np.asarray(raw[1], dtype=np.float64).ravel())
         self._rebuild_bg_sheet()
+
+    def set_surface_visible(self, on: bool) -> None:
+        """Задача #143: показать/скрыть «простыню образца» (основной 3D-рельеф)."""
+        self._surface_on = bool(on)
+        self._rebuild_surface()
+
+    def set_surface_style(self, style: str) -> None:
+        """Задача #145: стиль простыни образца: 'palette' | 'solid' | 'wire'."""
+        self._surface_style = style
+        self._rebuild_surface()
+
+    def set_bg_sheet_style(self, style: str) -> None:
+        """Задача #145: стиль простыни фона: 'palette' | 'solid' | 'wire'."""
+        self._bg_style = style
+        self._rebuild_bg_sheet()
+
+    @staticmethod
+    def _sheet_style_kwargs(style: str, rgb) -> dict:
+        """Задача #145: kwargs GLSurfacePlotItem для стиля 'wire' — каркас без граней."""
+        if style == "wire":
+            return {"drawEdges": True, "drawFaces": False, "edgeColor": (*rgb, 0.85)}
+        return {}
+
+    @staticmethod
+    def _apply_solid_style(colors, rgb, alpha: float) -> None:
+        """Задача #145: перекрасить массив цветов (..., 4) в однотонный rgb; прозрачные
+        ячейки (alpha==0 — обрезка по счёту/скрытое дно) остаются прозрачными."""
+        colors[..., 0], colors[..., 1], colors[..., 2] = rgb
+        colors[..., 3] = np.where(colors[..., 3] > 0.0, alpha, 0.0)
 
     def set_background_sheet_visible(self, on: bool) -> None:
         """Задача #98: показать/скрыть «фоновую простыню» на 3D-водопаде."""
@@ -460,45 +513,78 @@ class Waterfall3DView(gl.GLViewWidget):
         e_full = np.asarray(self._sg.energies(), dtype=np.float64)
         if e_full.size != bg.size:
             return
-        # Задача #140 («строить одинаково»): значение канала — СЫРОЙ фоновый спектр за живое
-        # время одного среза (background_window_like, как оверлей #139), без критуровня Currie
-        # (#135 отменён) и без max-агрегации по времени; каналы биннируются тем же max-LOD,
-        # сглаживаются тем же smooth, высота — по той же карте value->height, что рельеф.
-        # Фон-файл с иной калибровкой сырого блока не имеет — гладкий bg_cps (fallback, как #139).
-        lt = np.asarray(self._sg.live_time_s, dtype=np.float64)
-        pos = lt[lt > 0.0]
-        lt_ref = float(np.median(pos)) if pos.size else 1.0
-        if self._bg_sheet_raw is not None:
-            win = background_window_like(self._bg_sheet_raw[0], self._bg_sheet_raw[1], lt_ref)
-            val = win / lt_ref if self._unit == "cps" else win
-        else:
-            val = bg if self._unit == "cps" else bg * lt_ref
-        field = np.ones((self._sg.n_slices, 1)) * np.asarray(val, dtype=np.float64)[None, :]
-        lod, _t, _c = self._sg.downsample(self._max_time, self._max_chan,
-                                          method="max", data=field)
-        col = np.asarray(lod, dtype=np.float64)[0, :self._nc]
-        col = np.asarray(smooth_counts(col, self._smooth, axis=-1), dtype=np.float64)
-        vals = np.asarray(self._z_counts, dtype=np.float64).ravel()
-        hts = np.asarray(self._z_surface, dtype=np.float64).ravel()
-        order = np.argsort(vals)
-        bg_h = np.interp(col, vals[order], hts[order]).astype(np.float32)
-        self._add_bg_sheet(bg_h)
+        # Задача #144: простыня — полноценный рельеф ТЕМ ЖЕ пайплайном, что рельеф-образец
+        # (LOD max → обрезка по _MAX_ENERGY_KEV → smooth → apply_z_scale → нормировка на zmax
+        # образца → cmap). Если сырой блок фона совпадает по форме с целевой матрицей (фон=тот же
+        # файл или совместимый) — гоним счётную матрицу фона в текущих единицах через тот же
+        # sg.downsample; иначе fallback: константное поле поканального фона.
+        bg_field = self._bg_sheet_field(bg)
+        if bg_field is None:
+            return
+        z_bg, _t, ch_bg = self._sg.downsample(self._max_time, self._max_chan,
+                                              method="max", data=bg_field)
+        z_bg = np.asarray(z_bg, dtype=np.float64)
+        keep = int(np.count_nonzero(np.asarray(ch_bg, dtype=np.float64) <= _MAX_ENERGY_KEV))
+        if 0 < keep < z_bg.shape[1]:
+            z_bg = z_bg[:, :keep]
+        z_bg = smooth_counts(z_bg, self._smooth, axis=1)[:, :self._nc]
+        if z_bg.shape[1] < self._nc:
+            return
+        self._add_bg_sheet(z_bg)
 
-    def _add_bg_sheet(self, bg_h) -> None:
-        """Задача #98: собрать GLSurfacePlotItem простыни — тусклый полупрозрачный «лист»."""
-        nt, nc = self._nt, self._nc
+    def _bg_sheet_field(self, bg_cps):
+        """Задача #144: полноразмерная матрица счётов фона в текущих единицах для sg.downsample.
+        При совпадении формы с counts образца — берём сырой блок как есть (counts / lt при cps,
+        counts при counts). Иначе fallback: константа поканального фона размножается по времени."""
+        target_shape = self._sg.counts.shape
+        if (self._bg_sheet_raw is not None
+                and self._bg_sheet_raw[0].shape == target_shape):
+            bg_counts = np.asarray(self._bg_sheet_raw[0], dtype=np.float64)
+            if self._unit == "cps":
+                lt_arr = np.asarray(self._bg_sheet_raw[1], dtype=np.float64)
+                safe = np.where(lt_arr > 0.0, lt_arr, np.inf)
+                return bg_counts / safe[:, None]
+            return bg_counts
+        lt_arr = np.asarray(self._sg.live_time_s, dtype=np.float64)
+        pos = lt_arr[lt_arr > 0.0]
+        lt_ref = float(np.median(pos)) if pos.size else 1.0
+        val = np.asarray(bg_cps, dtype=np.float64)
+        val = val if self._unit == "cps" else val * lt_ref
+        return np.ones(target_shape, dtype=np.float64) * val[None, :]
+
+    def _add_bg_sheet(self, z_bg) -> None:
+        """Задача #144: цветной полупрозрачный рельеф простыни (палитра как у образца, alpha=0.55).
+        Высоты нормируются на zmax ОБРАЗЦА (одна высотная система с рельефом), при фон=образец
+        простыня ложится точно поверх рельефа."""
+        z_disp = apply_z_scale(np.asarray(z_bg, dtype=np.float64), self._z_mode,
+                               gain=self._gain, gamma=self._gamma, clip=self._clip)
+        z_smp = apply_z_scale(np.asarray(self._z_counts, dtype=np.float64), self._z_mode,
+                              gain=self._gain, gamma=self._gamma, clip=self._clip)
+        zmax = float(z_smp.max()) if z_smp.size else 0.0
+        zn = z_disp / zmax if zmax > 0 else z_disp
+        z = (zn * self._height_scale).astype(np.float32)
+        colors = get_colormap(self._cmap_name).map(zn, mode="float").astype(np.float32)
+        colors[..., 3] = 0.55
+        # Задача #145: стиль «однотонный» — перекрас в цвет фона (оранжевый, конвенция срезов).
+        if self._bg_style == "solid":
+            self._apply_solid_style(colors, _SHEET_RGB_BG, 0.55)
+        # Задача #146: «Подложка» гасит дно и у простыни фона (критерий как у рельефа, #76);
+        # у «каркаса» рёбра без per-vertex alpha — ячейки дна вырезаются NaN-ом.
+        if not self._floor_visible:
+            floor = zn <= _FLOOR_FRAC
+            colors[..., 3] = np.where(floor, 0.0, colors[..., 3])
+            if self._bg_style == "wire":
+                z = z.copy()
+                z[floor] = np.nan
+        nt, nc = z.shape
+        xs = np.arange(nt, dtype=np.float32)
         ys = np.arange(nc, dtype=np.float32)
-        xs = np.array([0.0, max(1.0, nt - 1)], dtype=np.float32)
-        z = np.vstack([bg_h, bg_h]).astype(np.float32)        # (2, nc) — плоско по времени
-        colors = np.empty((2 * nc, 4), dtype=np.float32)
-        colors[:] = (0.82, 0.86, 0.95, 0.16)                  # тусклый сине-серый, низкая alpha
-        sheet = gl.GLSurfacePlotItem(x=xs, y=ys, z=z, colors=colors,
-                                     shader=None, computeNormals=False, smooth=True)
-        sheet.setGLOptions("translucent")
-        sheet.setDepthValue(5)
-        sheet.translate(-nt / 2.0, -nc / 2.0, 0.0)
-        self.addItem(sheet)
-        self._bg_sheet = sheet
+        sheet = gl.GLSurfacePlotItem(x=xs, y=ys, z=z, colors=colors.reshape(-1, 4),
+                                     shader=None, computeNormals=False, smooth=False,
+                                     **self._sheet_style_kwargs(self._bg_style, _SHEET_RGB_BG))
+        sheet.setGLOptions("translucent"); sheet.setDepthValue(5)
+        sheet.translate(-self._nt / 2.0, -self._nc / 2.0, 0.0)
+        self.addItem(sheet); self._bg_sheet = sheet
 
     def set_smoothing(self, radius: int) -> None:
         """Радиус скользящего среднего по энергии (Замечание IV-R4); ре-рендер из той же sg."""
@@ -1089,6 +1175,28 @@ class Waterfall3DView(gl.GLViewWidget):
                     vals.append(None)
             out[axis] = vals
         return out
+
+    def time_plane_range(self):
+        """Задача #148: диапазон времени (t0, t1) в секундах между секущими плоскостями Времени
+        для выбора фонового участка. Невидимый слот -> край оси (семантика #84); ни одна
+        плоскость Времени не видима -> None (выбор плоскостями не задан).
+        Задача #151: LOD-бины рельефа шире сырых срезов — возвращаем КРАЯ крайних бинов
+        в сырых срезах (разбиение как в sg.downsample), не центры: иначе сырые срезы внешней
+        половины краевого бина выпадают из выборки фона и после вычета остаются «гребнем»
+        у плоскости сечения."""
+        if self._t_centers is None or len(self._t_centers) == 0 or self._sg is None:
+            return None
+        p0, p1 = self._planes[("time", 0)], self._planes[("time", 1)]
+        if not (p0["visible"] or p1["visible"]):
+            return None
+        nt = len(self._t_centers)
+        ns = int(self._sg.n_slices)
+        edges = np.unique(np.linspace(0, ns, nt + 1).astype(np.int64))
+        t_raw = np.asarray(self._sg.time_offsets_s, dtype=np.float64)
+        i0 = self._frac_to_index(self._t_centers, p0["frac"]) if p0["visible"] else 0
+        i1 = self._frac_to_index(self._t_centers, p1["frac"]) if p1["visible"] else nt - 1
+        lo, hi = min(i0, i1), max(i0, i1)
+        return (float(t_raw[edges[lo]]), float(t_raw[edges[hi + 1] - 1]))
 
     def set_plane(self, axis: str, slot: int, frac: float, visible: bool) -> None:
         """Поставить плоскость (axis, slot) на долю frac оси и показать/скрыть её вместе с профилем.
