@@ -193,6 +193,27 @@ def test_found_peaks_capped_at_max_energy(app):
     assert max(pk.energy for pk in peaks) < 3000.0     # пик 4004 кэВ отсечён
 
 
+# ===== Задача #153: нижняя граница поиска пиков (50 кэВ) =====
+
+def test_153_found_peaks_floor_at_min_energy(app, monkeypatch):
+    """Задача #153: _found_peaks() отсекает пики ниже 50 кэВ — рентгеновский/шумовой
+    край сцинтиллятора (23.6/37.1 кэВ на реальном файле) не гамма-линии. Детекция
+    monkeypatch-ится (как в тесте #141): проверяется сам фильтр, не физика FWHM
+    (дефолт-модель FWHM на <50 кэВ шире синтетических пиков — детекция там слепа)."""
+    from awf.analysis.types import FoundPeak
+    from awf.ui import view3d as v3
+    fakes = [FoundPeak(channel=10.0, energy=34.0, height=1.0,
+                       fwhm_channels=8.0, significance=9.0, area_estimate=1.0),
+             FoundPeak(channel=40.0, energy=104.0, height=1.0,
+                       fwhm_channels=8.0, significance=9.0, area_estimate=1.0)]
+    monkeypatch.setattr(v3, "find_peaks", lambda *a, **k: list(fakes))
+    monkeypatch.setattr(v3, "find_transient_peaks", lambda *a, **k: [])
+    v = _loaded()
+    got = [float(pk.energy) for pk in v._found_peaks()]
+    assert got == [104.0], "пик 34 кэВ отсечён, 104 кэВ остался"
+    assert v3._MIN_ENERGY_KEV == 50.0
+
+
 # ===== Задача #111: PeaksPanel в MainWindow =====
 
 def test_peaks_panel_exists_in_main_window(app):

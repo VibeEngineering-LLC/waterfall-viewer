@@ -224,5 +224,86 @@ def test_129_flat_deterministic_column_not_broken_by_abs_floor():
     assert mask.all(), "плоский столбец без шума должен пройти порог целиком (thr_abs==floor)"
 
 
+def test_152_sparse_trace_column_empty_with_poisson_gate():
+    """Задача #152: почти пустой столбец (следовые отсчёты 0/1/2, чистый пуассонов шум)
+    проходил масштабно-инвариантные пороги (они слепы к абсолютной статистике: при
+    мизерном фоне относительные флуктуации огромны) — маска покрывала почти всю ось,
+    на 3D рисовались длинные зелёные линии на пустом поле. poisson=True трактует данные
+    как COUNTS и требует пуассоновой значимости net_s >= K*sqrt(baseline_s) — маска пуста."""
+    rng = np.random.default_rng(2)
+    z = rng.poisson(0.08, size=(400, NC)).astype(np.float64)   # следовый уровень, как за 2614 кэВ
+    mask = peak_time_mask(z, PEAK_CH, poisson=True)
+    assert mask.sum() == 0, "следовый шумовой столбец должен давать пустую маску"
+
+
+def test_152_poisson_gate_keeps_strong_stable_line():
+    """Задача #152: пуассонов гейт не должен резать реальную стабильную линию —
+    сигнал много выше sqrt(фона) проходит по всей оси."""
+    rng = np.random.default_rng(3)
+    z = rng.poisson(BG, size=(NT, NC)).astype(np.float64)
+    z[:, PEAK_CH] += 200.0
+    mask = peak_time_mask(z, PEAK_CH, poisson=True)
+    assert mask.sum() >= NT - 4
+
+
 def test_export_is_same_object():
     assert peak_time_mask is _direct
+
+
+# ---------- #160: peak_presence_mask — сумма окна пика + Currie-гейт по бинам ----------
+
+def _wide_peak_z(present, amp_total, sigma_ch=2.5, bg=50.0, nt=200, nc=64,
+                 ch=30, seed=7):
+    """Пуассонов фон bg/канал; широкий гауссов пик (σ каналов) с amp_total
+    отсчётов на бин времени, размазанных по профилю, в слоях present."""
+    rng = np.random.default_rng(seed)
+    z = rng.poisson(bg, size=(nt, nc)).astype(np.float64)
+    j = np.arange(nc, dtype=float)
+    prof = np.exp(-0.5 * ((j - ch) / sigma_ch) ** 2)
+    prof /= prof.sum()
+    for i in present:
+        z[i] += rng.poisson(amp_total * prof)
+    return z
+
+
+def test_160_weak_wide_line_strict_empty_presence_covers():
+    """#160: слабая ШИРОКАЯ постоянная линия (K-40/равновесные Th-232): на один
+    канал приходится малая доля счётов — строгая одноканальная маска (#152)
+    пуста, но сумма окна пика статистически значима в каждом бине времени."""
+    from awf.analysis.peaks import peak_presence_mask
+    z = _wide_peak_z(range(200), amp_total=150.0)
+    strict = peak_time_mask(z, 30, poisson=True, peak_hw=6)
+    assert not strict.any(), "премисса #160: строгая маска пуста"
+    pm = peak_presence_mask(z, 30, peak_hw=6)
+    assert pm.dtype == bool and pm.shape == (200,)
+    assert pm.mean() >= 0.7, f"покрытие {pm.mean():.2f} < 0.7"
+
+
+def test_160_empty_column_presence_stays_empty():
+    """#160: чистый пуассонов фон без пика — маска присутствия пуста
+    (одиночные шумовые биты убивает opening)."""
+    from awf.analysis.peaks import peak_presence_mask
+    rng = np.random.default_rng(11)
+    z = rng.poisson(50.0, size=(200, 64)).astype(np.float64)
+    pm = peak_presence_mask(z, 30, peak_hw=6)
+    assert pm.sum() == 0, "пустой канал не должен получить гребень"
+
+
+def test_160_transient_presence_localized():
+    """#160: транзиент (первые 60 бинов из 200) — маска покрывает ядро зоны
+    присутствия и НЕ распространяется на пустую часть оси (анти-#112/#126)."""
+    from awf.analysis.peaks import peak_presence_mask
+    z = _wide_peak_z(range(60), amp_total=300.0, seed=5)
+    pm = peak_presence_mask(z, 30, peak_hw=6)
+    assert pm[5:55].mean() >= 0.9, "ядро транзиента покрыто"
+    assert not pm[70:].any(), "пустая часть оси без гребня"
+
+
+def test_160_edge_channel_no_crash():
+    """#160: канал у края спектра — одно плечо; без исключений, форма/тип верны."""
+    from awf.analysis.peaks import peak_presence_mask
+    rng = np.random.default_rng(4)
+    z = rng.poisson(50.0, size=(100, 64)).astype(np.float64)
+    for ch in (0, 1, 62, 63):
+        pm = peak_presence_mask(z, ch, peak_hw=6)
+        assert pm.dtype == bool and pm.shape == (100,)

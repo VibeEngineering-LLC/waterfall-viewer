@@ -92,6 +92,19 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "с": "s",
         "мин": "min",
         "ч": "h",
+        # Задача #156: нормализация по эффективности регистрации ε(E)
+        "Нормализация по эффективности": "Efficiency normalization",
+        "Умножить отсчёты каналов на ε_ref/ε(E) — компенсация падения "
+        "эффективности фотопика с энергией":
+            "Multiply channel counts by ε_ref/ε(E) — compensate the drop of "
+            "photopeak efficiency with energy",
+        "Загрузить кривую эффективности…": "Load efficiency curve…",
+        "Кривые эффективности (*.efr *.efa *.csv *.txt *.json);;Все файлы (*)":
+            "Efficiency curves (*.efr *.efa *.csv *.txt *.json);;All files (*)",
+        "Кривая эффективности": "Efficiency curve",
+        "Не удалось загрузить кривую эффективности:":
+            "Failed to load the efficiency curve:",
+        "Кривая:": "Curve:",
         # Задача #131: панель «Сегментация по времени» и её строки
         "Сегментация по времени": "Time segmentation",
         "Сегментация по времени…": "Time segmentation…",

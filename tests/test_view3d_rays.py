@@ -86,6 +86,19 @@ def test_plane_marker_depth_tested_not_additive(app):
     assert opts.get(GL_DEPTH_TEST) is True   # перекрывается рельефом, не «additive»-поверх
 
 
+def test_157_grid_lines_depth_tested_not_additive(app):
+    # Задача #157: линии координатной сетки/рамки — с depth-тестом (glOptions='translucent'),
+    # рельеф перекрывает сетку позади себя. Дефолт 'additive' просвечивал (корень как #95).
+    from OpenGL.GL import GL_DEPTH_TEST, GL_BLEND
+    v = Waterfall3DView()
+    v.set_spectrogram(_make_sg(), max_time=400, max_chan=512)
+    assert len(v._grid_items) > 0
+    for item in v._grid_items:
+        opts = item._GLGraphicsItem__glOpts
+        assert opts.get(GL_DEPTH_TEST) is True   # перекрывается рельефом
+        assert opts.get(GL_BLEND) is True        # альфа цветов сетки (0.55/0.9) работает
+
+
 def test_plane_markers_rebuilt_on_zscale_change(app):
     v = Waterfall3DView()
     v.set_spectrogram(_make_sg(), max_time=400, max_chan=512)

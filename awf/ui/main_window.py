@@ -22,6 +22,8 @@ from awf.ui.nuclide_panel import NuclidePanel
 from awf.ui.peaks_panel import PeaksPanel   # Задача #111: панель «Найденные пики»
 from awf.ui.segments_panel import SegmentsPanel   # Задача #131: панель «Сегментация по времени»
 from awf.analysis.segment import segment_by_time, identify_segments   # Задача #131
+from awf.analysis.efficiency import (default_gamma1s, load_efficiency_curve,
+                                     apply_efficiency)   # Задача #156
 from awf.ui.knobs import AdjustPanel
 from awf.ui.cyclebutton import CycleButton   # Задача #74: переключатель-перебор вместо QComboBox
 from awf.ui.style import APP_QSS
@@ -87,6 +89,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._bg_raw = None        # Задача #139: (counts_блок, lt_блок) сырого фонового окна (range-источник)
         self._bg_subtract = False
         self._bg_overlay = False
+        # Задача #156: нормализация по эффективности ε(E). Кривая — свойство детектора,
+        # переживает загрузку нового файла; по умолчанию — измеренная Гамма-1С.
+        self._eff_curve = default_gamma1s()
+        self._eff_normalize = False
 
         # центральная область: вкладки 3D / 2D
         self._tabs = QtWidgets.QTabWidget()
@@ -365,6 +371,26 @@ class MainWindow(QtWidgets.QMainWindow):
                             "Разбить запись по времени и идентифицировать нуклиды в каждом сегменте")
         self._act_segments.triggered.connect(self._on_segments_action)
         m.addAction(self._act_segments)
+        m.addSeparator()
+        # Задача #156: нормализация по эффективности регистрации ε(E).
+        self._act_eff_norm = QtGui.QAction("Нормализация по эффективности", self)
+        self._act_eff_norm.setCheckable(True)
+        self._act_eff_norm.setChecked(False)
+        self._register_i18n(self._act_eff_norm.setText, "Нормализация по эффективности")
+        self._register_i18n(self._act_eff_norm.setToolTip,
+                            "Умножить отсчёты каналов на ε_ref/ε(E) — компенсация падения "
+                            "эффективности фотопика с энергией")
+        self._act_eff_norm.toggled.connect(self._on_eff_norm_toggled)
+        m.addAction(self._act_eff_norm)
+        act_eff_load = QtGui.QAction("Загрузить кривую эффективности…", self)
+        self._register_i18n(act_eff_load.setText, "Загрузить кривую эффективности…")
+        act_eff_load.triggered.connect(self._on_eff_load)
+        m.addAction(act_eff_load)
+        # информационный пункт: имя текущей кривой (текст динамический, без i18n-реестра)
+        self._act_eff_info = QtGui.QAction("", self)
+        self._act_eff_info.setEnabled(False)
+        m.addAction(self._act_eff_info)
+        self._update_eff_info()
 
     def _build_service_menu(self, m) -> None:
         """Задача #106: «Сервис» → подменю «Язык» с пунктами Русский / English (QActionGroup,
@@ -647,6 +673,35 @@ class MainWindow(QtWidgets.QMainWindow):
         self._redistribute()
 
     @QtCore.Slot(bool)
+    def _on_eff_norm_toggled(self, on: bool) -> None:
+        """Задача #156: вкл/выкл нормализации водопада по эффективности регистрации ε(E)."""
+        self._eff_normalize = bool(on)
+        self._redistribute()
+
+    def _on_eff_load(self) -> None:
+        """Задача #156: загрузка кривой эффективности из файла (.efr/.efa LSRM, .json,
+        двухколоночный текст). Ошибка парсинга — предупреждение, кривая не меняется."""
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self, tr("Загрузить кривую эффективности…"), "",
+            tr("Кривые эффективности (*.efr *.efa *.csv *.txt *.json);;Все файлы (*)"))
+        if not path:
+            return
+        try:
+            self._eff_curve = load_efficiency_curve(path)
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(
+                self, tr("Кривая эффективности"),
+                tr("Не удалось загрузить кривую эффективности:") + f"\n{exc}")
+            return
+        self._update_eff_info()
+        if self._eff_normalize:
+            self._redistribute()
+
+    def _update_eff_info(self) -> None:
+        """Задача #156: инфо-пункт меню — имя текущей кривой эффективности."""
+        self._act_eff_info.setText(tr("Кривая:") + f" {self._eff_curve.name}")
+
+    @QtCore.Slot(bool)
     def _on_dose_toggled(self, on: bool) -> None:
         """Задача #104: переключатель оверлея мощности дозы (RadiaCode .rcspg)."""
         self._slices.set_dose_overlay(on)
@@ -707,13 +762,29 @@ class MainWindow(QtWidgets.QMainWindow):
         self._segments_dock.raise_()
         self._segments_panel._on_recompute()   # эмит recomputeRequested(pen_factor)
 
+    def _analysis_spectrogram(self):
+        """Задача #158: аналитическая спектрограмма — вычет фона (#96/#147) БЕЗ нормализации
+        по эффективности (#156). Поиск пиков и идентификация работают ТОЛЬКО по ней:
+        Currie-порог предполагает пуассонову статистику (var=N), а после умножения на
+        ε_ref/ε(E) дисперсия растёт как f² — на реальном файле это дало 10 ложных пиков
+        >1700 кэВ; identify_peaks сам вносит ε-поправку в интенсивности линий (#130),
+        нормализация входа = двойная коррекция (Th-232 терял все матчи, K-40 падал
+        ниже порога 0.30)."""
+        sg = self._sg
+        if self._bg_subtract and self._bg_cps is not None and sg is not None:
+            sg = subtract_background(sg, self._bg_cps, self._bg_raw)
+        return sg
+
     def _active_spectrogram(self):
-        """Задача #96: активная спектрограмма для 3D/2D/срезов — с вычтенным фоном, если вычет
-        включён и фон задан, иначе исходная. Задача #147: сырой блок _bg_raw — поячеечный вычет
-        (при самовычете точный ноль в каждой ячейке, как совпадающие простыни)."""
-        if self._bg_subtract and self._bg_cps is not None and self._sg is not None:
-            return subtract_background(self._sg, self._bg_cps, self._bg_raw)
-        return self._sg
+        """Задача #96: активная спектрограмма для ОТОБРАЖЕНИЯ 3D/2D/срезов — с вычтенным
+        фоном, если вычет включён и фон задан. Задача #147: сырой блок _bg_raw — поячеечный
+        вычет. Задача #156: нормализация ε(E) — ПОСЛЕ вычета фона (фон и образец сняты одним
+        детектором, вычитать надо в сырых отсчётах). Задача #158: нормализация — только
+        отображение; анализ (пики/ID) берёт _analysis_spectrogram()."""
+        sg = self._analysis_spectrogram()
+        if self._eff_normalize and sg is not None:
+            sg = apply_efficiency(sg, self._eff_curve)
+        return sg
 
     def _redistribute(self) -> None:
         """Задача #96: раздать активную спектрограмму в 3D/2D/срезы (аналитика — всегда на
@@ -726,7 +797,9 @@ class MainWindow(QtWidgets.QMainWindow):
         sg = self._active_spectrogram()               # #138: поканальный вычет #134 (или сырые данные)
         if sg is None:
             return
-        self._view3d.set_spectrogram(sg)
+        # Задача #158: view3d получает и аналитический источник (без ε-нормализации) —
+        # для _found_peaks (пики/ID) и пуассоновой маски гребней (#152 _z_counts_int).
+        self._view3d.set_spectrogram(sg, analysis_sg=self._analysis_spectrogram())
         self._slices.set_spectrogram(sg)
         self._heatmap.set_spectrogram(sg)
         self._sections.emit_all()

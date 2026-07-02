@@ -274,9 +274,12 @@ def _proportionality_eff(matched: Sequence[Tuple[GammaLine, FoundPeak, float]],
 def _energy_quality(matched: Sequence[Tuple[GammaLine, FoundPeak, float]]) -> float:
     """Множитель качества энергии eq из [0..1] по совпавшим линиям (#130).
 
-    eq = sum(I * max(0, 1 - |Δ|/окно)) / sum(I), Δ = pk.energy - ln.energy. Точные
-    совпадения (Δ=0) дают 1.0; зацепы у края окна тянут eq вниз. При нулевой сумме
-    интенсивностей возвращает 0.0.
+    eq = sum(I * max(0, 1 - (|Δ|/окно)²)) / sum(I), Δ = pk.energy - ln.energy.
+    Точные совпадения (Δ=0) дают 1.0; зацепы у края окна тянут eq вниз. При
+    нулевой сумме интенсивностей возвращает 0.0. Штраф квадратичный (#159):
+    энергошкала бытовых сцинтилляторов дрейфует на ±1–2 % (температура), и
+    линейный штраф давил честные матчи середины окна (K-40: пик 1440.6 при
+    линии 1460.8 → 0.33); квадратичный терпим в середине, у края всё равно → 0.
     """
     num = 0.0
     den = 0.0
@@ -284,7 +287,8 @@ def _energy_quality(matched: Sequence[Tuple[GammaLine, FoundPeak, float]]) -> fl
         if ln.intensity <= 0:
             continue
         w = win if win > 0 else 1e-6
-        closeness = 1.0 - abs(pk.energy - ln.energy) / w
+        x = abs(pk.energy - ln.energy) / w
+        closeness = 1.0 - x * x
         if closeness < 0.0:
             closeness = 0.0
         num += ln.intensity * closeness

@@ -1006,7 +1006,7 @@
           "d_energy": 0.006,
           "d_intensity": 0.07,
           "line_type": null,
-          "used": false
+          "used": true
         },
         {
           "energy": 510.77,
@@ -1030,7 +1030,7 @@
           "d_energy": 0.009,
           "d_intensity": 0.09,
           "line_type": null,
-          "used": false
+          "used": true
         },
         {
           "energy": 755.315,
@@ -1102,7 +1102,7 @@
           "d_energy": 0.017,
           "d_intensity": 0.3,
           "line_type": null,
-          "used": false
+          "used": true
         },
         {
           "energy": 1588.2,
@@ -1110,7 +1110,7 @@
           "d_energy": 0.03,
           "d_intensity": 0.08,
           "line_type": null,
-          "used": false
+          "used": true
         },
         {
           "energy": 1620.5,
@@ -1118,7 +1118,7 @@
           "d_energy": 0.1,
           "d_intensity": 0.03,
           "line_type": null,
-          "used": false
+          "used": true
         },
         {
           "energy": 1630.627,
@@ -1126,7 +1126,7 @@
           "d_energy": 0.01,
           "d_intensity": 0.04,
           "line_type": null,
-          "used": false
+          "used": true
         },
         {
           "energy": 2614.511,
