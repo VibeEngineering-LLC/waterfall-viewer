@@ -314,16 +314,19 @@ _PTM_SMOOTH_SIGMA = 2.0   # σ гауссова сглаживания net по 
 _PTM_CLOSE_LEN = 4        # макс. длина разрыва (бины), заращиваемого binary closing
 _PTM_MIN_LEN = 3          # мин. длина сегмента (бины); короче — шумовой выброс (opening)
 _PTM_SNR_K = 3.0          # порог значимости: net_smooth ≥ med + K·(1.4826·MAD) оси времени
+_PTM_POISSON_K = 3.0      # Задача #152: пуассонов гейт (poisson=True): net_s ≥ K·√(baseline_s)
 
 
-def _shoulder_baseline(z: np.ndarray, channel: int) -> np.ndarray:
+def _shoulder_baseline(z: np.ndarray, channel: int,
+                       gap: int = _PTM_SHOULDER_GAP) -> np.ndarray:
     """
     Фон по слоям из боковых полос вокруг channel; обрезка по краям,
     fallback на доступное плечо (как peakmap.window_series:80-89).
-    Возвращает 1D длины nt.
+    gap — отбивка от центра до плеча (Задача #152: для оконного пуассонова
+    гейта плечи выносятся за окно пика). Возвращает 1D длины nt.
     """
     nt, nc = z.shape
-    g = _PTM_SHOULDER_GAP
+    g = int(gap)
     w = max(1, _PTM_SHOULDER_WIDTH)
     l0, l1 = max(0, channel - g - w), max(0, channel - g)
     r0, r1 = min(nc, channel + g + 1), min(nc, channel + g + 1 + w)
@@ -408,6 +411,10 @@ def peak_time_mask(
     close_len: Optional[int] = None,    # заращивать разрывы ≤ close_len (None → авто от nt)
     min_len: int = _PTM_MIN_LEN,        # убрать сегменты < min_len (binary opening)
     abs_floor: bool = False,            # Задача #129: считать thr_abs от floor, не от нуля
+    poisson: bool = False,              # Задача #152: z_counts = СЫРЫЕ counts, требовать
+                                        # пуассонову значимость net_s ≥ K·√(baseline_s)
+    peak_hw: int = 0,                   # Задача #152: полуширина окна пика (LOD-каналов)
+                                        # для пуассонова гейта; 0 = одноканальный гейт
 ) -> np.ndarray:
     """
     Маска присутствия фотопика по времени для обрезки 3D-хребта (Задача #112).
@@ -503,8 +510,83 @@ def peak_time_mask(
     cond_abs = net_s >= thr_abs
     cond_rel = net_s >= rel_threshold * net_s_max  # лёгкий относит. пол (доля от max)
     raw = cond_abs & cond_rel
+    if poisson:
+        # Задача #152: все пороги выше масштабно-инвариантны и слепы к абсолютной
+        # статистике — почти пустой столбец (следовые counts, огромные относительные
+        # флуктуации) проходил и колоночный гейт (bg_level мизерный), и thr_abs
+        # (MAD сглаженного шума мал), и rel-пол (шум однороден) → маска почти на всю
+        # ось → длинные «гребни» на пустом поле 3D. Пуассонова значимость НЕ
+        # масштабно-инвариантна: она требует данные в COUNTS (σ≈√N) — вызывающая
+        # сторона обязана передать сырые counts (view3d: sum-LOD counts, не cps).
+        # Плечи гейта — ЗА пиком (gap=peak_hw+_PTM_SHOULDER_GAP): штатные близкие плечи
+        # (gap=1) сидят на склоне гауссианы пика шириной >1 LOD-канала и съедают до ~3/4
+        # амплитуды (реальный транзиент #126 давал ~1σ при ≫5σ фактических). Сигнал
+        # НАМЕРЕННО одноканальный: оконное суммирование ch±hw ловит СОСЕДНИЕ фоновые
+        # линии (K-40 1461 / Tl-208 2614 в ±hw от призрачного столбца) и возвращает
+        # длинные гребни на пустом поле — ровно баг #152.
+        if peak_hw > 0:
+            basefar = np.clip(_shoulder_baseline(
+                z, ch, gap=int(peak_hw) + _PTM_SHOULDER_GAP), 0.0, None)
+            gnet_s = _smooth_time(np.clip(column - basefar, 0.0, None), sm)
+            gbase_s = _smooth_time(basefar, sm)
+        else:
+            gnet_s = net_s
+            gbase_s = _smooth_time(np.clip(baseline, 0.0, None), sm)
+        raw &= gnet_s >= _PTM_POISSON_K * np.sqrt(np.maximum(gbase_s, 1.0))
     # (3) Морфология: заращиваем короткие разрывы стабильной линии, убираем шум-выбросы.
     return _binary_close_open(raw, cl, min_len)
+
+
+_PPM_GAP = 3          # Задача #160: отбивка от края окна пика до начала плеча (каналы)
+_PPM_SHOULDER_W = 6   # Задача #160: ширина каждого плеча базлайна (каналы)
+_PPM_CLOSE_LEN = 5    # Задача #160: closing — сшивать разрывы гребня ≤5 бинов
+
+
+def peak_presence_mask(
+    z_counts: np.ndarray,
+    channel: int,
+    *,
+    peak_hw: int,
+    k: float = _PTM_POISSON_K,
+    shoulder_gap: int = _PPM_GAP,
+    shoulder_w: int = _PPM_SHOULDER_W,
+    min_len: int = _PTM_MIN_LEN,
+    close_len: int = _PPM_CLOSE_LEN,
+) -> np.ndarray:
+    """Задача #160: маска присутствия пика по СУММЕ окна каналов channel±peak_hw.
+
+    Одноканальная peak_time_mask теряет слабые ШИРОКИЕ линии: на один LOD-канал
+    приходится малая доля счётов пика, пуассонов гейт #152 пуст во всех бинах,
+    хотя интегрально линия значима (K-40 1461, равновесные линии Th-232) — зона
+    1461–2614 оставалась без гребней. Здесь статистика набирается всей шириной
+    пика: net(t) = Σ окна − baseline(плечи·ширина окна); бин присутствует, если
+    net ≥ k·√(baseline) (Currie-подобный пуассонов гейт, вход — СЫРЫЕ counts).
+    Морфология: opening(min_len) убивает одиночные шумовые биты (пустые каналы
+    дают пустую маску — проверено на реальном файле: контрольные каналы
+    1800/2400/2900 кэВ → 0 бинов), closing(close_len) сшивает мелкие разрывы.
+    """
+    z = np.asarray(z_counts, dtype=np.float64)
+    if z.ndim != 2 or z.shape[0] == 0 or z.shape[1] < 2:
+        n = z.shape[0] if z.ndim == 2 else 0
+        return np.zeros(n, dtype=bool)
+    nt, nc = z.shape
+    ch = int(np.clip(channel, 0, nc - 1))
+    z = np.where(np.isfinite(z), z, 0.0)
+    hw = max(1, int(peak_hw))
+    lo, hi = max(0, ch - hw), min(nc - 1, ch + hw)
+    sig = z[:, lo:hi + 1].sum(axis=1)
+    # Плечи базлайна: слева и справа ЗА окном пика (с отбивкой на хвост пика).
+    l0, l1 = max(0, lo - shoulder_gap - shoulder_w), max(0, lo - shoulder_gap)
+    r0 = min(nc, hi + shoulder_gap + 1)
+    r1 = min(nc, hi + shoulder_gap + 1 + shoulder_w)
+    sh = np.concatenate([z[:, l0:l1], z[:, r0:r1]], axis=1)
+    if sh.shape[1] == 0:
+        return np.zeros(nt, dtype=bool)
+    bg = np.clip(sh.mean(axis=1), 0.0, None) * float(hi - lo + 1)
+    net = sig - bg
+    raw = net >= float(k) * np.sqrt(np.maximum(bg, 1.0))
+    m = _binary_close_open(raw, 0, int(min_len))      # opening: одиночные шум-биты
+    return _binary_close_open(m, int(close_len), 0)   # closing: мелкие разрывы гребня
 
 
 # ===========================================================================

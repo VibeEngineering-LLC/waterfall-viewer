@@ -7,12 +7,13 @@
 import json
 import sys
 from pathlib import Path
-from awf.io.nuclide_lib import parse_lsrm_lib, to_json_obj
+from awf.io.nuclide_lib import parse_lsrm_lib, to_json_obj, apply_used_overrides
 
 src = sys.argv[1] if len(sys.argv) > 1 else None
 if not src:
     raise SystemExit("usage: gen_nuclides_json.py <path-to-.lib>")
-nucs = parse_lsrm_lib(src)
+# Задача #159: поверх LSRM-флагов включаем равновесные линии (USED_OVERRIDES).
+nucs = apply_used_overrides(parse_lsrm_lib(src))
 prov = {
     "source": "LSRM SpectraLine gamma nuclide library (УДС-ГЦ 2024)",
     "library_version": "2.0",

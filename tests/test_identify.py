@@ -121,3 +121,44 @@ def test_apply_priors():
     assert res[0].confidence == pytest.approx(0.5, abs=1e-9)
     assert get_prior("Co-60") == 0.5
     assert get_prior("UnknownNuclide") == 1.0
+
+
+def test_energy_quality_tolerates_calibration_drift():
+    # #159: файл оператора сдвинут по шкале примерно на −1.4 % у 1461 кэВ
+    # (пик 1440.6 vs K-40 1460.8). Квадратичный штраф качества энергии:
+    # Δ = 2/3 окна → качество ≈ 1−(Δ/win)² ≈ 0.55, а не 0.33 (линейный).
+    lib = [_nuc("K-40", [(1460.82, 10.66)])]
+    res = identify_peaks([_fp(1440.6, 500.0)], lib, fwhm_model=lambda E: 60.0)
+    assert len(res) == 1
+    d, win = 1460.82 - 1440.6, 30.0
+    assert res[0].confidence == pytest.approx(1.0 - (d / win) ** 2, rel=1e-6)
+
+
+def test_th232_high_energy_lines_enabled_in_shipped_library():
+    # #159: равновесные линии цепочки Th-232 в диапазоне 460..2614 кэВ должны
+    # быть рабочими (used=True), иначе матчинг/маркеры теряют зону 911..2614.
+    from awf.io.nuclide_lib import default_library
+    th = next(n for n in default_library() if n.name == "Th-232")
+    enabled = {round(ln.energy, 1) for ln in th.lines if ln.used}
+    for e in (463.0, 727.3, 969.0, 1588.2, 1620.5, 1630.6, 2614.5):
+        assert e in enabled, f"линия {e} кэВ выключена (used=False)"
+
+
+def test_real_file_peak_set_k40_and_th232():
+    # #159: энергии пиков реального файла оператора (сдвинутая шкала −0.2..−1.4 %).
+    # K-40 должен войти в кандидаты с запасом над порогом 0.30 и выше La-138;
+    # Th-232 должен зацепить высокоэнергетические линии 969 и 1588.
+    from awf.io.nuclide_lib import default_library
+    from awf.io.nuclide_families import collapse_families
+    peak_es = [237.2, 335.0, 460.8, 501.9, 580.6, 660.2, 713.9,
+               902.5, 963.8, 1440.6, 1573.0, 2607.2]
+    peaks = [_fp(e, 500.0) for e in peak_es]
+    lib = collapse_families(default_library())
+    fwhm = lambda E: 0.062 * (661.66 * E) ** 0.5   # ≈ авто-модель файла
+    res = identify_peaks(peaks, lib, fwhm_model=fwhm, apply_priors=True)
+    by = {r.nuclide: r for r in res}
+    assert "K-40" in by and by["K-40"].confidence >= 0.45
+    assert by["K-40"].confidence > by.get("La-138", by["K-40"]).confidence \
+        or "La-138" not in by
+    th_lines = {round(m.line_energy, 1) for m in by["Th-232"].matches}
+    assert {969.0, 1588.2} <= th_lines

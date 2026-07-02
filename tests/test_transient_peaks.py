@@ -203,4 +203,6 @@ def test_view3d_short_record_no_transient_scan(app):
     # не падает; число пиков = интегральное (транзиент-скан вернул [])
     integ = _integral(sg)
     peaks = v._found_peaks()
-    assert len(peaks) == len([p for p in integ if p.energy <= 3000.0])
+    # Задача #153: ожидание зеркалит фильтр _found_peaks (низ 50 кэВ + верх 3000 кэВ) —
+    # интегральный скан находит численный артефакт ~5 кэВ (высота ~1e-13), пол его режет.
+    assert len(peaks) == len([p for p in integ if 50.0 <= p.energy <= 3000.0])

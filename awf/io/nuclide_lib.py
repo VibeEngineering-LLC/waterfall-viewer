@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, replace
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -105,6 +105,29 @@ def parse_lsrm_lib(path) -> List[Nuclide]:
             lines=tuple(lines)
         ))
     return nuclides
+
+
+# Задача #159: кураторская поправка used-флагов поверх LSRM-источника. В LSRM
+# у Th-232 включены только 6 линий; равновесные линии цепочки 463..1630 кэВ
+# выключены — матчинг и маркеры теряли всю зону 911..2614 кэВ.
+USED_OVERRIDES = {
+    "Th-232": (463.004, 727.33, 968.971, 1588.2, 1620.5, 1630.627),
+}
+
+
+def apply_used_overrides(nuclides: List[Nuclide]) -> List[Nuclide]:
+    """Включить used=True линиям из USED_OVERRIDES (Задача #159, идемпотентно)."""
+    out: List[Nuclide] = []
+    for nuc in nuclides:
+        es = USED_OVERRIDES.get(nuc.name)
+        if not es:
+            out.append(nuc)
+            continue
+        lines = tuple(replace(ln, used=True)
+                      if any(abs(ln.energy - e) < 0.01 for e in es) else ln
+                      for ln in nuc.lines)
+        out.append(replace(nuc, lines=lines))
+    return out
 
 
 def to_json_obj(nuclides: List[Nuclide], provenance: dict | None = None) -> dict:

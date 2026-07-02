@@ -4,12 +4,37 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from awf.io.nuclide_categories import (
     CATEGORIES, LIFETIMES, enrich_nuclide,
 )
+from awf.io.nuclide_families import collapse_families   # Задача #154
 from awf.io.nuclide_lib import Nuclide, GammaLine
 from awf.analysis.identify import identify_peaks
 
-COLORS = ("#e6194b", "#3cb44b", "#ffe119", "#4363d8", "#f58231", "#911eb4",
-          "#46f0f0", "#f032e6", "#bcf60c", "#fabebe", "#008080", "#9a6324",
-          "#800000", "#aaffc3", "#808000", "#ffd8b1", "#000075", "#a9a9a9")
+# исходная палитра (18 различимых оттенков); тёмные члены нечитаемы на тёмной теме
+_BASE_COLORS = ("#e6194b", "#3cb44b", "#ffe119", "#4363d8", "#f58231", "#911eb4",
+                "#46f0f0", "#f032e6", "#bcf60c", "#fabebe", "#008080", "#9a6324",
+                "#800000", "#aaffc3", "#808000", "#ffd8b1", "#000075", "#a9a9a9")
+
+# Задача #155: пол воспринимаемой яркости (luma) для текста на тёмном фоне
+_MIN_LUMA = 0.55
+
+
+def _luma(c: QtGui.QColor) -> float:
+    """Rec.709-luma sRGB-компонент — воспринимаемая яркость (HSL-светлота врёт для синего)."""
+    return 0.2126 * c.redF() + 0.7152 * c.greenF() + 0.0722 * c.blueF()
+
+
+def _readable_on_dark(color: str) -> str:
+    """Задача #155: поднять светлоту тёмного цвета до luma-пола, сохранив оттенок.
+
+    Цвет красит имя нуклида в дереве/кандидатах И линии-маркеры 3D — везде тёмный фон."""
+    c = QtGui.QColor(color)
+    h, s, l, a = c.getHslF()
+    while _luma(c) < _MIN_LUMA and l < 0.95:
+        l = min(l + 0.02, 0.95)
+        c.setHslF(max(h, 0.0), s, l, a)
+    return c.name()
+
+
+COLORS = tuple(_readable_on_dark(c) for c in _BASE_COLORS)
 
 # человекочитаемые подписи категорий / времени жизни для веток дерева и фильтров
 CATEGORY_LABELS = {
@@ -183,7 +208,11 @@ class NuclidePanel(QtWidgets.QWidget):
 
     # ---------- библиотека / дерево ----------
     def set_library(self, nuclides) -> None:
-        self._nuclides = [self._ensure_enriched(n) for n in nuclides]
+        # Задача #154: дочки семейств Th-232/Ra-226 свёрнуты в родителей (их
+        # равновесные линии уже в родительских записях). Действует на дерево,
+        # идентификацию (#127) и library() -> сегментацию (#131).
+        self._nuclides = [self._ensure_enriched(n)
+                          for n in collapse_families(list(nuclides))]
         self._color_by_name = {}
         for i, name in enumerate(sorted({n.name for n in self._nuclides})):
             self._color_by_name[name] = COLORS[i % len(COLORS)]

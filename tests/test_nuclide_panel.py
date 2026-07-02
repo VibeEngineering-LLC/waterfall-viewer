@@ -6,6 +6,7 @@ from PySide6 import QtWidgets, QtCore
 
 from awf.ui.nuclide_panel import NuclidePanel
 from awf.io.nuclide_lib import default_library, Nuclide, GammaLine
+from awf.io.nuclide_families import collapse_families   # Задача #154
 from awf.analysis.types import FoundPeak
 
 
@@ -44,8 +45,9 @@ def _fp(e, area=1000.0, sig=30.0):
 
 
 def test_tree_builds_all_nuclides(app):
-    lib = default_library()
-    p = NuclidePanel(lib)
+    # Задача #154: в дереве — библиотека БЕЗ дочек семейств Th-232/Ra-226
+    lib = collapse_families(default_library())
+    p = NuclidePanel(default_library())
     names = _leaf_names(p._tree)
     assert len(names) == len(lib)
     assert "Cs-137" in names and "K-40" in names
@@ -55,7 +57,8 @@ def test_tree_builds_all_nuclides(app):
 
 
 def test_category_filter_hides_branch(app):
-    lib = default_library()
+    # Задача #154: счётные ожидания — от свёрнутой библиотеки (как в дереве)
+    lib = collapse_families(default_library())
     p = NuclidePanel(lib)
     full = len(_leaf_names(p._tree))
     natural = sum(1 for n in lib if n.category == "natural")
@@ -68,7 +71,8 @@ def test_category_filter_hides_branch(app):
 
 def test_lifetime_filter_partitions_long_short(app):
     # после #86 в библиотеке есть и long, и short — фильтр должен их разделять
-    lib = default_library()
+    # Задача #154: счётные ожидания — от свёрнутой библиотеки (как в дереве)
+    lib = collapse_families(default_library())
     p = NuclidePanel(lib)
     full = len(_leaf_names(p._tree))
     n_long = sum(1 for n in lib if n.lifetime == "long")
@@ -245,3 +249,24 @@ def test_threshold_change_rerenders_and_filters(app):
     count_high = p._cand.topLevelItemCount()
     assert count_low >= 1
     assert count_high <= count_low
+
+# ---------- Задача #155: палитра читаема на тёмном фоне ----------
+
+def test_155_all_colors_readable_on_dark():
+    from PySide6 import QtGui
+    from awf.ui.nuclide_panel import COLORS, _MIN_LUMA, _luma
+    assert len(COLORS) == len(set(COLORS)) == 18  # различимость сохранена
+    for c in COLORS:
+        assert _luma(QtGui.QColor(c)) >= _MIN_LUMA - 1e-9, f"{c} тёмный"
+
+
+def test_155_light_colors_untouched_dark_lifted():
+    from awf.ui.nuclide_panel import COLORS, _readable_on_dark
+    # светлые члены базовой палитры не изменены
+    for c in ("#ffe119", "#46f0f0", "#fabebe", "#a9a9a9"):
+        assert c in COLORS
+    # тёмные (navy/maroon/purple/teal) — заменены поднятыми
+    for c in ("#000075", "#800000", "#911eb4", "#008080"):
+        assert c not in COLORS
+    # идемпотентность: уже читаемый цвет возвращается как есть
+    assert _readable_on_dark("#ffe119") == "#ffe119"
