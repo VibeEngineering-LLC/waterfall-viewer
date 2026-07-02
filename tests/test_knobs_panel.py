@@ -91,13 +91,13 @@ def test_adjustpanel_per_row_bypass(app):
     p.rows["gain"].set_on(True)                  # включаем два ряда — без всякого мастер-гейта
     p.rows["smooth"].set_on(True)
     p.rows["gain"].setValue(250)
-    p.rows["smooth"].setValue(7)
-    assert p.values()["gain"] == 250 and p.values()["smooth"] == 7
+    p.rows["smooth"].setValue(2)                 # Задача #163: диапазон теперь 0..2 (0/SMA/WMA)
+    assert p.values()["gain"] == 250 and p.values()["smooth"] == 2
     p.rows["gain"].set_on(False)                 # один ряд выкл → его дефолт, второй держит значение
-    assert p.values()["gain"] == 100 and p.values()["smooth"] == 7
+    assert p.values()["gain"] == 100 and p.values()["smooth"] == 2
     assert p.rows["gain"].value() == 250         # позиция ручки сохранена
     p.rows["gain"].set_on(True)                  # назад — снова 250
-    assert p.values()["gain"] == 250 and p.values()["smooth"] == 7
+    assert p.values()["gain"] == 250 and p.values()["smooth"] == 2
 
 
 def test_adjustpanel_reset_all(app):

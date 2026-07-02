@@ -29,6 +29,13 @@ Bi-207/Nb-95/F-18 вместо Th-232/Tl-208/Th-228/Ac-228/Pb-212 + слабог
      домножается на plausibility(nuclide) — априор по имени (RARE_ISOTOPE_PRIOR) или
      категории (CATEGORY_PRIOR): природные цепочки встречаются всегда, осколочные/
      активационные/медицинские — редко.
+  7. ВСЕ ЗНАЧИМЫЕ ЛИНИИ (#162). Прежний допуск (п.2) позволял опознать нуклид по ОДНОЙ
+     совпавшей линии, если она характеристическая — так La-138 опознавался по 1435.8 кэВ
+     без проверки его второй сильной линии 788.7 кэВ (34.5 %, не найдена). Теперь для
+     каждой детектируемой линии (энергия >= 50 кэВ, #153) с интенсивностью не менее
+     _SIGNIFICANT_REL_FRAC (20 %) от характеристической — она ОБЯЗАНА иметь совпавший
+     пик, иначе кандидат отвергается. Рентген-характеристики цепочек (<50 кэВ) в эту
+     проверку не входят — они не детектируемы физически (см. п.2).
 
 Окно матчинга: tol(E) = tol_factor * FWHM(E). FWHM(E) берётся из переданной модели
 fwhm_model(E) или из грубой сцинтилляционной модели default_fwhm_keV.
@@ -224,6 +231,13 @@ def _nearest_peak(peaks: Sequence[FoundPeak],
 _PROP_REL_FRAC = 0.10
 _PROP_REL_AREA = 0.02
 
+# Задача #162: линия считается «значимой» (обязана иметь совпавший пик), если её
+# интенсивность >= доли _SIGNIFICANT_REL_FRAC от характеристической И энергия не ниже
+# нижней границы поиска пиков (#153, 50 кэВ) — иначе линия физически не детектируема
+# и не может служить обязательным условием (напр. рентген-характеристика цепочек #130).
+_SIGNIFICANT_REL_FRAC = 0.20
+_SIGNIFICANT_MIN_E_KEV = 50.0
+
 
 def _proportionality_eff(matched: Sequence[Tuple[GammaLine, FoundPeak, float]],
                          ratio_tolerance: float,
@@ -368,6 +382,17 @@ def identify_peaks(found_peaks: Sequence[FoundPeak],
         char_found = any(ln is characteristic for (ln, _pk, _w) in matched)
         if not char_found and len(matched) < 2:
             continue
+
+        # #162: одной совпавшей линии недостаточно, если у нуклида есть другие
+        # детектируемые линии сравнимой интенсивности — они тоже обязаны найтись
+        # (иначе La-138 опознавался по одной 1435.8 кэВ без проверки 788.7 кэВ, 34.5 %).
+        significant = {id(ln) for ln in lines
+                      if ln.energy >= _SIGNIFICANT_MIN_E_KEV
+                      and ln.intensity >= _SIGNIFICANT_REL_FRAC * characteristic.intensity}
+        if significant:
+            matched_ids = {id(ln) for (ln, _pk, _w) in matched}
+            if not significant <= matched_ids:
+                continue
 
         if char_found:
             char_peak_area = next(pk.area_estimate

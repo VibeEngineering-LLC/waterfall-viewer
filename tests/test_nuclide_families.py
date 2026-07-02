@@ -116,10 +116,12 @@ def _th_peak(e):
 
 
 def test_identification_reports_parent_not_daughters(app):
-    # ториевый спектр (238.6/583.2/911.2/2614.5) -> кандидат Th-232, не дочки
+    # ториевый спектр -> кандидат Th-232, не дочки. Задача #162: гейт «все значимые
+    # линии» требует в наборе пиков и 338.3/968.9 (>=20% характеристической 238.6) —
+    # без них, при той же статистике, реальный спектр их тоже бы показал.
     from awf.ui.nuclide_panel import NuclidePanel
     p = NuclidePanel(default_library())
-    peaks = [_th_peak(e) for e in (238.6, 583.2, 911.2, 2614.5)]
+    peaks = [_th_peak(e) for e in (238.6, 338.3, 583.2, 911.2, 969.0, 2614.5)]
     p.show_candidates(peaks, min_confidence=0.30)
     names = [p._cand.topLevelItem(i).text(0)
              for i in range(p._cand.topLevelItemCount())]
