@@ -225,29 +225,81 @@ def test_view3d_bg_sheet_toggle(app):
     assert v._bg_sheet is None                          # выключили -> простыня снята
 
 
-def test_view3d_bg_sheet_currie_raised(app):
-    # #135: при фон=образец «простыня» встаёт на критуровень Currie (bg + kσ), а не тонет на
-    # среднем фоне. Эталон — тот же max-LOD и та же карта value->height, но БЕЗ критнадбавки:
-    # критуровневая простыня обязана лежать не ниже средней и строго выше в целом.
+def test_view3d_bg_sheet_built_like_relief(app):
+    # #140: простыня строится тем же способом, что рельеф: сырое фоновое окно (#139),
+    # без критуровня Currie (#135 отменён), без max по времени; та же карта value->height.
     from awf.ui.view3d import Waterfall3DView
-    from awf.model.background import background_from_range
+    from awf.model.background import background_from_range, background_window_like
     v = Waterfall3DView()
     sg = _make_sg(ns=16, nc=24)
     v.set_spectrogram(sg)
-    bg = background_from_range(sg, 0, sg.n_slices)       # фон = весь файл (самофон)
+    bg = background_from_range(sg, 0, sg.n_slices)
     cap = {}
     v._add_bg_sheet = lambda h: cap.__setitem__("h", np.asarray(h, dtype=float))
-    v.set_background_sheet(bg)
+    v.set_background_sheet(bg, (sg.counts, sg.live_time_s))     # фон = весь файл (самофон)
     v.set_background_sheet_visible(True)
-    h_crit = cap["h"]
-    mean_field = bg[None, :] * np.ones((sg.n_slices, 1))  # cps, без критнадбавки (default unit=cps)
-    lod, _t, _c = sg.downsample(v._max_time, v._max_chan, method="max", data=mean_field)
-    col_mean = np.asarray(lod, dtype=float)[:, :v._nc].max(axis=0)
+    lt = np.asarray(sg.live_time_s, dtype=float)
+    lt_ref = float(np.median(lt[lt > 0.0]))
+    val = background_window_like(sg.counts, sg.live_time_s, lt_ref) / lt_ref   # unit=cps
+    field = np.ones((sg.n_slices, 1)) * val[None, :]
+    lod, _t, _c = sg.downsample(v._max_time, v._max_chan, method="max", data=field)
+    col = np.asarray(lod, dtype=float)[0, :v._nc]
     vals = np.asarray(v._z_counts, dtype=float).ravel(); hts = np.asarray(v._z_surface, dtype=float).ravel()
     o = np.argsort(vals)
-    h_mean = np.interp(col_mean, vals[o], hts[o])
-    assert h_crit.size == v._nc
-    assert np.all(h_crit >= h_mean - 1e-6) and np.median(h_crit) > np.median(h_mean)
+    assert cap["h"].size == v._nc
+    assert np.allclose(cap["h"], np.interp(col, vals[o], hts[o]), atol=1e-5)
+
+
+# ---------- #141: фон из файла-источника — сырой блок при совпадающей энергосетке ----------
+
+def test_compute_background_file_same_grid_stashes_raw(app, monkeypatch):
+    # #141: файл-фон с той же энергосеткой (тот же файл/прибор) -> сырой блок _bg_raw,
+    # фон «лохматый как образец» и в срезах (#139), и на простыне 3D (#140).
+    import awf.ui.main_window as mw
+    full = _make_sg(ns=8, nc=17)
+    w = MainWindow()
+    w._sg = full.trimmed_channels(1)
+    monkeypatch.setattr(mw, "load_spectrogram", lambda p, **k: full)
+    bg = w._compute_background(("file", "dummy.n42"))
+    assert w._bg_raw is not None
+    cnt, lt = w._bg_raw
+    assert cnt.shape == w._sg.counts.shape and lt.size == w._sg.n_slices
+    assert bg.size == w._sg.n_channels
+    w.close()
+
+
+def test_compute_background_file_other_grid_raw_none(app, monkeypatch):
+    # #141: иная энергосетка файла-фона -> сырой поканальный матч не строим (гладкий bg_cps).
+    import awf.ui.main_window as mw
+    w = MainWindow()
+    w._sg = _make_sg(ns=8, nc=17).trimmed_channels(1)
+    w._bg_raw = (np.zeros((2, 2)), np.ones(2))
+    monkeypatch.setattr(mw, "load_spectrogram", lambda p, **k: _make_sg(ns=8, nc=23))
+    bg = w._compute_background(("file", "dummy.n42"))
+    assert w._bg_raw is None
+    assert bg.size == w._sg.n_channels
+    w.close()
+
+
+# ---------- #142: тумблеры видимости элементов наложения (тулбар «Вид») ----------
+
+def test_bg_overlay_visibility_toggles(app):
+    # #142: «Простыня фона» / «Фон среза» режут видимость по-элементно в режиме наложения.
+    w = MainWindow()
+    assert not w._bg_sheet_check.isEnabled() and not w._bg_curve_check.isEnabled()
+    w._act_bg_overlay.setEnabled(True)
+    w._act_bg_overlay.setChecked(True)                  # включили режим наложения
+    assert w._bg_sheet_check.isEnabled() and w._bg_curve_check.isEnabled()
+    assert w._slices._bg_overlay and w._view3d._bg_sheet_on
+    w._bg_sheet_check.setChecked(False)                 # скрыли простыню 3D
+    assert not w._view3d._bg_sheet_on and w._slices._bg_overlay
+    w._bg_curve_check.setChecked(False)                 # скрыли кривую фона в срезе
+    assert not w._slices._bg_overlay
+    w._act_bg_overlay.setChecked(False)                 # выключили режим наложения
+    assert not w._bg_sheet_check.isEnabled() and not w._bg_curve_check.isEnabled()
+    w._bg_sheet_check.setChecked(True); w._bg_curve_check.setChecked(True)
+    assert not w._view3d._bg_sheet_on and not w._slices._bg_overlay   # без режима — скрыто
+    w.close()
 
 
 # ---------- #101: нижняя граница оси Y графика спектра зафиксирована ----------

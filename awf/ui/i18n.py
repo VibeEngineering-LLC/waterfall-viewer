@@ -55,6 +55,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # Меню «Анализ»
         "Выбор фона…": "Select background…",
         "Наложение фона": "Overlay background",
+        # Задача #142: тумблеры видимости элементов наложения (тулбар «Вид»)
+        "Простыня фона": "Background sheet",
+        "Фон среза": "Slice background",
         "Вычет фона": "Subtract background",
         "Мощность дозы (RadiaCode)": "Dose rate (RadiaCode)",
         "Калибровка дозы доступна только для RadiaCode (.rcspg)":

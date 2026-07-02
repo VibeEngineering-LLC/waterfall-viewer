@@ -447,6 +447,21 @@ class MainWindow(QtWidgets.QMainWindow):
         self._floor_check.setToolTip("Показать/скрыть подложку (плоское дно рельефа)")
         self._floor_check.toggled.connect(self._on_floor_toggled)
         tb.addWidget(self._floor_check)
+        # Задача #142: по-элементная видимость наложения фона (активны в режиме «Наложение фона»)
+        self._bg_sheet_check = QtWidgets.QCheckBox("Простыня фона")
+        self._bg_sheet_check.setChecked(True)
+        self._bg_sheet_check.setEnabled(False)
+        self._bg_sheet_check.setToolTip("Показать/скрыть простыню фона на 3D-спектрограмме")
+        self._bg_sheet_check.toggled.connect(lambda _on: self._apply_bg_overlay_visibility())
+        self._register_i18n(self._bg_sheet_check.setText, "Простыня фона")
+        tb.addWidget(self._bg_sheet_check)
+        self._bg_curve_check = QtWidgets.QCheckBox("Фон среза")
+        self._bg_curve_check.setChecked(True)
+        self._bg_curve_check.setEnabled(False)
+        self._bg_curve_check.setToolTip("Показать/скрыть кривую фона в окне среза")
+        self._bg_curve_check.toggled.connect(lambda _on: self._apply_bg_overlay_visibility())
+        self._register_i18n(self._bg_curve_check.setText, "Фон среза")
+        tb.addWidget(self._bg_curve_check)
         # Изолинии (Задача 20) ВРЕМЕННО отключены в UI: вернём после реализации поиска,
         # идентификации пиков и подгонки их чистыми гауссианами. Механизм контуров в
         # HeatmapPanel (set_contours_enabled / set_contour_levels) сохранён и покрыт тестами;
@@ -471,6 +486,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._axes_check.setChecked(True)     # оси видимы
         self._hl_check.setChecked(False)      # подсветка выкл
         self._floor_check.setChecked(True)    # Задача #76: подложка видима (дефолт)
+        self._bg_sheet_check.setChecked(True)  # Задача #142: элементы наложения видимы (дефолт)
+        self._bg_curve_check.setChecked(True)
         # Задача #55: регулировки (усиление/гамма/отсечка/сглаживание/освещение) живут на
         # панели-рукоятках; сброс к дефолтам + включение всех рядов/общего — одним вызовом.
         self._adjust.reset_all()
@@ -524,7 +541,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         self._bg_cps = bg
         self._slices.set_background(bg, self._bg_raw)   # Задача #139: сырой блок для «лохматого» оверлея
-        self._view3d.set_background_sheet(bg)              # Задача #98: «простыня» фона на 3D
+        self._view3d.set_background_sheet(bg, self._bg_raw)   # #98/#140: простыня из сырого окна
         self._act_bg_overlay.setEnabled(True)
         self._act_bg_subtract.setEnabled(True)
         self._redistribute()
@@ -541,16 +558,35 @@ class MainWindow(QtWidgets.QMainWindow):
             return background_from_range(self._sg, spec[1], spec[2])
         if spec and spec[0] == "file":
             bg_sg = load_spectrogram(spec[1]).trimmed_channels(1)
-            self._bg_raw = None      # #139: иная калибровка -> сырой матч не строим (оверлей = гладкий bg_cps)
+            # Задача #141: энергосетка файла-фона совпадает с целью (тот же прибор/файл) ->
+            # сырой блок годен поканально, фон строится «лохматым как образец» и в срезах (#139),
+            # и на простыне 3D (#140). Иная сетка -> сырой матч не строим (гладкий bg_cps).
+            e_bg = np.asarray(bg_sg.energies(), dtype=np.float64)
+            e_t = np.asarray(self._sg.energies(), dtype=np.float64)
+            if e_bg.size == e_t.size and np.allclose(e_bg, e_t):
+                self._bg_raw = (np.asarray(bg_sg.counts, dtype=np.float64),
+                                np.asarray(bg_sg.live_time_s, dtype=np.float64))
+            else:
+                self._bg_raw = None
             return background_from_spectrogram(bg_sg, self._sg)
         raise ValueError("неизвестный источник фона")
 
     @QtCore.Slot(bool)
     def _on_bg_overlay_toggled(self, on: bool) -> None:
-        """Задача #96: наложение фона на спектр среза (панель срезов) и «простыню» на 3D (#98)."""
+        """Задача #96: наложение фона на спектр среза (панель срезов) и «простыню» на 3D (#98).
+        Задача #142: тумблеры тулбара активны только в режиме наложения."""
         self._bg_overlay = bool(on)
-        self._slices.set_background_overlay(self._bg_overlay)
-        self._view3d.set_background_sheet_visible(self._bg_overlay)   # Задача #98
+        self._bg_sheet_check.setEnabled(self._bg_overlay)
+        self._bg_curve_check.setEnabled(self._bg_overlay)
+        self._apply_bg_overlay_visibility()
+
+    def _apply_bg_overlay_visibility(self) -> None:
+        """Задача #142: элемент наложения виден, когда включён режим «Наложение фона»
+        И его тумблер на тулбаре («Простыня фона» — 3D, «Фон среза» — окно среза)."""
+        self._slices.set_background_overlay(
+            self._bg_overlay and self._bg_curve_check.isChecked())
+        self._view3d.set_background_sheet_visible(
+            self._bg_overlay and self._bg_sheet_check.isChecked())   # Задача #98
 
     @QtCore.Slot(bool)
     def _on_bg_subtract_toggled(self, on: bool) -> None:
@@ -661,6 +697,14 @@ class MainWindow(QtWidgets.QMainWindow):
             act.setChecked(False)
             act.setEnabled(False)
             act.blockSignals(False)
+        # Задача #142: тумблеры видимости наложения — в дефолт (показывать) и погасить
+        for chk in (getattr(self, "_bg_sheet_check", None), getattr(self, "_bg_curve_check", None)):
+            if chk is None:
+                continue
+            chk.blockSignals(True)
+            chk.setChecked(True)
+            chk.setEnabled(False)
+            chk.blockSignals(False)
 
     @QtCore.Slot(bool)
     def _on_contours_toggled(self, on: bool) -> None:
