@@ -136,3 +136,42 @@ def test_roi_band_curve_independent_of_window(app):
     _, y_win = s._ewin_curve.getData()
     assert not np.allclose(y_roi, y_win)          # разные данные на разных кривых
     assert np.allclose(y_roi, sg.band_time_series(0, sg.n_channels).astype(np.float64))
+
+
+def test_update_spectrogram_keeps_time_slice_view(app):
+    # Задача #161: update_spectrogram() (toggle фона/нормализации) НЕ сбрасывает текущий
+    # срез на интегральный вид, но данные подтягивает свежие (не залипают на старой sg)
+    sg = _make_sg()
+    s = SlicePanel()
+    s.set_spectrogram(sg)
+    s.set_unit_mode("counts")
+    s.show_time_slice(5)
+    sg2 = Spectrogram(counts=sg.counts * 3, calibration=sg.calibration,
+                       time_offsets_s=sg.time_offsets_s, real_time_s=sg.real_time_s,
+                       live_time_s=sg.live_time_s)
+    s.update_spectrogram(sg2)
+    assert s._header.text() == "Срез времени #5 (t = 10.0 с)"
+    x, y = s._spectrum_curve.getData()
+    assert np.allclose(y, sg2.energy_spectrum(5).astype(np.float64))
+
+
+def test_update_spectrogram_keeps_roi_view(app):
+    # Задача #161: ROI-выборка — заголовок/границы сохраняются после toggle
+    sg = _make_sg()
+    s = SlicePanel()
+    s.set_spectrogram(sg)
+    s.show_roi(2, 6, 100, 200)
+    sg2 = Spectrogram(counts=sg.counts * 3, calibration=sg.calibration,
+                       time_offsets_s=sg.time_offsets_s, real_time_s=sg.real_time_s,
+                       live_time_s=sg.live_time_s)
+    s.update_spectrogram(sg2)
+    assert s._header.text().startswith("Выборка: срезы [2:6], каналы [100:200]")
+
+
+def test_update_spectrogram_keeps_integral_view(app):
+    # Задача #161: интегральный вид не ломается повторным update
+    sg = _make_sg()
+    s = SlicePanel()
+    s.set_spectrogram(sg)
+    s.update_spectrogram(sg)
+    assert "Интегральный спектр" in s._header.text()

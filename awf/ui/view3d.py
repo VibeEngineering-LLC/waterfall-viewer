@@ -5,7 +5,7 @@ import pyqtgraph.opengl as gl
 from OpenGL.GL import GL_DEPTH_TEST, GL_BLEND, GL_ALPHA_TEST, GL_CULL_FACE
 from PySide6 import QtCore, QtGui, QtWidgets
 from awf.ui.zscale import (apply_z_scale, DEFAULT_GAIN, DEFAULT_GAMMA,
-                           DEFAULT_CLIP, desaturate_rgba, smooth_counts)
+                           DEFAULT_CLIP, desaturate_rgba, smooth_by_mode)
 from awf.ui.colormaps import get_colormap
 from awf.model.background import background_window_like   # Задача #140: сырое фоновое окно простыни
 from awf.ui.knobs import Knob          # Задача #59: панель сечений в том же knob-стиле
@@ -313,8 +313,8 @@ class Waterfall3DView(gl.GLViewWidget):
             z_int = z_int[:, :keep]
             ch_centers = ch_centers[:keep]
         self._z_counts_int = z_int
-        # 1b) регулируемое усреднение спектра по энергетической оси (axis=1) — Замечание IV-R4
-        z_counts = smooth_counts(z_counts, self._smooth, axis=1)
+        # 1b) сглаживание спектра по энергетической оси (axis=1) — Замечание IV-R4 / #163
+        z_counts = smooth_by_mode(z_counts, self._smooth, axis=1)
         nt, nc = z_counts.shape
         # 2) Z-шкала контраста, затем нормировка для высоты и цвета (защита от нулевого максимума)
         z_disp = apply_z_scale(z_counts, self._z_mode, gain=self._gain,
@@ -550,7 +550,7 @@ class Waterfall3DView(gl.GLViewWidget):
         keep = int(np.count_nonzero(np.asarray(ch_bg, dtype=np.float64) <= _MAX_ENERGY_KEV))
         if 0 < keep < z_bg.shape[1]:
             z_bg = z_bg[:, :keep]
-        z_bg = smooth_counts(z_bg, self._smooth, axis=1)[:, :self._nc]
+        z_bg = smooth_by_mode(z_bg, self._smooth, axis=1)[:, :self._nc]
         if z_bg.shape[1] < self._nc:
             return
         self._add_bg_sheet(z_bg)
@@ -609,9 +609,10 @@ class Waterfall3DView(gl.GLViewWidget):
         sheet.translate(-self._nt / 2.0, -self._nc / 2.0, 0.0)
         self.addItem(sheet); self._bg_sheet = sheet
 
-    def set_smoothing(self, radius: int) -> None:
-        """Радиус скользящего среднего по энергии (Замечание IV-R4); ре-рендер из той же sg."""
-        self._smooth = max(0, int(radius))
+    def set_smoothing(self, mode: int) -> None:
+        """Режим сглаживания по энергии (Задача #163): 0/SMA/WMA (см. zscale.SMOOTH_MODE_*);
+        ре-рендер из той же sg."""
+        self._smooth = max(0, min(2, int(mode)))
         if self._sg is not None:
             self.set_spectrogram(self._sg, self._max_time, self._max_chan)
 

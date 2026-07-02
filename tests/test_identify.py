@@ -105,13 +105,25 @@ def test_category_populated():
 
 
 def test_min_confidence_filter():
-    peaks = [_fp(1332.5, 900.0)]
+    # Задача #162: Co-60 требует ОБЕ значимые линии (частичное покрытие теперь
+    # отбраковывается новым гейтом _SIGNIFICANT_*) — фильтр строится на apply_priors.
+    peaks = [_fp(1173.2, 1000.0), _fp(1332.5, 1000.0)]
     lib = [_nuc("Co-60", [(1173.2, 99.85), (1332.5, 99.98)])]
-    res_all = identify_peaks(peaks, lib, fwhm_model=_fwhm6)
+    res_all = identify_peaks(peaks, lib, fwhm_model=_fwhm6, apply_priors=True)
     assert len(res_all) == 1
-    assert res_all[0].confidence == pytest.approx(99.98 / (99.85 + 99.98))
-    res_filtered = identify_peaks(peaks, lib, fwhm_model=_fwhm6, min_confidence=0.6)
+    assert res_all[0].confidence == pytest.approx(0.5, abs=1e-9)
+    res_filtered = identify_peaks(peaks, lib, fwhm_model=_fwhm6, apply_priors=True,
+                                   min_confidence=0.6)
     assert res_filtered == []
+
+
+def test_significant_lines_all_required():
+    # Задача #162: нуклид с двумя сравнимыми по интенсивности значимыми линиями
+    # отвергается, если найден пик только для одной (рецидив-сценарий La-138).
+    peaks = [_fp(1435.8, 1000.0)]
+    lib = [_nuc("La-138", [(788.7, 34.5), (1435.8, 65.5)])]
+    res = identify_peaks(peaks, lib, fwhm_model=_fwhm6)
+    assert res == []
 
 
 def test_apply_priors():

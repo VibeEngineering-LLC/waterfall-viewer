@@ -333,9 +333,10 @@ def test_slice_spectrum_y_floor_log(app):
     p.set_spectrum_log(True)
     _, s, lt = p._raw_spec
     disp = p._spec_to_unit(s, lt)
-    expected = float(np.log10(disp[disp > 0].min()))
+    # Задача #166: пол = 10-й перцентиль pos (не min) — устойчив к ВЭ-выбросам после ε-нормировки.
+    expected = float(np.log10(np.percentile(disp[disp > 0], 10.0)))
     ymin, _ = p._spectrum_plot.getViewBox().state["limits"]["yLimits"]
-    assert ymin == pytest.approx(expected)              # лог: пол = log10(min>0)
+    assert ymin == pytest.approx(expected)              # лог: пол = log10(percentile10(pos))
 
 
 # ---------- #128: нижняя граница оси Y графика «Скорость в полосе» зафиксирована ----------

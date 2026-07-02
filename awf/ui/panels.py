@@ -3,7 +3,7 @@ import numpy as np
 import pyqtgraph as pg
 from PySide6 import QtCore, QtWidgets
 from awf.ui.zscale import (apply_z_scale, DEFAULT_GAIN, DEFAULT_GAMMA, DEFAULT_CLIP,
-                           smooth_counts)
+                           smooth_by_mode)
 from awf.ui.colormaps import get_colormap
 from awf.analysis.peakmap import DEFAULT_WINDOWS
 from awf.model.dose import dose_rate_series  # Задача #104: мощность дозы (RadiaCode)
@@ -11,6 +11,17 @@ from awf.model.background import background_window_like  # Задача #139: с
 
 # Задача #110: поиск фотопиков перенесён на 3D-водопад (awf/ui/view3d.py) — раньше (#108) маркеры
 # рисовались здесь, на спектре среза; оператор попросил вести поиск на 3D-спектрограмме.
+
+
+class _NoPanViewBox(pg.ViewBox):
+    """Задача #165: ViewBox без mouse-pan. Оператор: «спектр в окне срезы не должен цепляться
+    мышью и перемещаться, нужен зум колесиком относительно указателя мыши». Left/middle/right-drag
+    игнорируем (pyqtgraph по умолчанию ловит left-drag как pan). Wheel-zoom не трогаем — pyqtgraph
+    сам центрирует его в точке курсора (см. ViewBox.wheelEvent: scaleBy(anchor=ev.pos()))."""
+
+    def mouseDragEvent(self, ev, axis=None):  # noqa: D401
+        ev.ignore()
+
 
 class HeatmapPanel(QtWidgets.QWidget):
     """2D-карта Время(ось Y)×Энергия/канал(ось X). Цвет = log(1+counts). Прямоугольная выборка
@@ -33,7 +44,7 @@ class HeatmapPanel(QtWidgets.QWidget):
         self._gamma = DEFAULT_GAMMA
         self._clip = DEFAULT_CLIP
         self._cmap_name = "insight"  # палитра карты (Задача 17)
-        self._smooth = 0             # радиус усреднения спектра по энергии (Замечание IV-R4)
+        self._smooth = 0             # режим сглаживания спектра по энергии (Задача #163): 0/SMA/WMA
         self._t_scale = 1.0      # n_slices / disp_rows  (полный индекс = дисплейный * scale)
         self._ch_scale = 1.0     # n_channels / disp_cols
         self._disp_rows = 0
@@ -179,13 +190,13 @@ class HeatmapPanel(QtWidgets.QWidget):
 
     def _scaled_image(self):
         """Дисплейная матрица -> усреднение по энергии (IV-R4) -> Z-шкала контраста."""
-        base = smooth_counts(self._disp_counts, self._smooth, axis=1)
+        base = smooth_by_mode(self._disp_counts, self._smooth, axis=1)
         return apply_z_scale(base, self._z_mode, gain=self._gain,
                              gamma=self._gamma, clip=self._clip)
 
-    def set_smoothing(self, radius: int) -> None:
-        """Радиус скользящего среднего спектра по энергии (Замечание IV-R4); перерисовать карту."""
-        self._smooth = max(0, int(radius))
+    def set_smoothing(self, mode: int) -> None:
+        """Режим сглаживания спектра по энергии (Задача #163): 0/SMA/WMA; перерисовать карту."""
+        self._smooth = max(0, min(2, int(mode)))
         self._redraw()
 
     def _redraw(self) -> None:
@@ -339,7 +350,7 @@ class SlicePanel(QtWidgets.QWidget):
         self._live = None         # live_time_s по срезам — делитель cps (Задача #44)
         self._unit = "cps"        # единицы графиков: counts | cps (Задача #44; дефолт cps — #53)
         self._spec_log = False    # лог-шкала Y графика спектра (Задача #43)
-        self._smooth = 0          # радиус усреднения спектра по энергии (Замечание IV-R4)
+        self._smooth = 0          # режим сглаживания спектра по энергии (Задача #163): 0/SMA/WMA
         self._raw_spec = None     # (energies, spec_raw, lt_total) последнего спектра (Задача #44)
         self._raw_series = None   # (times, band_raw) кривой полосы ROII (Задача #44)
         self._raw_ewin = None     # (times, series_raw) кривой энергоокна (Задача #44)
@@ -351,6 +362,7 @@ class SlicePanel(QtWidgets.QWidget):
         self._dose = None         # np.ndarray дозы по срезам (Задача #104)
         self._dose_unit = "mSv/h" # единицы дозы (Задача #104): 'mSv/h' | 'uSv/h'
         self._dose_visible = True # флаг показа оверлея дозы (Задача #104)
+        self._view_mode = ("integral",)  # текущий вид (Задача #161): integral|slice|roi, для update_spectrogram
         layout = QtWidgets.QVBoxLayout(self)
         self._header = QtWidgets.QLabel("Файл не загружен")
         self._header.setWordWrap(True)
@@ -383,7 +395,9 @@ class SlicePanel(QtWidgets.QWidget):
         self._reset_zoom_btn.clicked.connect(self.reset_zoom)
         ewin_row.addWidget(self._reset_zoom_btn)
         layout.addLayout(ewin_row)
-        self._spectrum_plot = pg.PlotWidget()
+        # Задача #165: спектр среза — ViewBox без mouse-pan (см. _NoPanViewBox).
+        # Зум колесиком по-прежнему работает, pyqtgraph центрирует его в точке курсора.
+        self._spectrum_plot = pg.PlotWidget(viewBox=_NoPanViewBox())
         self._spectrum_plot.setLabel("bottom", "Энергия, кэВ")
         self._spectrum_plot.setLabel("left", "Отсчёты")
         self._spectrum_plot.showGrid(x=True, y=True, alpha=0.3)
@@ -435,6 +449,7 @@ class SlicePanel(QtWidgets.QWidget):
         self._times = np.asarray(sg.time_offsets_s, dtype=np.float64)
         self._live = np.asarray(sg.live_time_s, dtype=np.float64)   # делитель cps (Задача #44)
         self._clear_series_sections()   # новые данные -> снять старые маркеры сечений (Задача #42)
+        self._view_mode = ("integral",)  # Задача #161: новый файл -> вид сброшен на интеграл
         # начальный вид: полный интегральный спектр и полная полоса по времени
         spec = np.asarray(sg.total_spectrum(), dtype=np.float64)
         self._plot_spectrum(self._energies, spec, sg.live_time_total())
@@ -471,6 +486,90 @@ class SlicePanel(QtWidgets.QWidget):
             self._dose_unit = "mSv/h"
         self._draw_dose_overlay()
         self._lock_views_to_data()    # Задача #89: графики не «уезжают» за окно данных
+
+    def update_spectrogram(self, sg) -> None:
+        """Задача #161: лёгкое обновление данных (toggle фона/нормализации #96/#156) — БЕЗ
+        сброса текущего вида/зума/энергоокна, в отличие от set_spectrogram() (новый файл)."""
+        self._sg = sg
+        self._energies = np.asarray(sg.energies(), dtype=np.float64)
+        self._times = np.asarray(sg.time_offsets_s, dtype=np.float64)
+        self._live = np.asarray(sg.live_time_s, dtype=np.float64)
+        mode = self._view_mode
+        if mode[0] == "slice":
+            self.show_time_slice(mode[1])
+        elif mode[0] == "roi":
+            self.show_roi(*mode[1:])
+        else:
+            spec = np.asarray(sg.total_spectrum(), dtype=np.float64)
+            self._plot_spectrum(self._energies, spec, sg.live_time_total())
+            band = np.asarray(sg.band_time_series(0, sg.n_channels), dtype=np.float64)
+            self._set_series(self._times, band)
+        self._refresh_after_update(sg)
+
+    def _refresh_after_update(self, sg) -> None:
+        """Задача #161: дозавершение update_spectrogram() — энергоокно + доза, без сброса вида.
+        Задача #164: подрастить верхнюю границу Y графиков, если ε-нормировка/фон/сглаживание
+        задрали амплитуду за пределы текущего окна (иначе кривая уезжает вверх и оператор
+        воспринимает это как «спектр не нормализовался»)."""
+        if self._ewin_active is not None:
+            self.show_energy_window(*self._ewin_active)
+        src = getattr(sg, "source_path", None) or ""
+        if src.lower().endswith(".rcspg"):
+            d_msvh = dose_rate_series(sg, unit="mSv/h")
+            if float(d_msvh.max()) < 1.0:
+                self._dose = dose_rate_series(sg, unit="uSv/h")
+                self._dose_unit = "uSv/h"
+            else:
+                self._dose = d_msvh
+                self._dose_unit = "mSv/h"
+        else:
+            self._dose = None
+        self._draw_dose_overlay()
+        self._expand_y_if_needed()
+
+    def _expand_y_if_needed(self) -> None:
+        """Задача #164: после update_spectrogram() полностью переподогнать Y-диапазон обоих
+        графиков под свежие данные. ε-нормировка меняет масштаб амплитуды ×5–10, старый
+        Y-зум разъезжается: кривая либо уходит за верх окна, либо «висит» над низом
+        далеко от оси X (лог-шкала — самый заметный случай, нижний край окна остаётся
+        на pre-нормировочном log10(min)). X-зум пользователя не трогаем."""
+        vb = self._spectrum_plot.getViewBox()
+        if vb is not None and self._raw_spec is not None:
+            _, s, lt_total = self._raw_spec
+            disp = np.asarray(smooth_by_mode(
+                self._spec_to_unit(s, lt_total), self._smooth, axis=-1), dtype=np.float64)
+            if disp.size:
+                if self._spec_log:
+                    pos = disp[disp > 0.0]
+                    if pos.size:
+                        # Задача #166: нижний край окна — 10-й перцентиль pos, а не min.
+                        # ε-нормировка ×10.76 в ВЭ-хвосте помножает 1-count каналы, min
+                        # уползает до ~0.005 cps → окно растянуто вниз на ~1 декаду ниже
+                        # плотной части кривой (оператор: «спектр в окне срезы взлетает»).
+                        floor = float(np.percentile(pos, 10.0))
+                        vb.setYRange(float(np.log10(floor)) - 0.1,
+                                     float(np.log10(pos.max())) + 0.1, padding=0)
+                else:
+                    vb.setYRange(0.0, float(disp.max()) * 1.05, padding=0)
+        self._expand_series_y_if_needed()
+
+    def _expand_series_y_if_needed(self) -> None:
+        """Задача #164: полностью переподогнать Y-верх нижнего графика (полоса ROI + энергоокно)
+        под свежие данные после update_spectrogram(). ε-нормировка меняет масштаб ×5–10, старый
+        Y-зум разъезжается. yMin=0 держим по #128, X не трогаем."""
+        vb = self._series_plot.getViewBox()
+        if vb is None:
+            return
+        maxes = []
+        for raw in (self._raw_series, self._raw_ewin):
+            if raw is not None:
+                _, arr_raw = raw
+                arr = np.asarray(self._series_to_unit(arr_raw), dtype=np.float64)
+                if arr.size:
+                    maxes.append(float(arr.max()))
+        if not maxes:
+            return
+        vb.setYRange(0.0, max(maxes) * 1.05, padding=0)
 
     def _lock_views_to_data(self) -> None:
         """Задача #89: привязать X-домен графиков к экстенту данных, чтобы они не «уезжали»
@@ -525,7 +624,7 @@ class SlicePanel(QtWidgets.QWidget):
             return
         e, s, lt_total = self._raw_spec
         disp = self._spec_to_unit(s, lt_total)
-        self._spectrum_curve.setData(e, smooth_counts(disp, self._smooth, axis=-1))
+        self._spectrum_curve.setData(e, smooth_by_mode(disp, self._smooth, axis=-1))
         self._render_background(e, lt_total)   # Задача #96: кривая фона в тех же единицах
         self._lock_spectrum_y()                # Задача #101: зафиксировать нижнюю границу Y
 
@@ -538,17 +637,19 @@ class SlicePanel(QtWidgets.QWidget):
             return
         _, s, lt_total = self._raw_spec
         disp = self._spec_to_unit(s, lt_total)
-        disp = np.asarray(smooth_counts(disp, self._smooth, axis=-1), dtype=np.float64)
+        disp = np.asarray(smooth_by_mode(disp, self._smooth, axis=-1), dtype=np.float64)
         if not self._spec_log:
             vb.setLimits(yMin=0.0)
             return
         pos = disp[disp > 0.0]
-        floor = float(pos.min()) if pos.size else 1e-3
+        # Задача #166: пол в лог-режиме — 10-й перцентиль pos (не min): ВЭ-выбросы после
+        # ε-нормировки тянут абсолютный min на ~1 декаду ниже плотной части кривой.
+        floor = float(np.percentile(pos, 10.0)) if pos.size else 1e-3
         vb.setLimits(yMin=float(np.log10(floor)))
 
-    def set_smoothing(self, radius: int) -> None:
-        """Радиус скользящего среднего спектра по энергии (Замечание IV-R4); перерисовать кривую."""
-        self._smooth = max(0, int(radius))
+    def set_smoothing(self, mode: int) -> None:
+        """Режим сглаживания спектра по энергии (Задача #163): 0/SMA/WMA; перерисовать кривую."""
+        self._smooth = max(0, min(2, int(mode)))
         self._render_spectrum()
 
     def _spec_to_unit(self, spec_raw, lt_total):
@@ -667,7 +768,7 @@ class SlicePanel(QtWidgets.QWidget):
             disp = raw / float(lt_total) if (self._unit == "cps" and lt_total) else raw
         else:
             disp = bg if self._unit == "cps" else bg * float(lt_total or 0.0)
-        disp = np.asarray(smooth_counts(disp, self._smooth, axis=-1), dtype=np.float64)
+        disp = np.asarray(smooth_by_mode(disp, self._smooth, axis=-1), dtype=np.float64)
         if self._spec_log:
             disp = np.where(disp > 0.0, disp, np.nan)
         self._bg_curve.setData(e, disp, connect="finite")
@@ -721,6 +822,7 @@ class SlicePanel(QtWidgets.QWidget):
         self._plot_spectrum(self._energies, spec, self._sg.live_time_total(i, i + 1))
         t = float(self._times[i]) if self._times is not None and self._times.size > i else 0.0
         self._header.setText(f"Срез времени #{i} (t = {t:.1f} с)")
+        self._view_mode = ("slice", i)   # Задача #161: запомнить вид для update_spectrogram
 
     @QtCore.Slot(int, int, int, int)
     def show_roi(self, t_lo: int, t_hi: int, ch_lo: int, ch_hi: int) -> None:
@@ -738,6 +840,7 @@ class SlicePanel(QtWidgets.QWidget):
         self._header.setText(
             f"Выборка: срезы [{t_lo}:{t_hi}], каналы [{ch_lo}:{ch_hi}] "
             f"({e_lo:.0f}–{e_hi:.0f} кэВ). Сумма отсчётов = {total}.")
+        self._view_mode = ("roi", t_lo, t_hi, ch_lo, ch_hi)   # Задача #161: для update_spectrogram
 
     def show_energy_window(self, e_lo, e_hi) -> None:
         """Временной профиль интенсивности в энергоокне [e_lo,e_hi] — жёлтая кривая нижнего

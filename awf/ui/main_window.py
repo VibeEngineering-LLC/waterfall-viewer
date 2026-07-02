@@ -786,21 +786,29 @@ class MainWindow(QtWidgets.QMainWindow):
             sg = apply_efficiency(sg, self._eff_curve)
         return sg
 
-    def _redistribute(self) -> None:
+    def _redistribute(self, *, reset: bool = False) -> None:
         """Задача #96: раздать активную спектрограмму в 3D/2D/срезы (аналитика — всегда на
         исходных данных). Порядок как в _on_loaded: срезы -> карта (она шлёт roiChanged).
 
         Задача #138 (решение оператора: «вычитай сырые данные поканально, ничего не усредняй»):
         3D, 2D и срезы получают ОДНУ И ТУ ЖЕ активную спектрограмму — прямой знаковый поканальный
         вычет сырых данных (subtract_background, #134). Посегментное усреднение (#137) и гейт 3σ
-        (#136) из проводки 3D/2D убраны: способ отображения везде одинаков, вычет — как есть."""
+        (#136) из проводки 3D/2D убраны: способ отображения везде одинаков, вычет — как есть.
+
+        Задача #161: reset=True — только для НОВОГО файла (_on_loaded), полный сброс окна срезов
+        (set_spectrogram). Для toggle фона/нормализации (bg-select/subtract/eff-norm/eff-load)
+        reset=False (дефолт) — update_spectrogram() сохраняет текущий вид (срез/ROI/интеграл) и
+        зум; раньше любой такой toggle «ломал» окно срезов, перескакивая на интегральный спектр."""
         sg = self._active_spectrogram()               # #138: поканальный вычет #134 (или сырые данные)
         if sg is None:
             return
         # Задача #158: view3d получает и аналитический источник (без ε-нормализации) —
         # для _found_peaks (пики/ID) и пуассоновой маски гребней (#152 _z_counts_int).
         self._view3d.set_spectrogram(sg, analysis_sg=self._analysis_spectrogram())
-        self._slices.set_spectrogram(sg)
+        if reset:
+            self._slices.set_spectrogram(sg)
+        else:
+            self._slices.update_spectrogram(sg)
         self._heatmap.set_spectrogram(sg)
         self._sections.emit_all()
         self._refresh_peaks_panel()   # Задача #111: обновить панель пиков после ре-рендера
@@ -956,7 +964,7 @@ class MainWindow(QtWidgets.QMainWindow):
             act_dose.blockSignals(False)
         self._analytics.set_spectrogram(sg)   # «Аналитика» (Задача 26) — всегда на исходных данных
         # 3D/2D/срезы + секущие плоскости под новую геометрию (через активную спектрограмму)
-        self._redistribute()
+        self._redistribute(reset=True)   # Задача #161: новый файл -> полный сброс окна срезов
         # Задача #104: после redistribute явно синхронизировать видимость дозы
         self._slices.set_dose_overlay(is_rcspg)
         total = int(np.asarray(sg.counts).sum(dtype=np.int64))

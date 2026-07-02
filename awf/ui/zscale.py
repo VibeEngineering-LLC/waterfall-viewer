@@ -96,6 +96,13 @@ def desaturate_rgba(colors, amount: float):
 # Регулируемое усреднение спектра выкл. по умолчанию (Замечание IV-R4).
 DEFAULT_SMOOTH = 0
 
+# Задача #163: рукоятка «Сглаживание» — дискретный выбор режима вместо непрерывного радиуса.
+# 0 = выкл, 1 = SMA (равные веса, smooth_counts), 2 = WMA (треугольные веса, сильнее к центру).
+SMOOTH_MODE_OFF, SMOOTH_MODE_SMA, SMOOTH_MODE_WMA = 0, 1, 2
+# Фиксированная ширина окна (2*r+1 = 5 каналов) для обоих активных режимов — раньше её задавал
+# сам регулятор (0..15); теперь регулятор выбирает только алгоритм, ширина окна не варьируется.
+SMOOTH_RADIUS = 2
+
 
 def smooth_counts(arr, radius, axis: int = -1):
     """Скользящее среднее (box-фильтр) шириной 2*radius+1 вдоль оси axis с краевым
@@ -116,3 +123,34 @@ def smooth_counts(arr, radius, axis: int = -1):
     win = (csum[..., k:] - csum[..., :-k]) / float(k)
     out = np.moveaxis(win, -1, axis)
     return np.ascontiguousarray(out, dtype=np.float32)
+
+
+def weighted_moving_average(arr, radius, axis: int = -1):
+    """Взвешенное скользящее среднее (Задача #163): треугольные веса radius+1-|смещение|,
+    центр окна весит больше краёв (в отличие от smooth_counts — там веса равны). Ширина окна
+    2*radius+1, краевое дополнение 'edge'. radius<=0 — массив без изменений. float32."""
+    r = int(radius)
+    a = np.asarray(arr, dtype=np.float32)
+    if r <= 0 or a.ndim == 0 or a.shape[axis] < 2:
+        return a
+    work = np.moveaxis(a, axis, -1).astype(np.float64, copy=False)
+    L = work.shape[-1]
+    r = min(r, L)
+    weights = (r + 1 - np.abs(np.arange(-r, r + 1))).astype(np.float64)
+    pad = np.pad(work, [(0, 0)] * (work.ndim - 1) + [(r, r)], mode="edge")
+    out = np.zeros_like(work)
+    for i, w in enumerate(weights):
+        out += w * pad[..., i:i + L]
+    out /= weights.sum()
+    return np.ascontiguousarray(np.moveaxis(out, -1, axis), dtype=np.float32)
+
+
+def smooth_by_mode(arr, mode, axis: int = -1, radius: int = SMOOTH_RADIUS):
+    """Применить сглаживание по коду режима рукоятки «Сглаживание» (Задача #163):
+    SMOOTH_MODE_OFF -> без изменений, SMOOTH_MODE_SMA -> smooth_counts,
+    SMOOTH_MODE_WMA -> weighted_moving_average. Неизвестный код трактуется как выкл."""
+    if int(mode) == SMOOTH_MODE_SMA:
+        return smooth_counts(arr, radius, axis=axis)
+    if int(mode) == SMOOTH_MODE_WMA:
+        return weighted_moving_average(arr, radius, axis=axis)
+    return np.asarray(arr, dtype=np.float32)

@@ -8,7 +8,9 @@ import pyqtgraph.opengl as gl
 from PySide6 import QtCore, QtWidgets
 
 from awf.model.spectrogram import Calibration, Spectrogram
-from awf.ui.zscale import smooth_counts, DEFAULT_SMOOTH
+from awf.ui.zscale import (smooth_counts, DEFAULT_SMOOTH, weighted_moving_average,
+                           smooth_by_mode, SMOOTH_MODE_OFF, SMOOTH_MODE_SMA,
+                           SMOOTH_MODE_WMA, SMOOTH_RADIUS)
 from awf.ui.view3d import Waterfall3DView
 from awf.ui.panels import HeatmapPanel, SlicePanel
 
@@ -99,22 +101,74 @@ def test_smooth_per_time_slice_independent_axis1(app):
         assert np.allclose(s[i], smooth_counts(m[i], 2))
 
 
+# ---------- Задача #163: weighted_moving_average (WMA) ----------
+def test_wma_radius0_identity():
+    a = np.array([0, 0, 10, 0, 0], dtype=float)
+    assert np.allclose(weighted_moving_average(a, 0), a)
+
+
+def test_wma_triangular_weight_value():
+    a = np.array([0, 0, 10, 0, 0], dtype=float)
+    s = weighted_moving_average(a, 1)           # окно 3, треугольные веса [1,2,1]/4
+    assert s[2] == pytest.approx(10.0 * 2.0 / 4.0, rel=1e-6)
+    assert s[1] == pytest.approx(10.0 * 1.0 / 4.0, rel=1e-6)
+
+
+def test_wma_differs_from_sma_uniform_weights():
+    # WMA весит центр больше краёв, SMA — равномерно; на неоднородном сигнале различаются.
+    a = np.array([0, 0, 0, 10, 0, 0, 0], dtype=float)
+    sma, wma = smooth_counts(a, 2), weighted_moving_average(a, 2)
+    assert not np.allclose(sma, wma)
+    assert wma[3] > sma[3]                      # треугольные веса сильнее подтягивают центр
+
+
+def test_wma_2d_axis_preserves_shape():
+    m = np.random.RandomState(3).poisson(50, (6, 8)).astype(float)
+    assert weighted_moving_average(m, 2, axis=1).shape == (6, 8)
+    assert weighted_moving_average(m, 2, axis=0).shape == (6, 8)
+
+
+# ---------- Задача #163: smooth_by_mode (диспетчер режима рукоятки «Сглаживание») ----------
+def test_smooth_by_mode_off_returns_unchanged():
+    a = np.array([1.0, 2.0, 3.0], dtype=np.float32)
+    assert np.allclose(smooth_by_mode(a, SMOOTH_MODE_OFF), a)
+
+
+def test_smooth_by_mode_sma_matches_smooth_counts():
+    a = np.random.RandomState(4).poisson(60, 20).astype(float)
+    assert np.allclose(smooth_by_mode(a, SMOOTH_MODE_SMA), smooth_counts(a, SMOOTH_RADIUS))
+
+
+def test_smooth_by_mode_wma_matches_weighted_moving_average():
+    a = np.random.RandomState(5).poisson(60, 20).astype(float)
+    assert np.allclose(smooth_by_mode(a, SMOOTH_MODE_WMA),
+                        weighted_moving_average(a, SMOOTH_RADIUS))
+
+
+def test_smooth_by_mode_unknown_treated_as_off():
+    a = np.array([1.0, 2.0, 3.0], dtype=np.float32)
+    assert np.allclose(smooth_by_mode(a, 99), a)
+
+
 def test_smooth_view3d_setter(app):
+    # Задача #163: рукоятка теперь режим 0/SMA/WMA, не радиус.
     v = Waterfall3DView()
     v.set_spectrogram(_make_sg())
-    v.set_smoothing(4)
-    assert v._smooth == 4
+    v.set_smoothing(2)
+    assert v._smooth == 2
     assert v._surface is not None
 
 
 def test_smooth_heatmap_setter(app):
+    # Задача #163: режим 1 = SMA.
     h = HeatmapPanel()
     h.set_spectrogram(_make_sg())
-    h.set_smoothing(3)
-    assert h._smooth == 3
+    h.set_smoothing(1)
+    assert h._smooth == 1
 
 
 def test_smooth_slice_setter_uses_raw_cache(app):
+    # Задача #163: режим 2 = WMA.
     s = SlicePanel()
     s.set_spectrogram(_make_sg())
     assert s._raw_spec is not None         # сырой спектр закэширован
@@ -746,7 +800,7 @@ def test_adjust_setters_preserve_camera_zoom(app):
     v.set_spectrogram(_make_sg(ns=40, nc=60))     # первая загрузка кадрирует камеру
     v.setCameraPosition(distance=12.5)            # пользователь приблизил вручную
     azim0 = v.opts["azimuth"]
-    v.set_smoothing(5)                            # рукоятка «Сглаживание» -> ре-рендер того же sg
+    v.set_smoothing(1)                            # рукоятка «Сглаживание» -> ре-рендер того же sg
     assert v.opts["distance"] == 12.5             # зум сохранён
     v.set_contrast(gain=2.0)                      # рукоятки «Усиление/Гамма/Отсечка»
     assert v.opts["distance"] == 12.5
@@ -773,3 +827,101 @@ def test_slice_views_locked_to_data(app):
     tlim = sp._series_plot.getViewBox().state["limits"]
     assert tlim["xLimits"][0] == tmin and tlim["xLimits"][1] == tmax
     assert tlim["xRange"][1] == tmax - tmin            # maxXRange = полный домен времени
+
+
+# ---------- #164: update_spectrogram расширяет Y, если данные вылезли (ε-нормировка ×10) ----------
+def test_slice_update_expands_y_after_normalization(app):
+    """Задача #164: после ε-нормировки амплитуда ×~10; жёстко-зафиксированный до нормировки
+    yRange становится тесен и кривая улетает вверх (оператор видит только хвост и жалуется
+    «спектр не нормализовался»). update_spectrogram() должен подрастить верхнюю границу Y,
+    сохраняя нижнюю и пользовательский X-зум."""
+    sp = SlicePanel()
+    sg = _make_sg(ns=30, nc=50, t_step=2.0)
+    sp.set_spectrogram(sg)
+    vb = sp._spectrum_plot.getViewBox()
+    vb.setXRange(10.0, 30.0, padding=0)                 # эмулируем пользовательский X-зум
+    vb.setYRange(0.0, 5.0, padding=0)                   # узкий Y (после ручной подгонки)
+    xr_before = tuple(vb.viewRange()[0])
+    sg_norm = Spectrogram(counts=sg.counts * 10, calibration=sg.calibration,
+                          time_offsets_s=sg.time_offsets_s, real_time_s=sg.real_time_s,
+                          live_time_s=sg.live_time_s)
+    sp.update_spectrogram(sg_norm)
+    xr_after = tuple(vb.viewRange()[0])
+    yr_after = vb.viewRange()[1]
+    assert xr_after == pytest.approx(xr_before, rel=1e-6)  # X-зум пользователя сохранён
+    assert yr_after[1] > 5.0                                # Y-верх подрос под новую амплитуду
+    assert yr_after[0] == pytest.approx(0.0, abs=1e-6)      # лин.режим: Y-низ прибит к 0 (#128)
+
+
+def test_slice_update_full_y_autofit_log_mode(app):
+    """Задача #164 (ревизия): в лог-шкале ε-нормировка ×10 сдвигает и min, и max данных на +1 dec.
+    Если только «расширять сверху» — нижняя граница viewRange остаётся на pre-нормировочном
+    log10(min), и кривая визуально «висит» над низом окна (оператор: «спектр оторвался от X»).
+    update_spectrogram() должен переподгонять Y-диапазон целиком (низ и верх). X-зум сохраняем."""
+    sp = SlicePanel()
+    sg = _make_sg(ns=30, nc=50, t_step=2.0)
+    sp.set_spectrogram(sg)
+    sp.set_spectrum_log(True)                            # лог-шкала — как в операторском скриншоте
+    vb = sp._spectrum_plot.getViewBox()
+    yr_before = tuple(vb.viewRange()[1])
+    vb.setXRange(10.0, 30.0, padding=0)
+    xr_before = tuple(vb.viewRange()[0])
+    sg_norm = Spectrogram(counts=sg.counts * 10, calibration=sg.calibration,
+                          time_offsets_s=sg.time_offsets_s, real_time_s=sg.real_time_s,
+                          live_time_s=sg.live_time_s)
+    sp.update_spectrogram(sg_norm)
+    xr_after = tuple(vb.viewRange()[0])
+    yr_after = tuple(vb.viewRange()[1])
+    disp = sg_norm.total_spectrum() / sg_norm.live_time_total()   # cps, как в _spec_to_unit
+    pos = disp[disp > 0.0]
+    # Задача #166: пол — 10-й перцентиль (не min); при равномерных данных poisson близко к min.
+    lo_expect = float(np.log10(np.percentile(pos, 10.0)))
+    hi_expect = float(np.log10(pos.max()))
+    assert xr_after == pytest.approx(xr_before, rel=1e-6)         # X-зум сохранён
+    # yMin в setLimits (#101 _lock_spectrum_y) клампит запас -0.1: Y-низ = log10(percentile10).
+    # При клампе pyqtgraph сохраняет ширину диапазона → Y-верх сдвигается на +0.1 дополнительно.
+    assert yr_after[0] == pytest.approx(lo_expect, abs=0.05)        # Y-низ прижат к log10(percentile10)
+    assert yr_after[1] == pytest.approx(hi_expect + 0.2, abs=0.05)  # Y-верх покрывает log10(max)+запас
+
+
+def test_slice_spectrum_no_mouse_pan(app):
+    """Задача #165: спектр среза не должен «цепляться мышью и перемещаться».
+    Проверяем: mouseDragEvent на ViewBox спектра — no-op (ignore, без сдвига viewRange);
+    mouseEnabled по обеим осям остался True (иначе pyqtgraph отключит и wheel-zoom).
+    Регрессия: ViewBox нижнего графика (_series_plot) — прежний, drag там работает."""
+    from awf.ui.panels import _NoPanViewBox
+    sp = SlicePanel()
+    sp.set_spectrogram(_make_sg(ns=20, nc=40, t_step=1.0))
+    vb = sp._spectrum_plot.getViewBox()
+    assert isinstance(vb, _NoPanViewBox)                 # #165: подмена ViewBox прошла
+    assert vb.state["mouseEnabled"] == [True, True]      # #165: wheel-zoom не отключён
+
+    class _Ev:                                           # фейковый MouseDragEvent
+        def __init__(self): self.accepted = False
+        def ignore(self): self.accepted = False
+        def accept(self): self.accepted = True
+    xr0, yr0 = tuple(vb.viewRange()[0]), tuple(vb.viewRange()[1])
+    vb.mouseDragEvent(_Ev())                             # #165: игнорируется
+    assert tuple(vb.viewRange()[0]) == xr0 and tuple(vb.viewRange()[1]) == yr0
+    assert not isinstance(sp._series_plot.getViewBox(), _NoPanViewBox)  # регрессия: нижний график цел
+
+
+# ---------- #166: лог-Y низ окна «Срезы» после нормализации ----------
+def test_slice_normalization_ve_outliers_do_not_stretch_y_bottom(app):
+    """Задача #166: ε-нормировка ×10.76 в ВЭ-хвосте помножает 1-count каналы; min(pos)
+    уползает на 2-3 декады ниже плотной части, окно растягивается вниз, кривая визуально
+    «взлетает». Автофит Y должен брать 10-й перцентиль как пол — редкие выбросы (5-10%
+    каналов) не растягивают окно, плотная часть занимает почти всё."""
+    ns, nc = 10, 50
+    counts = np.full((ns, nc), 1000, dtype=np.int64)     # плотная полка → 10 cps/канал
+    counts[:, 15] = 1; counts[:, 30] = 1; counts[:, 45] = 1   # 3/50 = 6% ВЭ-выбросов → 0.01 cps
+    cal = Calibration(coeffs=[0.0, 10.0])
+    t = np.arange(ns, dtype=np.float64) * 100.0
+    sg = Spectrogram(counts=counts, calibration=cal, time_offsets_s=t,
+                     real_time_s=np.full(ns, 100.0), live_time_s=np.full(ns, 100.0))
+    sp = SlicePanel()
+    sp.set_spectrogram(sg); sp.set_spectrum_log(True); sp.update_spectrogram(sg)
+    yr = sp._spectrum_plot.getViewBox().viewRange()[1]
+    # Без фикса (min): yr[0] ≈ log10(0.01) = -2, окно 3 dec, кривая в верхней трети.
+    # С фиксом (percentile-10 отсекает 3 из 50 выбросов): yr[0] ≈ log10(10) = 1.
+    assert yr[0] > 0.5                                   # #166: перцентиль отсёк выбросы
