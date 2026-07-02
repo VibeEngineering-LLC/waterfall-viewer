@@ -593,18 +593,21 @@ def _floor_sg(n=10):
                        real_time_s=np.full(n, 2.0), live_time_s=np.full(n, 2.0))
 
 
-def test_floor_visible_by_default(app):
-    """Задача #76: по умолчанию подложка видима — ни одна ячейка не прозрачна."""
+def test_floor_hidden_by_default(app):
+    """Задача #150: по умолчанию подложка СКРЫТА (было видима, #76) — ячейки дна прозрачны."""
     v = Waterfall3DView()
     v.set_spectrogram(_floor_sg())
-    assert v._floor_visible is True
+    assert v._floor_visible is False
     alpha = np.asarray(v._surface._colors)[:, 3]
-    assert np.all(alpha > 0.0)
+    assert np.any(alpha == 0.0)        # дно (нули) прозрачно уже на старте
+    v.set_floor_visible(True)          # включили — всё видимо (прежний дефолт #76)
+    assert np.all(np.asarray(v._surface._colors)[:, 3] > 0.0)
 
 
 def test_floor_hidden_zeroes_base_cells(app):
     """Задача #76: выключенная подложка делает ячейки дна (zn≈0) прозрачными, рельеф остаётся."""
     v = Waterfall3DView()
+    v.set_floor_visible(True)          # #150: дефолт теперь выкл — включаем явно
     v.set_spectrogram(_floor_sg())
     v.set_floor_visible(False)
     alpha = np.asarray(v._surface._colors)[:, 3]
@@ -619,11 +622,11 @@ def test_floor_toolbar_checkbox_drives_view(app):
     from awf.ui.main_window import MainWindow
     w = MainWindow()
     w._view3d.set_spectrogram(_floor_sg())
-    assert w._floor_check.isChecked() and w._view3d._floor_visible is True
-    w._floor_check.setChecked(False)
-    assert w._view3d._floor_visible is False
+    assert not w._floor_check.isChecked() and w._view3d._floor_visible is False  # #150: дефолт выкл
     w._floor_check.setChecked(True)
     assert w._view3d._floor_visible is True
+    w._floor_check.setChecked(False)
+    assert w._view3d._floor_visible is False
     w.close()
 
 

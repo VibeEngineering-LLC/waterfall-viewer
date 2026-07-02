@@ -55,6 +55,20 @@ def background_window_like(bg_counts, bg_lt, target_lt) -> np.ndarray:
     return win * (tgt / win_lt) if win_lt > 0.0 else win
 
 
+def tile_background_block(bg_counts, bg_lt, n_slices: int, phase: int = 0):
+    """Задача #149: транслировать (циклически скопировать) сырой фоновый блок на всю временную
+    шкалу из n_slices срезов. Фон аппроксимируется КОПИРОВАНИЕМ сырых срезов, не усреднением
+    (директива #138): срез t получает клон bg-среза (t − phase) mod m. phase — позиция начала
+    фонового участка в целевой шкале: срезы ВНУТРИ участка получают клонами самих себя, поэтому
+    самовычет фонового участка остаётся точным нулём (#147). Возвращает (counts_full, lt_full)."""
+    counts = np.asarray(bg_counts, dtype=np.float64)
+    lt = np.asarray(bg_lt, dtype=np.float64).ravel()
+    if counts.ndim != 2 or counts.shape[0] == 0 or lt.size != counts.shape[0]:
+        raise ValueError("tile_background_block: неверная форма фонового блока")
+    idx = (np.arange(int(n_slices)) - int(phase)) % counts.shape[0]
+    return counts[idx], lt[idx]
+
+
 def _channel_widths(energies) -> np.ndarray:
     """Ширина каналов по энергии (кэВ/канал) через градиент монотонной шкалы энергий."""
     e = np.asarray(energies, dtype=np.float64)
@@ -82,18 +96,30 @@ def background_from_spectrogram(bg_sg, target_sg) -> np.ndarray:
     return dens_t * _channel_widths(e_t)
 
 
-def subtract_background(sg, bg_cps) -> Spectrogram:
+def subtract_background(sg, bg_cps, bg_raw=None) -> Spectrogram:
     """Новая спектрограмма с вычтенным фоном: counts[t,ch] - bg_cps[ch]*live_time[t] (Задача #96).
     Остаток ЗНАКОВЫЙ, без клипа к 0 (Задача #134): поканальный клип асимметрично разрушал
     сокращение и оставлял ложный ~18 % положительный остаток при фон=спектр (должно быть 0).
     Без клипа Σ_t остаток = total_counts − bg_cps·total_lt = 0 поканально при фон=весь файл.
     Калибровка/временные оси сохраняются; отрицательные ячейки гасятся к 0 на отображении
-    (zscale._base_transform), поэтому 3D/2D-виды не меняются, а интегральный спектр уходит в 0."""
+    (zscale._base_transform), поэтому 3D/2D-виды не меняются, а интегральный спектр уходит в 0.
+
+    Задача #147: bg_raw=(counts_блок, lt_блок) той же формы, что sg.counts (фон = тот же файл
+    или весь диапазон), — вычет поячеечный: counts − bg_counts·(lt/bg_lt). При самовычете
+    остаток ТОЧНЫЙ ноль в каждой ячейке (как совпадающие простыни #139/#141), а не только в
+    интеграле по времени; усреднённый bg_cps не размывает пуассонов шум образца. Иная форма
+    блока (под-диапазон, чужая сетка) — прежний путь через средний bg_cps."""
     bg = np.asarray(bg_cps, dtype=np.float64).ravel()
     if bg.size != sg.n_channels:
         raise ValueError("subtract_background: длина bg_cps != числу каналов")
     lt = np.asarray(sg.live_time_s, dtype=np.float64)
-    sub = sg.counts.astype(np.float64) - bg[None, :] * lt[:, None]
+    if bg_raw is not None and np.asarray(bg_raw[0]).shape == sg.counts.shape:
+        bg_counts = np.asarray(bg_raw[0], dtype=np.float64)
+        bg_lt = np.asarray(bg_raw[1], dtype=np.float64).ravel()
+        safe = np.where(bg_lt > 0.0, bg_lt, np.inf)
+        sub = sg.counts.astype(np.float64) - bg_counts * (lt / safe)[:, None]
+    else:
+        sub = sg.counts.astype(np.float64) - bg[None, :] * lt[:, None]
     return Spectrogram(counts=sub, calibration=sg.calibration,
                        time_offsets_s=sg.time_offsets_s, real_time_s=sg.real_time_s,
                        live_time_s=sg.live_time_s, t0_iso=sg.t0_iso, source_path=sg.source_path)
