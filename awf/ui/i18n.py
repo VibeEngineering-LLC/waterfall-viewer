@@ -185,6 +185,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Гамма": "Gamma",
         "Отсечка": "Clip",
         "Сглаживание": "Smoothing",
+        "Сглаживание E": "Smoothing E",
         "Сглаж. по t": "t-smooth",
         "по сегм.": "by segs",
         "Сглаживать по оси времени внутри каждого временного сегмента независимо": "Smooth time axis within each segment independently",
