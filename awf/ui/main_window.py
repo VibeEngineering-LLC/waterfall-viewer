@@ -946,6 +946,9 @@ class MainWindow(QtWidgets.QMainWindow):
             self._slices.set_smoothing(r)
         if v["tsmooth"] != last.get("tsmooth", 0) or v["tsmooth_by_seg"] != last.get("tsmooth_by_seg", 0):
             self._view3d.set_t_smoothing(int(v["tsmooth"]), bool(v["tsmooth_by_seg"]))
+            # Задача #174: первое включение «по сегм.» → авто-сегментация если ещё не было
+            if v["tsmooth_by_seg"] and not last.get("tsmooth_by_seg", 0) and not self._view3d.has_segments:
+                self._on_segment_recompute()
         if v["light"] != last["light"]:
             self._view3d.set_light_intensity(v["light"] / 100.0)
         if v["tbin"] != last["tbin"]:                       # Задача #56: ширина выборки по t

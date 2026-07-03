@@ -249,7 +249,8 @@ _SPECS = (
     ("gamma",  "Гамма",       20, 300, 100, lambda v: f"{v / 100:.2f}"),
     ("clip",   "Отсечка",     80, 100, 100, lambda v: f"{v}%"),
     ("smooth",  "Сглаживание",  0,   2,   0, lambda v: {0: "0", 1: "SMA", 2: "WMA"}[v]),
-    ("tsmooth", "Сглаж. по t",  0,   2,   0, lambda v: {0: "0", 1: "SMA", 2: "WMA"}[v]),
+    ("tsmooth", "Сглаж. по t",  0,   6,   0,
+     lambda v: {0:"0",1:"SMA×1",2:"SMA×2",3:"SMA×4",4:"WMA×1",5:"WMA×2",6:"WMA×4"}.get(v,"?")),
     ("light",   "Освещение",    0, 100,   0, lambda v: f"{v}%"),
     ("tbin",   "Окно t",      25, 400, 100, lambda v: f"{v / 100:.2f}×"),
 )
@@ -294,8 +295,9 @@ class AdjustPanel(QtWidgets.QWidget):
         self._tsmooth_by_seg_cb = QtWidgets.QCheckBox(tr("по сегм."), self)
         self._tsmooth_by_seg_cb.setToolTip(tr(
             "Сглаживать по оси времени внутри каждого временного сегмента независимо"))
+        self._tsmooth_by_seg_cb.setChecked(True)  # Задача #174: по умолчанию ВКЛ
         self._tsmooth_by_seg_cb.stateChanged.connect(lambda _: self.changed.emit())
-        outer.addWidget(self._tsmooth_by_seg_cb)
+        self.rows["tsmooth"].layout().addWidget(self._tsmooth_by_seg_cb)  # #174: в строку движка
         outer.addStretch(1)
 
     # --- реакции / API ---
@@ -318,7 +320,7 @@ class AdjustPanel(QtWidgets.QWidget):
         (стартовое состояние). Сигналы рядов глушим — пересчёт отображения один раз в конце.
         Гашение ручек делает _on_toggle при set_on(False) (сигнал _chk не заглушён)."""
         self._tsmooth_by_seg_cb.blockSignals(True)
-        self._tsmooth_by_seg_cb.setChecked(False)
+        self._tsmooth_by_seg_cb.setChecked(True)  # Задача #174: сброс → ВКЛ (это дефолт)
         self._tsmooth_by_seg_cb.blockSignals(False)
         for r in self.rows.values():
             r.blockSignals(True)

@@ -5,7 +5,8 @@ import pyqtgraph.opengl as gl
 from OpenGL.GL import GL_DEPTH_TEST, GL_BLEND, GL_ALPHA_TEST, GL_CULL_FACE
 from PySide6 import QtCore, QtGui, QtWidgets
 from awf.ui.zscale import (apply_z_scale, DEFAULT_GAIN, DEFAULT_GAMMA,
-                           DEFAULT_CLIP, desaturate_rgba, smooth_by_mode)
+                           DEFAULT_CLIP, desaturate_rgba, smooth_by_mode,
+                           SMOOTH_MODE_SMA, SMOOTH_MODE_WMA)
 from awf.ui.colormaps import get_colormap
 from awf.ui.i18n import tr                 # Задача #169: локализация панели сечений
 from awf.model.background import background_window_like   # Задача #140: сырое фоновое окно простыни
@@ -146,14 +147,21 @@ _PEAK_HILITE_RGBA = (1.0, 0.20, 0.90, 1.0)
 _TRANSIENT_SIGMA_MARGIN = 3.0
 
 
-def _smooth_by_segs(arr, mode, t_centers, seg_bounds_sec):
-    """Задача #172: сглаживание по оси времени (axis=0) отдельно в каждом сегменте."""
+# Задача #174: карта режимов сглаживания по t (7 ступеней: 0=выкл, 1-3=SMA, 4-6=WMA)
+_T_SMOOTH_MAP = {
+    1: (SMOOTH_MODE_SMA, 2), 2: (SMOOTH_MODE_SMA, 4), 3: (SMOOTH_MODE_SMA, 8),
+    4: (SMOOTH_MODE_WMA, 2), 5: (SMOOTH_MODE_WMA, 4), 6: (SMOOTH_MODE_WMA, 8),
+}
+
+
+def _smooth_by_segs(arr, mode, radius, t_centers, seg_bounds_sec):
+    """Задача #172/#174: сглаживание по оси времени (axis=0) отдельно в каждом сегменте."""
     t = np.asarray(t_centers, dtype=np.float64)
     out = arr.copy()
     for t0, t1 in seg_bounds_sec:
         idx = np.where((t >= float(t0)) & (t <= float(t1)))[0]
         if len(idx) >= 2:
-            out[idx] = smooth_by_mode(arr[idx], mode, axis=0)
+            out[idx] = smooth_by_mode(arr[idx], mode, axis=0, radius=radius)
     return out
 
 
@@ -352,12 +360,15 @@ class Waterfall3DView(gl.GLViewWidget):
         self._z_counts_int = z_int
         # 1b) сглаживание спектра по энергетической оси (axis=1) — Замечание IV-R4 / #163
         z_counts = smooth_by_mode(z_counts, self._smooth, axis=1)
-        # 1c) сглаживание по оси времени (axis=0) — Задача #172
+        # 1c) сглаживание по оси времени (axis=0) — Задача #172/#174
         if self._t_smooth:
-            if self._t_smooth_by_seg and self._seg_bounds_sec:
-                z_counts = _smooth_by_segs(z_counts, self._t_smooth, t_centers, self._seg_bounds_sec)
-            else:
-                z_counts = smooth_by_mode(z_counts, self._t_smooth, axis=0)
+            _ts = _T_SMOOTH_MAP.get(self._t_smooth)
+            if _ts:
+                _algo, _radius = _ts
+                if self._t_smooth_by_seg and self._seg_bounds_sec:
+                    z_counts = _smooth_by_segs(z_counts, _algo, _radius, t_centers, self._seg_bounds_sec)
+                else:
+                    z_counts = smooth_by_mode(z_counts, _algo, axis=0, radius=_radius)
         nt, nc = z_counts.shape
         # 2) Z-шкала контраста, затем нормировка для высоты и цвета (защита от нулевого максимума)
         z_disp = apply_z_scale(z_counts, self._z_mode, gain=self._gain,
@@ -665,9 +676,14 @@ class Waterfall3DView(gl.GLViewWidget):
         if self._sg is not None:
             self.set_spectrogram(self._sg, self._max_time, self._max_chan)
 
+    @property
+    def has_segments(self) -> bool:
+        """Задача #174: True если сегменты уже вычислены (для авто-триггера сегментации)."""
+        return bool(self._seg_bounds_sec)
+
     def set_t_smoothing(self, mode: int, by_seg: bool = False) -> None:
-        """Задача #172: режим сглаживания по оси времени (0/SMA/WMA) + флаг «по сегментам»."""
-        self._t_smooth = max(0, min(2, int(mode)))
+        """Задача #172/#174: режим сглаживания по оси времени (0..6) + флаг «по сегментам»."""
+        self._t_smooth = max(0, min(6, int(mode)))
         self._t_smooth_by_seg = bool(by_seg)
         if self._sg is not None:
             self.set_spectrogram(self._sg, self._max_time, self._max_chan)
