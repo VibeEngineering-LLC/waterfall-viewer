@@ -146,6 +146,17 @@ _PEAK_HILITE_RGBA = (1.0, 0.20, 0.90, 1.0)
 _TRANSIENT_SIGMA_MARGIN = 3.0
 
 
+def _smooth_by_segs(arr, mode, t_centers, seg_bounds_sec):
+    """Задача #172: сглаживание по оси времени (axis=0) отдельно в каждом сегменте."""
+    t = np.asarray(t_centers, dtype=np.float64)
+    out = arr.copy()
+    for t0, t1 in seg_bounds_sec:
+        idx = np.where((t >= float(t0)) & (t <= float(t1)))[0]
+        if len(idx) >= 2:
+            out[idx] = smooth_by_mode(arr[idx], mode, axis=0)
+    return out
+
+
 class Waterfall3DView(gl.GLViewWidget):
     """3D-поверхность спектрограммы. Наследует GLViewWidget => вращение ЛКМ, зум колесом,
     панорама СКМ уже работают. set_spectrogram(sg) строит/заменяет поверхность.
@@ -192,6 +203,9 @@ class Waterfall3DView(gl.GLViewWidget):
         self._clip = DEFAULT_CLIP
         self._cmap_name = "insight"   # палитра рельефа/цвета (Задача 17)
         self._smooth = 0              # радиус усреднения спектра по энергии (Замечание IV-R4)
+        self._t_smooth = 0            # Задача #172: режим сглаживания по оси времени (0/SMA/WMA)
+        self._t_smooth_by_seg = False  # применять по сегментам независимо
+        self._seg_bounds_sec = []     # [(t_start_s, t_end_s), …] текущих сегментов
         self._unit = "cps"            # единицы рельефа/цвета: counts | cps (Задача #44; дефолт cps — #53)
         self._light = 0.0             # интенсивность рельефного затенения 0..1 (Задача #46)
         self._max_time = 400          # параметры LOD-прорежки последнего рендера
@@ -338,6 +352,12 @@ class Waterfall3DView(gl.GLViewWidget):
         self._z_counts_int = z_int
         # 1b) сглаживание спектра по энергетической оси (axis=1) — Замечание IV-R4 / #163
         z_counts = smooth_by_mode(z_counts, self._smooth, axis=1)
+        # 1c) сглаживание по оси времени (axis=0) — Задача #172
+        if self._t_smooth:
+            if self._t_smooth_by_seg and self._seg_bounds_sec:
+                z_counts = _smooth_by_segs(z_counts, self._t_smooth, t_centers, self._seg_bounds_sec)
+            else:
+                z_counts = smooth_by_mode(z_counts, self._t_smooth, axis=0)
         nt, nc = z_counts.shape
         # 2) Z-шкала контраста, затем нормировка для высоты и цвета (защита от нулевого максимума)
         z_disp = apply_z_scale(z_counts, self._z_mode, gain=self._gain,
@@ -643,6 +663,22 @@ class Waterfall3DView(gl.GLViewWidget):
         ре-рендер из той же sg."""
         self._smooth = max(0, min(2, int(mode)))
         if self._sg is not None:
+            self.set_spectrogram(self._sg, self._max_time, self._max_chan)
+
+    def set_t_smoothing(self, mode: int, by_seg: bool = False) -> None:
+        """Задача #172: режим сглаживания по оси времени (0/SMA/WMA) + флаг «по сегментам»."""
+        self._t_smooth = max(0, min(2, int(mode)))
+        self._t_smooth_by_seg = bool(by_seg)
+        if self._sg is not None:
+            self.set_spectrogram(self._sg, self._max_time, self._max_chan)
+
+    def set_segment_bounds(self, segs) -> None:
+        """Задача #172: задать временны́е границы сегментов (список TimeSegment или (t0, t1) с).
+        Ре-рендер только если активно временно́е сглаживание по сегментам."""
+        self._seg_bounds_sec = [(float(s.t_start_s), float(s.t_end_s))
+                                if hasattr(s, 't_start_s') else (float(s[0]), float(s[1]))
+                                for s in segs]
+        if self._t_smooth and self._t_smooth_by_seg and self._sg is not None:
             self.set_spectrogram(self._sg, self._max_time, self._max_chan)
 
     def set_time_bins(self, max_time: int) -> None:

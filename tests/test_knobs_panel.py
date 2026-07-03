@@ -68,7 +68,8 @@ def test_knobrow_bypass_preserves_position(app):
 
 # ---------- AdjustPanel: глобальный bypass и сброс ----------
 
-_DEFAULTS = {"gain": 100, "gamma": 100, "clip": 100, "smooth": 0, "light": 0, "tbin": 100}
+_DEFAULTS = {"gain": 100, "gamma": 100, "clip": 100, "smooth": 0, "tsmooth": 0,
+             "light": 0, "tbin": 100, "tsmooth_by_seg": 0}  # Задача #172: +tsmooth/tsmooth_by_seg
 
 
 def test_panel_defaults_all_off(app):
