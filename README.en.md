@@ -1,4 +1,4 @@
-# AtomSpectra Waterfall Viewer
+# Waterfall Viewer
 
 A viewer and analyzer for **waterfall spectrograms** from gamma-ray spectrometers.
 3D view with rotation and zoom, 2D Time×Energy map, time slices / cross-sections / rectangular ROI selections.
