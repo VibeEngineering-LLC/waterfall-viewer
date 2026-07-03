@@ -5,6 +5,7 @@ import numpy as np
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from awf.ui.colormaps import COLORMAPS, get_colormap
+from awf.ui.i18n import tr
 
 _DIALOG_QSS = """
 QDialog { background: #1e2024; }
@@ -76,7 +77,7 @@ class PaletteDialog(QtWidgets.QDialog):
 
     def __init__(self, current: str, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Цветовая палитра")
+        self.setWindowTitle(tr("Цветовая палитра"))
         self.setModal(True)
         self.setMinimumSize(420, 520)
         self.setStyleSheet(_DIALOG_QSS)
@@ -93,7 +94,7 @@ class PaletteDialog(QtWidgets.QDialog):
         col.setContentsMargins(10, 10, 10, 10)
         col.setSpacing(4)
         for key, label, desc in COLORMAPS:
-            row = _PaletteRow(key, label, desc)
+            row = _PaletteRow(key, label, tr(desc))
             row.clicked.connect(self._on_pick)
             self._rows[key] = row
             col.addWidget(row)

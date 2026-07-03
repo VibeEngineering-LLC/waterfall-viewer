@@ -110,8 +110,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # правый док: срезы/сечения/выборки
         self._slices = SlicePanel()
-        dock = QtWidgets.QDockWidget("Срезы / Сечения / Выборки", self)
+        dock = QtWidgets.QDockWidget(tr("Срезы / Сечения / Выборки"), self)
         dock.setObjectName("dock_slices")   # Задача #40: имя нужно saveState/restoreState
+        self._register_i18n(dock.setWindowTitle, "Срезы / Сечения / Выборки")   # Задача #169
         dock.setWidget(self._slices)
         dock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, dock)
@@ -124,8 +125,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # правый док: секущие плоскости 3D (Задача 13) — во вкладке поверх дока срезов
         self._sections = SectionControls()
-        self._sdock = QtWidgets.QDockWidget("Сечения (3D)", self)
+        self._sdock = QtWidgets.QDockWidget(tr("Сечения (3D)"), self)
         self._sdock.setObjectName("dock_sections")   # Задача #40
+        self._register_i18n(self._sdock.setWindowTitle, "Сечения (3D)")   # Задача #169
         self._sdock.setWidget(self._sections)
         self._sdock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self._sdock)
@@ -135,8 +137,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # левый док: библиотека нуклидов; выбор -> вертикальные маркеры энергий на спектре
         self._nuclides = NuclidePanel(default_library())
-        ndock = QtWidgets.QDockWidget("Нуклиды", self)
+        ndock = QtWidgets.QDockWidget(tr("Нуклиды"), self)
         ndock.setObjectName("dock_nuclides")   # Задача #40
+        self._register_i18n(ndock.setWindowTitle, "Нуклиды")   # Задача #169
         ndock.setWidget(self._nuclides)
         ndock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, ndock)
@@ -161,8 +164,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # дефолтам). Старые имена _*_slider оставлены алиасами на сами ручки (Knob имеет
         # QSlider-совместимый API) — внешний код/тесты целы.
         self._adjust = AdjustPanel()
-        adock = QtWidgets.QDockWidget("Регулировки отображения", self)
+        adock = QtWidgets.QDockWidget(tr("Регулировки отображения"), self)
         adock.setObjectName("dock_adjust")          # Задача #40: имя нужно saveState/restoreState
+        self._register_i18n(adock.setWindowTitle, "Регулировки отображения")   # Задача #169
         adock.setWidget(self._adjust)
         adock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, adock)
@@ -267,6 +271,14 @@ class MainWindow(QtWidgets.QMainWindow):
             self._segments_panel.retranslate()
         except (AttributeError, RuntimeError):
             pass
+        # Задача #169: остальные панели/контролы с собственным retranslate()
+        for name in ("_nuclides", "_analytics", "_heatmap", "_slices",
+                     "_sections", "_adjust"):
+            panel = getattr(self, name, None)
+            try:
+                panel.retranslate()
+            except (AttributeError, RuntimeError):
+                pass
 
     def _build_menu(self) -> None:
         menu = self.menuBar().addMenu("Файл")
@@ -435,49 +447,66 @@ class MainWindow(QtWidgets.QMainWindow):
         self._register_i18n(_lab_z.setText, " Z-шкала: ")
         tb.addWidget(_lab_z)
         self._z_combo = CycleButton()   # Задача #74: клик = следующее значение, колесо = листать
-        for key, label in Z_MODES:
-            self._z_combo.addItem(label, key)
+        for _zi, (key, label) in enumerate(Z_MODES):   # Задача #169: tr + ретранслейт
+            self._z_combo.addItem(tr(label), key)
+            self._register_i18n(
+                lambda s, i=_zi: self._z_combo.setItemText(i, s), label)
         self._z_combo.setCurrentIndex(2)  # по умолчанию log (как было до переключателя)
         self._z_combo.currentIndexChanged.connect(self._on_z_scale_changed)
         tb.addWidget(self._z_combo)
-        tb.addWidget(QtWidgets.QLabel("  Палитра: "))
+        _lab_pal = QtWidgets.QLabel(tr("  Палитра: "))   # Задача #169
+        self._register_i18n(_lab_pal.setText, "  Палитра: ")
+        tb.addWidget(_lab_pal)
         self._cmap_name = COLORMAPS[0][0]                 # Задача #102: текущий ключ (дефолт — Insight)
         self._cmap_btn = QtWidgets.QToolButton()          # кнопка открывает окно «Цветовая палитра»
         self._cmap_btn.setText(COLORMAPS[0][1])
-        self._cmap_btn.setToolTip("Выбрать цветовую палитру")
+        self._register_i18n(self._cmap_btn.setToolTip, "Выбрать цветовую палитру")
         self._cmap_btn.clicked.connect(self._open_palette_dialog)
         tb.addWidget(self._cmap_btn)
-        tb.addWidget(QtWidgets.QLabel("  Единицы: "))  # Задача #44: счёт / скорость счёта
+        _lab_u = QtWidgets.QLabel(tr("  Единицы: "))  # Задача #44: счёт / скорость счёта
+        self._register_i18n(_lab_u.setText, "  Единицы: ")
+        tb.addWidget(_lab_u)
         self._unit_combo = CycleButton()   # Задача #74: клик = следующее значение, колесо = листать
-        self._unit_combo.addItem("отсчёты", "counts")
-        self._unit_combo.addItem("отсч/с (cps)", "cps")
+        for _ui, (label, key) in enumerate((("отсчёты", "counts"), ("отсч/с (cps)", "cps"))):
+            self._unit_combo.addItem(tr(label), key)
+            self._register_i18n(
+                lambda s, i=_ui: self._unit_combo.setItemText(i, s), label)
         self._unit_combo.setCurrentIndex(1)   # Задача #53: дефолт — cps (connect ниже, сигнал не шлём)
         self._unit_combo.currentIndexChanged.connect(self._on_unit_changed)
         tb.addWidget(self._unit_combo)
-        tb.addWidget(QtWidgets.QLabel("  Время: "))  # Задача #64: единицы оси времени 3D-сетки
+        _lab_t = QtWidgets.QLabel(tr("  Время: "))  # Задача #64: единицы оси времени 3D-сетки
+        self._register_i18n(_lab_t.setText, "  Время: ")   # Задача #169
+        tb.addWidget(_lab_t)
         self._tunit_combo = CycleButton()   # Задача #74: клик = следующее значение, колесо = листать
-        for unit in ("с", "мин", "ч"):
-            self._tunit_combo.addItem(unit, unit)
+        for _ti, unit in enumerate(("с", "мин", "ч")):
+            self._tunit_combo.addItem(tr(unit), unit)
+            self._register_i18n(
+                lambda s, i=_ti: self._tunit_combo.setItemText(i, s), unit)
         self._tunit_combo.setCurrentIndex(0)          # дефолт — секунды
         self._tunit_combo.currentIndexChanged.connect(self._on_time_unit_changed)
         tb.addWidget(self._tunit_combo)
-        self._axes_check = QtWidgets.QCheckBox("Оси")  # подписи делений 3D (Задача 14)
+        self._axes_check = QtWidgets.QCheckBox(tr("Оси"))  # подписи делений 3D (Задача 14)
         self._axes_check.setChecked(True)
         self._axes_check.toggled.connect(self._on_axes_toggled)
+        self._register_i18n(self._axes_check.setText, "Оси")   # Задача #169
         tb.addWidget(self._axes_check)
-        self._hl_check = QtWidgets.QCheckBox("Подсветка")  # подсветка выбранных пиков (Задача 18)
+        self._hl_check = QtWidgets.QCheckBox(tr("Подсветка"))  # подсветка выбранных пиков (Задача 18)
         self._hl_check.setChecked(False)
         self._hl_check.toggled.connect(self._on_highlight_toggled)
+        self._register_i18n(self._hl_check.setText, "Подсветка")   # Задача #169
         tb.addWidget(self._hl_check)
-        self._floor_check = QtWidgets.QCheckBox("Подложка")  # Задача #76: дно рельефа (фиолет. прямоугольник)
+        self._floor_check = QtWidgets.QCheckBox(tr("Подложка"))  # Задача #76: дно рельефа (фиолет. прямоугольник)
         self._floor_check.setChecked(False)   # Задача #150: по умолчанию подложка выключена
-        self._floor_check.setToolTip("Показать/скрыть подложку (плоское дно рельефа)")
+        self._register_i18n(self._floor_check.setText, "Подложка")   # Задача #169
+        self._register_i18n(self._floor_check.setToolTip,
+                            "Показать/скрыть подложку (плоское дно рельефа)")
         self._floor_check.toggled.connect(self._on_floor_toggled)
         tb.addWidget(self._floor_check)
         # Задача #143: тумблер «Простыня образца» — основной 3D-рельеф спектрограммы.
         self._surface_check = QtWidgets.QCheckBox("Простыня образца")
         self._surface_check.setChecked(True)
-        self._surface_check.setToolTip("Показать/скрыть простыню образца (основной 3D-рельеф)")
+        self._register_i18n(self._surface_check.setToolTip,
+                            "Показать/скрыть простыню образца (основной 3D-рельеф)")
         self._surface_check.toggled.connect(self._on_surface_toggled)
         self._register_i18n(self._surface_check.setText, "Простыня образца")
         tb.addWidget(self._surface_check)
@@ -485,14 +514,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self._bg_sheet_check = QtWidgets.QCheckBox("Простыня фона")
         self._bg_sheet_check.setChecked(True)
         self._bg_sheet_check.setEnabled(False)
-        self._bg_sheet_check.setToolTip("Показать/скрыть простыню фона на 3D-спектрограмме")
+        self._register_i18n(self._bg_sheet_check.setToolTip,
+                            "Показать/скрыть простыню фона на 3D-спектрограмме")
         self._bg_sheet_check.toggled.connect(lambda _on: self._apply_bg_overlay_visibility())
         self._register_i18n(self._bg_sheet_check.setText, "Простыня фона")
         tb.addWidget(self._bg_sheet_check)
         self._bg_curve_check = QtWidgets.QCheckBox("Фон среза")
         self._bg_curve_check.setChecked(True)
         self._bg_curve_check.setEnabled(False)
-        self._bg_curve_check.setToolTip("Показать/скрыть кривую фона в окне среза")
+        self._register_i18n(self._bg_curve_check.setToolTip,
+                            "Показать/скрыть кривую фона в окне среза")
         self._bg_curve_check.toggled.connect(lambda _on: self._apply_bg_overlay_visibility())
         self._register_i18n(self._bg_curve_check.setText, "Фон среза")
         tb.addWidget(self._bg_curve_check)
@@ -501,18 +532,24 @@ class MainWindow(QtWidgets.QMainWindow):
         self._register_i18n(_lab_ss.setText, "  Стиль обр.: ")
         tb.addWidget(_lab_ss)
         self._smp_style_combo = CycleButton()
-        for label, key in (("Палитра", "palette"), ("Однотонный", "solid"), ("Каркас", "wire")):
-            self._smp_style_combo.addItem(label, key)
-        self._smp_style_combo.setToolTip("Стиль простыни образца")
+        for _si, (label, key) in enumerate(
+                (("Палитра", "palette"), ("Однотонный", "solid"), ("Каркас", "wire"))):
+            self._smp_style_combo.addItem(tr(label), key)   # Задача #169
+            self._register_i18n(
+                lambda s, i=_si: self._smp_style_combo.setItemText(i, s), label)
+        self._register_i18n(self._smp_style_combo.setToolTip, "Стиль простыни образца")
         self._smp_style_combo.currentIndexChanged.connect(self._on_surface_style_changed)
         tb.addWidget(self._smp_style_combo)
         _lab_bs = QtWidgets.QLabel("  Стиль фона: ")
         self._register_i18n(_lab_bs.setText, "  Стиль фона: ")
         tb.addWidget(_lab_bs)
         self._bg_style_combo = CycleButton()
-        for label, key in (("Палитра", "palette"), ("Однотонный", "solid"), ("Каркас", "wire")):
-            self._bg_style_combo.addItem(label, key)
-        self._bg_style_combo.setToolTip("Стиль простыни фона")
+        for _bi, (label, key) in enumerate(
+                (("Палитра", "palette"), ("Однотонный", "solid"), ("Каркас", "wire"))):
+            self._bg_style_combo.addItem(tr(label), key)   # Задача #169
+            self._register_i18n(
+                lambda s, i=_bi: self._bg_style_combo.setItemText(i, s), label)
+        self._register_i18n(self._bg_style_combo.setToolTip, "Стиль простыни фона")
         self._bg_style_combo.currentIndexChanged.connect(self._on_bg_style_changed)
         tb.addWidget(self._bg_style_combo)
         # Изолинии (Задача 20) ВРЕМЕННО отключены в UI: вернём после реализации поиска,
@@ -522,8 +559,10 @@ class MainWindow(QtWidgets.QMainWindow):
         # Задача #55: регулировки усиление/гамма/отсечка/сглаживание/освещение перенесены из
         # тулбара на отдельную панель-рукоятки (док «Регулировки отображения», см. __init__).
         # Задача #51: вернуть все настройки отображения к значениям по умолчанию
-        self._reset_btn = QtWidgets.QPushButton("Сброс")
-        self._reset_btn.setToolTip("Вернуть настройки отображения к значениям по умолчанию")
+        self._reset_btn = QtWidgets.QPushButton(tr("Сброс"))
+        self._register_i18n(self._reset_btn.setText, "Сброс")   # Задача #169
+        self._register_i18n(self._reset_btn.setToolTip,
+                            "Вернуть настройки отображения к значениям по умолчанию")
         self._reset_btn.clicked.connect(self._on_reset_display)
         tb.addWidget(self._reset_btn)
 
@@ -600,7 +639,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def _on_bg_select(self) -> None:
         """Задача #96: открыть диалог выбора фона; вычислить поканальный фон (cps) и применить."""
         if self._sg is None:
-            self.statusBar().showMessage("Сначала откройте файл, затем выбирайте фон.")
+            self.statusBar().showMessage(tr("Сначала откройте файл, затем выбирайте фон."))
             return
         # Задача #148: диапазон между секущими плоскостями Времени предзаполняет поля срезов
         dlg = BackgroundDialog(self._sg.n_slices, self._sg.time_offsets_s, self,
@@ -610,7 +649,7 @@ class MainWindow(QtWidgets.QMainWindow):
         try:
             bg = self._compute_background(dlg.result_spec())
         except Exception as exc:
-            QtWidgets.QMessageBox.warning(self, "Выбор фона", f"{type(exc).__name__}: {exc}")
+            QtWidgets.QMessageBox.warning(self, tr("Выбор фона"), f"{type(exc).__name__}: {exc}")
             return
         self._bg_cps = bg
         self._slices.set_background(bg, self._bg_raw)   # Задача #139: сырой блок для «лохматого» оверлея
@@ -618,7 +657,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act_bg_overlay.setEnabled(True)
         self._act_bg_subtract.setEnabled(True)
         self._redistribute()
-        self.statusBar().showMessage("Фон выбран. Доступны «Наложение» и «Вычет».")
+        self.statusBar().showMessage(tr("Фон выбран. Доступны «Наложение» и «Вычет»."))
 
     def _compute_background(self, spec):
         """Задача #96: спецификация диалога -> поканальный фон (cps), выровненный по текущему файлу.
@@ -938,7 +977,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def open_file(self, path: str, max_slices: int | None = None) -> None:
         """Запустить фоновую загрузку файла. UI остаётся отзывчивым."""
-        self.statusBar().showMessage(f"Загрузка: {path} …")
+        self.statusBar().showMessage(f"{tr('Загрузка')}: {path} …")
         self._loader = LoaderThread(path, max_slices=max_slices, parent=self)
         self._loader.loaded.connect(self._on_loaded)
         self._loader.failed.connect(self._on_failed)
@@ -971,12 +1010,12 @@ class MainWindow(QtWidgets.QMainWindow):
         t0 = sg.t0_iso if sg.t0_iso else "—"
         src = sg.source_path if sg.source_path else "?"
         self.statusBar().showMessage(
-            f"{src} — срезов {sg.n_slices} × каналов {sg.n_channels}; "
-            f"t0={t0}; всего отсчётов={total}")
+            f"{src} — {tr('срезов')} {sg.n_slices} × {tr('каналов')} {sg.n_channels}; "
+            f"t0={t0}; {tr('всего отсчётов')}={total}")
 
     @QtCore.Slot(str)
     def _on_failed(self, message: str) -> None:
-        self.statusBar().showMessage(f"Ошибка загрузки: {message}")
+        self.statusBar().showMessage(f"{tr('Ошибка загрузки')}: {message}")
         QtWidgets.QMessageBox.critical(self, tr("Ошибка загрузки"), message)
 
 def main(argv: list[str] | None = None) -> int:

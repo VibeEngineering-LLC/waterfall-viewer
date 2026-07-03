@@ -7,6 +7,7 @@ from awf.io.nuclide_categories import (
 from awf.io.nuclide_families import collapse_families   # Задача #154
 from awf.io.nuclide_lib import Nuclide, GammaLine
 from awf.analysis.identify import identify_peaks
+from awf.ui.i18n import tr
 
 # исходная палитра (18 различимых оттенков); тёмные члены нечитаемы на тёмной теме
 _BASE_COLORS = ("#e6194b", "#3cb44b", "#ffe119", "#4363d8", "#f58231", "#911eb4",
@@ -73,7 +74,7 @@ class IaeaFetchThread(QtCore.QThread):
                 for e, i, di in merged["lines"]
             )
             if not gamma:
-                self.failed.emit(f"{self._name}: гамма-линий не найдено")
+                self.failed.emit(f"{self._name}: {tr('гамма-линий не найдено')}")
                 return
             self.fetched.emit(enrich_nuclide(Nuclide(name=self._name, lines=gamma)))
         except Exception as exc:  # любую ошибку отдать в UI-поток, не падать
@@ -105,18 +106,20 @@ class NuclidePanel(QtWidgets.QWidget):
         self._fetch_thread = None
 
         root = QtWidgets.QVBoxLayout(self)
-        root.addWidget(QtWidgets.QLabel("Библиотека нуклидов"))
+        self._lib_title = QtWidgets.QLabel(tr("Библиотека нуклидов"))
+        root.addWidget(self._lib_title)
 
         # --- фильтр по интенсивности / основным линиям ---
         frow = QtWidgets.QHBoxLayout()
-        frow.addWidget(QtWidgets.QLabel("Мин. интенс., %:"))
+        self._min_int_label = QtWidgets.QLabel(tr("Мин. интенс., %:"))
+        frow.addWidget(self._min_int_label)
         self._min_int = QtWidgets.QDoubleSpinBox()
         self._min_int.setRange(0, 100)
         self._min_int.setSingleStep(1.0)
         self._min_int.setValue(5.0)
         self._min_int.setDecimals(1)
         frow.addWidget(self._min_int)
-        self._only_used = QtWidgets.QCheckBox("только основные")
+        self._only_used = QtWidgets.QCheckBox(tr("только основные"))
         self._only_used.setChecked(True)
         frow.addWidget(self._only_used)
         frow.addStretch(1)
@@ -124,10 +127,11 @@ class NuclidePanel(QtWidgets.QWidget):
 
         # --- фильтр по категориям (Задача 12.2) ---
         crow = QtWidgets.QHBoxLayout()
-        crow.addWidget(QtWidgets.QLabel("Категории:"))
+        self._cat_label = QtWidgets.QLabel(tr("Категории:"))
+        crow.addWidget(self._cat_label)
         self._cat_checks: dict = {}
         for cat in CATEGORIES:
-            cb = QtWidgets.QCheckBox(CATEGORY_LABELS[cat])
+            cb = QtWidgets.QCheckBox(tr(CATEGORY_LABELS[cat]))
             cb.setChecked(True)
             cb.stateChanged.connect(self._rebuild_tree)
             self._cat_checks[cat] = cb
@@ -137,10 +141,11 @@ class NuclidePanel(QtWidgets.QWidget):
 
         # --- фильтр по времени жизни (Задача 12.2) ---
         lrow = QtWidgets.QHBoxLayout()
-        lrow.addWidget(QtWidgets.QLabel("Время жизни:"))
+        self._lt_label = QtWidgets.QLabel(tr("Время жизни:"))
+        lrow.addWidget(self._lt_label)
         self._lt_checks: dict = {}
         for lt in LIFETIMES:
-            cb = QtWidgets.QCheckBox(LIFETIME_LABELS[lt])
+            cb = QtWidgets.QCheckBox(tr(LIFETIME_LABELS[lt]))
             cb.setChecked(True)
             cb.stateChanged.connect(self._rebuild_tree)
             self._lt_checks[lt] = cb
@@ -156,8 +161,8 @@ class NuclidePanel(QtWidgets.QWidget):
 
         # --- кнопки ---
         brow = QtWidgets.QHBoxLayout()
-        self._btn_iaea = QtWidgets.QPushButton("Добавить из IAEA…")
-        self._btn_none = QtWidgets.QPushButton("Снять все")
+        self._btn_iaea = QtWidgets.QPushButton(tr("Добавить из IAEA…"))
+        self._btn_none = QtWidgets.QPushButton(tr("Снять все"))
         brow.addWidget(self._btn_iaea)
         brow.addWidget(self._btn_none)
         root.addLayout(brow)
@@ -167,25 +172,27 @@ class NuclidePanel(QtWidgets.QWidget):
         # пиков (метод show_candidates не вызывался). Теперь main_window кормит её
         # _found_peaks() из подсистемы поиска (#110/#111) — identify_peaks по библиотеке.
         irow = QtWidgets.QHBoxLayout()
-        self._ident_title = QtWidgets.QLabel("Идентификация по найденным пикам")
+        self._ident_title = QtWidgets.QLabel(tr("Идентификация по найденным пикам"))
         irow.addWidget(self._ident_title)
         irow.addStretch(1)
-        irow.addWidget(QtWidgets.QLabel("мин. увер.:"))
+        self._conf_label = QtWidgets.QLabel(tr("мин. увер.:"))
+        irow.addWidget(self._conf_label)
         self._ident_min_conf = QtWidgets.QDoubleSpinBox()
         self._ident_min_conf.setRange(0.0, 1.0)
         self._ident_min_conf.setSingleStep(0.05)
         self._ident_min_conf.setValue(0.30)
         self._ident_min_conf.setDecimals(2)
-        self._ident_min_conf.setToolTip(
-            "Порог уверенности: кандидаты ниже порога не показываются (меньше ложных)")
+        self._ident_min_conf.setToolTip(tr(
+            "Порог уверенности: кандидаты ниже порога не показываются (меньше ложных)"))
         irow.addWidget(self._ident_min_conf)
         root.addLayout(irow)
         self._cand = QtWidgets.QTreeWidget()
-        self._cand.setHeaderLabels(["Нуклид", "Уверен.", "Категория", "Линий"])
+        self._cand.setHeaderLabels(
+            [tr("Нуклид"), tr("Уверен."), tr("Категория"), tr("Линий")])
         self._cand.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         root.addWidget(self._cand, stretch=2)
         # Задача #127: «идентифицировано N нуклид(ов) по M пик(ам)».
-        self._ident_status = QtWidgets.QLabel("Идентификация: —")
+        self._ident_status = QtWidgets.QLabel(tr("Идентификация") + ": —")
         self._ident_status.setWordWrap(True)
         root.addWidget(self._ident_status)
 
@@ -248,10 +255,10 @@ class NuclidePanel(QtWidgets.QWidget):
                 if not grp:
                     continue
                 if cat_item is None:
-                    cat_item = QtWidgets.QTreeWidgetItem(self._tree, [CATEGORY_LABELS[cat]])
+                    cat_item = QtWidgets.QTreeWidgetItem(self._tree, [tr(CATEGORY_LABELS[cat])])
                     cat_item.setFlags(QtCore.Qt.ItemIsEnabled)
                     cat_item.setExpanded(True)
-                lt_item = QtWidgets.QTreeWidgetItem(cat_item, [LIFETIME_LABELS[lt]])
+                lt_item = QtWidgets.QTreeWidgetItem(cat_item, [tr(LIFETIME_LABELS[lt])])
                 lt_item.setFlags(QtCore.Qt.ItemIsEnabled)
                 lt_item.setExpanded(True)
                 for n in sorted(grp, key=lambda x: x.name):
@@ -297,7 +304,8 @@ class NuclidePanel(QtWidgets.QWidget):
 
     def _recompute(self, *args) -> None:
         lines = self._collect_lines()
-        self._status.setText(f"выбрано нуклидов: {len(self._checked)}, линий: {len(lines)}")
+        self._status.setText(
+            f"{tr('выбрано нуклидов')}: {len(self._checked)}, {tr('линий')}: {len(lines)}")
         self.linesChanged.emit(lines)
 
     def selected_lines(self) -> list:
@@ -327,7 +335,7 @@ class NuclidePanel(QtWidgets.QWidget):
         self._cand.clear()
         n_peaks = len(self._found_peaks)
         if not self._nuclides or not self._found_peaks:
-            self._ident_status.setText("Идентификация: —")
+            self._ident_status.setText(tr("Идентификация") + ": —")
             return
         # Задача #130: apply_priors=True — давить ложные кандидаты (осколочные/медицинские/
         # космогенные) априорами правдоподобия; fwhm_model — реальная ширина детектора (#120).
@@ -353,14 +361,15 @@ class NuclidePanel(QtWidgets.QWidget):
         for m in r.matches:
             QtWidgets.QTreeWidgetItem(
                 top,
-                [f"{m.line_energy:.1f} кэВ", f"Δ={m.delta_keV:+.2f}",
+                [f"{m.line_energy:.1f} {tr('кэВ')}", f"Δ={m.delta_keV:+.2f}",
                  f"I={m.intensity_pct:.1f}%", ""])
         top.setExpanded(True)
 
     def _update_ident_status(self, n_results: int, n_peaks: int) -> None:
         """Задача #127: метка «идентифицировано N нуклид(ов) по M пик(ам)»."""
         self._ident_status.setText(
-            f"Идентификация: {n_results} нуклид(ов) по {n_peaks} пик(ам)")
+            f"{tr('Идентификация')}: {n_results} {tr('нуклид(ов) по')} "
+            f"{n_peaks} {tr('пик(ам)')}")
 
     def _on_candidate_clicked(self, item, col: int = 0) -> None:
         """Задача #127: клик по кандидату → отметить нуклид в библиотеке (линии подсветятся
@@ -382,18 +391,18 @@ class NuclidePanel(QtWidgets.QWidget):
     def clear_candidates(self) -> None:
         self._found_peaks = []
         self._cand.clear()
-        self._ident_status.setText("Идентификация: —")
+        self._ident_status.setText(tr("Идентификация") + ": —")
 
     # ---------- IAEA (Задача 12.4) ----------
     def _on_add_iaea(self) -> None:
         name, ok = QtWidgets.QInputDialog.getText(
-            self, "Добавить нуклид из IAEA",
-            "Имя нуклида (например, Th-234, Cs-137):")
+            self, tr("Добавить нуклид из IAEA"),
+            tr("Имя нуклида (например, Th-234, Cs-137):"))
         if not ok or not name.strip():
             return
         name = name.strip()
         self._btn_iaea.setEnabled(False)
-        self._status.setText(f"IAEA: загрузка {name} …")
+        self._status.setText(f"{tr('IAEA: загрузка')} {name} …")
         self._fetch_thread = IaeaFetchThread(name, parent=self)
         self._fetch_thread.fetched.connect(self._on_iaea_fetched)
         self._fetch_thread.failed.connect(self._on_iaea_failed)
@@ -404,14 +413,15 @@ class NuclidePanel(QtWidgets.QWidget):
         self.add_nuclide(nuclide)
         self._btn_iaea.setEnabled(True)
         self._status.setText(
-            f"IAEA: добавлен {nuclide.name} ({len(nuclide.lines)} линий)")
+            f"{tr('IAEA: добавлен')} {nuclide.name} "
+            f"({len(nuclide.lines)} {tr('линий')})")
 
     @QtCore.Slot(str)
     def _on_iaea_failed(self, message: str) -> None:
         self._btn_iaea.setEnabled(True)
-        self._status.setText(f"IAEA: ошибка — {message}")
+        self._status.setText(f"{tr('IAEA: ошибка —')} {message}")
         QtWidgets.QMessageBox.warning(
-            self, "IAEA", f"Не удалось загрузить нуклид:\n{message}")
+            self, "IAEA", f"{tr('Не удалось загрузить нуклид:')}\n{message}")
 
     def add_nuclide(self, nuclide) -> None:
         """Добавить/заменить нуклид в библиотеке и перестроить дерево (тестируемо без сети)."""
@@ -425,3 +435,25 @@ class NuclidePanel(QtWidgets.QWidget):
 
     def library(self) -> list:
         return list(self._nuclides)
+
+    def retranslate(self) -> None:
+        """Задача #169: перерисовать подписи панели на текущем языке."""
+        self._lib_title.setText(tr("Библиотека нуклидов"))
+        self._min_int_label.setText(tr("Мин. интенс., %:"))
+        self._only_used.setText(tr("только основные"))
+        self._cat_label.setText(tr("Категории:"))
+        for cat, cb in self._cat_checks.items():
+            cb.setText(tr(CATEGORY_LABELS[cat]))
+        self._lt_label.setText(tr("Время жизни:"))
+        for lt, cb in self._lt_checks.items():
+            cb.setText(tr(LIFETIME_LABELS[lt]))
+        self._btn_iaea.setText(tr("Добавить из IAEA…"))
+        self._btn_none.setText(tr("Снять все"))
+        self._ident_title.setText(tr("Идентификация по найденным пикам"))
+        self._conf_label.setText(tr("мин. увер.:"))
+        self._ident_min_conf.setToolTip(tr(
+            "Порог уверенности: кандидаты ниже порога не показываются (меньше ложных)"))
+        self._cand.setHeaderLabels(
+            [tr("Нуклид"), tr("Уверен."), tr("Категория"), tr("Линий")])
+        self._rebuild_tree()        # ветки дерева + статус «выбрано нуклидов»
+        self._render_candidates()   # строки кандидатов + статус идентификации

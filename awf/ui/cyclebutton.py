@@ -43,6 +43,15 @@ class CycleButton(QtWidgets.QPushButton):
     def itemText(self, i: int) -> str:
         return self._labels[i] if 0 <= i < len(self._labels) else ""
 
+    def setItemText(self, i: int, label) -> None:
+        """Задача #169: смена подписи пункта на лету (ретранслейт RU↔EN)."""
+        if not (0 <= i < len(self._labels)):
+            return
+        self._labels[i] = str(label)
+        if i == self._index:
+            self.setText(self._labels[i])
+        self._refit()
+
     # ---- доступ к текущему значению (QComboBox-совместимый) ----
     def currentIndex(self) -> int:
         return self._index

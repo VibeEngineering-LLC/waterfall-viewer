@@ -7,6 +7,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from awf.ui.zscale import (apply_z_scale, DEFAULT_GAIN, DEFAULT_GAMMA,
                            DEFAULT_CLIP, desaturate_rgba, smooth_by_mode)
 from awf.ui.colormaps import get_colormap
+from awf.ui.i18n import tr                 # Задача #169: локализация панели сечений
 from awf.model.background import background_window_like   # Задача #140: сырое фоновое окно простыни
 from awf.ui.knobs import Knob          # Задача #59: панель сечений в том же knob-стиле
 from awf.analysis.peaks import (            # Задача #110/#114/#112/#120: поиск фотопиков на 3D-водопаде
@@ -63,20 +64,25 @@ def _surface_shading(z_surface, intensity):
 
 
 def _floor_shift_linear(z_disp):
-    """Задача #168 (итер.2): «обрезай отрицательные пики». Первая итерация обнуляла низкие
-    значения ниже percentile-10 → воронки 0-count каналов только УСИЛИЛИСЬ (контраст с
-    поднятой ε-нормировкой простынёй #156 стал резче). Правильный жест: floor как СДВИГ ВНИЗ
-    с клипом к нулю — `max(x - floor, 0)`. Каналы ≤ floor садятся ровно на Z=0 (плоскость
-    основания без воронок), настоящие пики поднимаются над ней. Простыня не задирается —
-    она гарантированно уходит в 0. Sqrt/log не трогаем: у log свой floor из #167, sqrt
-    сжимает динамику."""
-    pos = z_disp[z_disp > 0.0]
-    if pos.size == 0:
+    """Задача #168 (итер.3): поканальный floor-сдвиг `max(x - floor_col, 0)`. Глубина «иглы»
+    0-count бина = локальный уровень «1 отсчёт» (ε-фактор #156, ×10.76 за 1408 кэВ) — зависит
+    от энергии, поэтому глобальный скаляр итер.2 (percentile-10 = 0.36 < 0.43 уровня ВЭ-полосы
+    на реальном файле) иглы не срезал. floor_col = min положительного в колонке (= локальный
+    квант 1 отсчёта в «дырявых» колонках) с потолком cap = max кванта по колонкам с 0-бинами:
+    низкоэнергетический континуум (min >> квант) не проседает, его форма сохраняется. 0 и
+    1 отсчёт садятся на Z=0 при любой энергии, настоящие пики (≥2 отсчётов) поднимаются.
+    Пустые временные строки (хвост файла) не считаются «дырками». Sqrt/log не трогаем:
+    у log свой floor из #167, sqrt сжимает динамику."""
+    if z_disp.ndim != 2 or not np.any(z_disp > 0.0):
         return z_disp
-    floor = float(np.percentile(pos, 10.0))
-    if not (floor > 0.0):
-        return z_disp
-    return np.maximum(z_disp - floor, 0.0).astype(z_disp.dtype, copy=False)
+    zz = z_disp[(z_disp > 0.0).any(axis=1)]            # только строки-времена с сигналом
+    masked = np.where(zz > 0.0, zz, np.inf)
+    min_pos = masked.min(axis=0)                       # (nc,) min положительного колонки
+    holey = (zz <= 0.0).any(axis=0) & np.isfinite(min_pos)
+    fin = np.isfinite(min_pos)
+    cap = float(min_pos[holey].max()) if holey.any() else float(min_pos[fin].min())
+    floor_col = np.where(fin, np.minimum(min_pos, cap), 0.0)
+    return np.maximum(z_disp - floor_col[None, :], 0.0).astype(z_disp.dtype, copy=False)
 
 
 def _fmt_count(v: float) -> str:
@@ -336,10 +342,10 @@ class Waterfall3DView(gl.GLViewWidget):
         # 2) Z-шкала контраста, затем нормировка для высоты и цвета (защита от нулевого максимума)
         z_disp = apply_z_scale(z_counts, self._z_mode, gain=self._gain,
                                gamma=self._gamma, clip=self._clip)
-        # Задача #168 (итер.2): floor-сдвиг для лин режима — обрезаем «отрицательные пики»
-        # (провалы 0-count каналов на фоне поднятой ε-нормировкой #156 простыни). floor =
-        # percentile-10 положительных; каналы ≤ floor садятся ровно на Z=0, пики поднимаются
-        # над плоскостью. Симметрично #167 log-floor.
+        # Задача #168 (итер.3): поканальный floor-сдвиг для лин режима — обрезаем «отрицательные
+        # пики» (провалы 0-count бинов на фоне поднятой ε-нормировкой #156 простыни). floor_col =
+        # локальный уровень «1 отсчёт» колонки (с потолком по «дырявым» колонкам); 0 и 1 отсчёт
+        # садятся ровно на Z=0 на любой энергии, пики поднимаются. Симметрично #167 log-floor.
         if self._z_mode == "linear":
             z_disp = _floor_shift_linear(z_disp)
         zmax = float(z_disp.max()) if z_disp.size else 0.0
@@ -1380,16 +1386,19 @@ class SectionControls(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(4)
-        cap = QtWidgets.QLabel("Секущие плоскости (2 на ось)")
+        cap = QtWidgets.QLabel(tr("Секущие плоскости (2 на ось)"))
         cap.setObjectName("knobTitle")
+        self._caption = cap                      # Задача #169: ссылки для retranslate()
+        self._axis_heads = {}
         layout.addWidget(cap)
         grid = QtWidgets.QGridLayout()
         grid.setSpacing(4)
         layout.addLayout(grid)
         row = 0
         for axis in PLANE_AXES:
-            head = QtWidgets.QLabel(_AXIS_LABEL[axis])
+            head = QtWidgets.QLabel(tr(_AXIS_LABEL[axis]))
             head.setObjectName("knobTitle")
+            self._axis_heads[axis] = head
             grid.addWidget(head, row, 0, 1, 4)
             row += 1
             for slot in (0, 1):
@@ -1411,7 +1420,7 @@ class SectionControls(QtWidgets.QWidget):
         vlabel.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         check = QtWidgets.QToolButton()
         check.setCheckable(True)
-        check.setText("выкл")                    # дефолт — все выкл (#59)
+        check.setText(tr("выкл"))                # дефолт — все выкл (#59)
         check.setObjectName("knobToggle")
         for col, wdg in ((0, title), (1, slider), (2, vlabel), (3, check)):
             grid.addWidget(wdg, row, col)
@@ -1422,7 +1431,7 @@ class SectionControls(QtWidgets.QWidget):
 
     def _on_slot_toggle(self, on, btn, slider, axis, slot) -> None:
         """Переключение слота (#59): текст вкл/выкл, гашение движка, переиздание planeChanged."""
-        btn.setText("вкл" if on else "выкл")
+        btn.setText(tr("вкл") if on else tr("выкл"))
         slider.setEnabled(bool(on))
         self._emit(axis, slot)
 
@@ -1441,3 +1450,12 @@ class SectionControls(QtWidgets.QWidget):
         for axis in PLANE_AXES:
             for slot in (0, 1):
                 self._emit(axis, slot)
+
+    def retranslate(self) -> None:
+        """Задача #169: подписи панели сечений на текущем языке."""
+        self._caption.setText(tr("Секущие плоскости (2 на ось)"))
+        for axis, head in self._axis_heads.items():
+            head.setText(tr(_AXIS_LABEL[axis]))
+        for r in self._rows.values():
+            chk = r["check"]
+            chk.setText(tr("вкл") if chk.isChecked() else tr("выкл"))

@@ -8,11 +8,13 @@ from __future__ import annotations
 import numpy as np
 from PySide6 import QtWidgets
 
+from awf.ui.i18n import tr
+
 
 class BackgroundDialog(QtWidgets.QDialog):
     def __init__(self, n_slices: int, time_offsets=None, parent=None, plane_range=None):
         super().__init__(parent)
-        self.setWindowTitle("Выбор фона")
+        self.setWindowTitle(tr("Выбор фона"))
         self._n = int(n_slices)
         self._times = time_offsets
         self._plane_range = plane_range   # Задача #148: (t0, t1) с секущих плоскостей Времени
@@ -20,11 +22,11 @@ class BackgroundDialog(QtWidgets.QDialog):
         self._spec = None
         root = QtWidgets.QVBoxLayout(self)
         # --- источник 1: диапазон срезов текущего измерения ---
-        self._rb_range = QtWidgets.QRadioButton("Из текущего измерения (диапазон срезов)")
+        self._rb_range = QtWidgets.QRadioButton(tr("Из текущего измерения (диапазон срезов)"))
         self._rb_range.setChecked(True)
         root.addWidget(self._rb_range)
         row = QtWidgets.QHBoxLayout()
-        row.addWidget(QtWidgets.QLabel("срезы:"))
+        row.addWidget(QtWidgets.QLabel(tr("срезы:")))
         self._lo = QtWidgets.QSpinBox(); self._lo.setRange(0, max(0, self._n - 1))
         self._hi = QtWidgets.QSpinBox(); self._hi.setRange(1, self._n)
         self._lo.setValue(0); self._hi.setValue(self._n)
@@ -32,8 +34,8 @@ class BackgroundDialog(QtWidgets.QDialog):
         self._hi.valueChanged.connect(self._update_hint)
         row.addWidget(self._lo); row.addWidget(QtWidgets.QLabel("–")); row.addWidget(self._hi)
         # Задача #148: перенести диапазон с секущих плоскостей Времени 3D в поля срезов
-        self._planes_btn = QtWidgets.QPushButton("Из сечений")
-        self._planes_btn.setToolTip("Диапазон между секущими плоскостями Времени (3D)")
+        self._planes_btn = QtWidgets.QPushButton(tr("Из сечений"))
+        self._planes_btn.setToolTip(tr("Диапазон между секущими плоскостями Времени (3D)"))
         self._planes_btn.setEnabled(self._plane_range is not None and self._times is not None)
         self._planes_btn.clicked.connect(self._apply_planes)
         row.addWidget(self._planes_btn)
@@ -42,11 +44,11 @@ class BackgroundDialog(QtWidgets.QDialog):
         self._hint = QtWidgets.QLabel("")
         root.addWidget(self._hint)
         # --- источник 2: отдельный файл ---
-        self._rb_file = QtWidgets.QRadioButton("Из файла (.aswf / .rcspg / .n42)")
+        self._rb_file = QtWidgets.QRadioButton(tr("Из файла (.aswf / .rcspg / .n42)"))
         root.addWidget(self._rb_file)
         frow = QtWidgets.QHBoxLayout()
-        self._path_lbl = QtWidgets.QLabel("файл не выбран")
-        self._browse = QtWidgets.QPushButton("Обзор…")
+        self._path_lbl = QtWidgets.QLabel(tr("файл не выбран"))
+        self._browse = QtWidgets.QPushButton(tr("Обзор…"))
         self._browse.clicked.connect(self._on_browse)
         frow.addWidget(self._path_lbl, 1); frow.addWidget(self._browse)
         root.addLayout(frow)
@@ -79,14 +81,16 @@ class BackgroundDialog(QtWidgets.QDialog):
         if t is not None and len(t) >= self._n and self._n > 0:
             a = float(t[max(0, min(self._n - 1, lo))])
             b = float(t[max(0, min(self._n - 1, hi - 1))])
-            self._hint.setText(f"диапазон времени ≈ {a:.1f}–{b:.1f} с  ({n_sel} срезов)")
+            self._hint.setText(
+                f"{tr('диапазон времени ≈')} {a:.1f}–{b:.1f} {tr('с')}"
+                f"  ({n_sel} {tr('срезов')})")
         else:
-            self._hint.setText(f"{n_sel} срезов")
+            self._hint.setText(f"{n_sel} {tr('срезов')}")
 
     def _on_browse(self) -> None:
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
-            self, "Файл фона", "",
-            "Спектрограммы (*.n42 *.xml *.rcspg *.aswf);;Все файлы (*)")
+            self, tr("Файл фона"), "",
+            tr("Спектрограммы (*.n42 *.xml *.rcspg *.aswf);;Все файлы (*)"))
         if path:
             self._path = path
             self._path_lbl.setText(path)
@@ -95,13 +99,15 @@ class BackgroundDialog(QtWidgets.QDialog):
     def _on_accept(self) -> None:
         if self._rb_file.isChecked():
             if not self._path:
-                QtWidgets.QMessageBox.warning(self, "Выбор фона", "Файл фона не выбран.")
+                QtWidgets.QMessageBox.warning(
+                    self, tr("Выбор фона"), tr("Файл фона не выбран."))
                 return
             self._spec = ("file", self._path)
         else:
             lo = self._lo.value(); hi = self._hi.value()
             if hi <= lo:
-                QtWidgets.QMessageBox.warning(self, "Выбор фона", "Пустой диапазон срезов.")
+                QtWidgets.QMessageBox.warning(
+                    self, tr("Выбор фона"), tr("Пустой диапазон срезов."))
                 return
             self._spec = ("range", lo, hi)
         self.accept()

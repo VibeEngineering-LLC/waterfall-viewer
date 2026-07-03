@@ -11,6 +11,7 @@ from PySide6 import QtCore, QtWidgets
 
 from awf.analysis.decomposition import feature_matrix, project, METHODS as PROJ_METHODS
 from awf.analysis.cluster import cluster, METHODS as CLUSTER_METHODS
+from awf.ui.i18n import tr
 
 # палитра кластеров (повторяется при переполнении); шум (-1) — серый
 _CLUSTER_COLORS = (
@@ -41,12 +42,14 @@ class AnalyticsPanel(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout(self)
 
         ctrl = QtWidgets.QHBoxLayout()
-        ctrl.addWidget(QtWidgets.QLabel("Проекция:"))
+        self._proj_label = QtWidgets.QLabel(tr("Проекция:"))
+        ctrl.addWidget(self._proj_label)
         self._proj_combo = QtWidgets.QComboBox()
         for m in PROJ_METHODS:
             self._proj_combo.addItem(m.upper(), m)
         ctrl.addWidget(self._proj_combo)
-        ctrl.addWidget(QtWidgets.QLabel("Кластеры:"))
+        self._clu_label = QtWidgets.QLabel(tr("Кластеры:"))
+        ctrl.addWidget(self._clu_label)
         self._clu_combo = QtWidgets.QComboBox()
         for m in CLUSTER_METHODS:
             self._clu_combo.addItem(m, m)
@@ -56,22 +59,22 @@ class AnalyticsPanel(QtWidgets.QWidget):
         self._k_spin.setRange(1, 20)
         self._k_spin.setValue(3)
         ctrl.addWidget(self._k_spin)
-        self._norm_chk = QtWidgets.QCheckBox("Нормировка")
+        self._norm_chk = QtWidgets.QCheckBox(tr("Нормировка"))
         self._norm_chk.setChecked(True)
         ctrl.addWidget(self._norm_chk)
-        self._run_btn = QtWidgets.QPushButton("Пересчитать")
+        self._run_btn = QtWidgets.QPushButton(tr("Пересчитать"))
         self._run_btn.clicked.connect(self._recompute)
         ctrl.addWidget(self._run_btn)
         ctrl.addStretch(1)
         layout.addLayout(ctrl)
 
-        self._status = QtWidgets.QLabel("Загрузите файл и нажмите «Пересчитать».")
+        self._status = QtWidgets.QLabel(tr("Загрузите файл и нажмите «Пересчитать»."))
         self._status.setWordWrap(True)
         layout.addWidget(self._status)
 
         self._plot = pg.PlotWidget()
-        self._plot.setLabel("bottom", "Компонента 1")
-        self._plot.setLabel("left", "Компонента 2")
+        self._plot.setLabel("bottom", tr("Компонента 1"))
+        self._plot.setLabel("left", tr("Компонента 2"))
         self._plot.showGrid(x=True, y=True, alpha=0.3)
         self._legend = self._plot.addLegend(offset=(-10, 10))
         layout.addWidget(self._plot)
@@ -85,7 +88,8 @@ class AnalyticsPanel(QtWidgets.QWidget):
         else:
             n = 0 if sg is None else sg.n_slices
             self._status.setText(
-                f"Срезов {n} (> {self.AUTORUN_SLICE_CAP}) — нажмите «Пересчитать» вручную.")
+                f"{tr('Срезов')} {n} (> {self.AUTORUN_SLICE_CAP}) — "
+                f"{tr('нажмите «Пересчитать» вручную.')}")
 
     def _clear_scatter(self) -> None:
         for sc in self._scatters:
@@ -110,20 +114,20 @@ class AnalyticsPanel(QtWidgets.QWidget):
             proj = project(X, method=pmethod, n_components=2)
             clu = cluster(X, method=cmethod, n_clusters=k)
         except ImportError as exc:
-            self._status.setText(f"Метод недоступен (пакет не установлен): {exc}")
+            self._status.setText(f"{tr('Метод недоступен (пакет не установлен):')} {exc}")
             return
         except Exception as exc:  # вырожденные данные и пр. — показать, не падать
-            self._status.setText(f"Ошибка: {type(exc).__name__}: {exc}")
+            self._status.setText(f"{tr('Ошибка')}: {type(exc).__name__}: {exc}")
             return
         coords = np.asarray(proj.coords, dtype=np.float64)
         labels = np.asarray(clu.labels)
         self._draw(coords, labels)
         n_clu = int(clu.n_clusters)
-        msg = (f"Метод {pmethod.upper()} / {cmethod}: точек {coords.shape[0]}, "
-               f"кластеров {n_clu}")
+        msg = (f"{tr('Метод')} {pmethod.upper()} / {cmethod}: "
+               f"{tr('точек')} {coords.shape[0]}, {tr('кластеров')} {n_clu}")
         if proj.explained_variance is not None and len(proj.explained_variance) >= 2:
             ev = proj.explained_variance
-            msg += f"; дисперсия PCA {ev[0] * 100:.0f}% / {ev[1] * 100:.0f}%"
+            msg += f"; {tr('дисперсия PCA')} {ev[0] * 100:.0f}% / {ev[1] * 100:.0f}%"
         self._status.setText(msg)
 
     def _draw(self, coords: np.ndarray, labels: np.ndarray) -> None:
@@ -133,7 +137,7 @@ class AnalyticsPanel(QtWidgets.QWidget):
             idx = np.nonzero(mask)[0]
             pts = coords[mask]
             color = _color_for(lab)
-            name = "шум" if lab < 0 else f"Кластер {lab}"
+            name = tr("шум") if lab < 0 else f"{tr('Кластер')} {lab}"
             scat = pg.ScatterPlotItem(
                 x=pts[:, 0], y=pts[:, 1], size=8,
                 brush=pg.mkBrush(*color, 200), pen=pg.mkPen(0, 0, 0, 0),
@@ -150,3 +154,14 @@ class AnalyticsPanel(QtWidgets.QWidget):
         if idx is None:
             return
         self.sliceClicked.emit(int(idx))
+
+    def retranslate(self) -> None:
+        """Задача #169: перерисовать подписи вкладки на текущем языке."""
+        self._proj_label.setText(tr("Проекция:"))
+        self._clu_label.setText(tr("Кластеры:"))
+        self._norm_chk.setText(tr("Нормировка"))
+        self._run_btn.setText(tr("Пересчитать"))
+        self._plot.setLabel("bottom", tr("Компонента 1"))
+        self._plot.setLabel("left", tr("Компонента 2"))
+        if self._sg is None:
+            self._status.setText(tr("Загрузите файл и нажмите «Пересчитать»."))

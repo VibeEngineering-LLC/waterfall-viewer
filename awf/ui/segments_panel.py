@@ -40,20 +40,22 @@ class SegmentsPanel(QtWidgets.QWidget):
         # Строка управления
         ctrl_layout = QtWidgets.QHBoxLayout()
 
-        label = QtWidgets.QLabel("Чувствительность (штраф BIC)")
-        label.setObjectName("knobTitle")
+        self._pen_label = QtWidgets.QLabel(tr("Чувствительность (штраф BIC)"))
+        self._pen_label.setObjectName("knobTitle")
         self._pen_box = QtWidgets.QDoubleSpinBox()
         self._pen_box.setObjectName("segPenBox")
         self._pen_box.setRange(0.5, 8.0)
         self._pen_box.setSingleStep(0.5)
         self._pen_box.setValue(2.0)
         self._pen_box.setDecimals(1)
-        self._pen_box.setToolTip("Штраф BIC за новый сегмент: больше → меньше (крупнее) сегментов")
+        self._pen_box.setToolTip(
+            tr("Штраф BIC за новый сегмент: больше → меньше (крупнее) сегментов"))
 
-        self._btn = QtWidgets.QPushButton("Сегментировать")
-        self._btn.setToolTip("Разбить запись по времени и идентифицировать нуклиды в каждом сегменте")
+        self._btn = QtWidgets.QPushButton(tr("Сегментировать"))
+        self._btn.setToolTip(
+            tr("Разбить запись по времени и идентифицировать нуклиды в каждом сегменте"))
 
-        ctrl_layout.addWidget(label)
+        ctrl_layout.addWidget(self._pen_label)
         ctrl_layout.addWidget(self._pen_box)
         ctrl_layout.addWidget(self._btn)
         ctrl_layout.addStretch(1)
@@ -61,7 +63,7 @@ class SegmentsPanel(QtWidgets.QWidget):
         layout.addLayout(ctrl_layout)
 
         # Метка статуса
-        self._status = QtWidgets.QLabel("Сегментов: —")
+        self._status = QtWidgets.QLabel(f"{tr('Сегментов')}: —")
         self._status.setObjectName("knobTitle")
         self._status.setWordWrap(True)
         layout.addWidget(self._status)
@@ -69,7 +71,7 @@ class SegmentsPanel(QtWidgets.QWidget):
         # Дерево
         self._tree = QtWidgets.QTreeWidget()
         self._tree.setColumnCount(len(self._COL_HEADERS_RU))
-        self._tree.setHeaderLabels(self._COL_HEADERS_RU)
+        self._tree.setHeaderLabels([tr(h) for h in self._COL_HEADERS_RU])
         self._tree.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self._tree.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
 
@@ -176,6 +178,12 @@ class SegmentsPanel(QtWidgets.QWidget):
     def retranslate(self):
         self._tree.setHeaderLabels([tr(h) for h in self._COL_HEADERS_RU])
         self._btn.setText(tr("Сегментировать"))
+        # Задача #169: метка и тултипы регулятора чувствительности
+        self._pen_label.setText(tr("Чувствительность (штраф BIC)"))
+        self._pen_box.setToolTip(
+            tr("Штраф BIC за новый сегмент: больше → меньше (крупнее) сегментов"))
+        self._btn.setToolTip(
+            tr("Разбить запись по времени и идентифицировать нуклиды в каждом сегменте"))
         cur = self._status.text()
         suffix = cur.split(":", 1)[1].strip() if ":" in cur else "—"
         self._status.setText(f"{tr('Сегментов')}: {suffix}")
