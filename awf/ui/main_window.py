@@ -469,9 +469,9 @@ class MainWindow(QtWidgets.QMainWindow):
         _lab_pal = QtWidgets.QLabel(tr("  Палитра: "))   # Задача #169
         self._register_i18n(_lab_pal.setText, "  Палитра: ")
         tb.addWidget(_lab_pal)
-        self._cmap_name = COLORMAPS[0][0]                 # Задача #102: текущий ключ (дефолт — Insight)
+        self._cmap_name = "jet"                            # Задача #102/#177: текущий ключ (дефолт — Jet)
         self._cmap_btn = QtWidgets.QToolButton()          # кнопка открывает окно «Цветовая палитра»
-        self._cmap_btn.setText(COLORMAPS[0][1])
+        self._cmap_btn.setText("Jet")
         self._register_i18n(self._cmap_btn.setToolTip, "Выбрать цветовую палитру")
         self._cmap_btn.clicked.connect(self._open_palette_dialog)
         tb.addWidget(self._cmap_btn)
@@ -584,7 +584,7 @@ class MainWindow(QtWidgets.QMainWindow):
         дефолтное значение; Qt шлёт valueChanged/currentIndexChanged/toggled только при реальном
         изменении, и штатный обработчик применяет дефолт на все панели (2D/3D/срезы)."""
         self._z_combo.setCurrentIndex(2)      # log
-        self._apply_colormap(COLORMAPS[0][0])  # Задача #102: палитра -> Insight (дефолт)
+        self._apply_colormap("jet")            # Задача #102/#177: палитра -> Jet (дефолт)
         self._unit_combo.setCurrentIndex(1)   # cps (Задача #53 — дефолт)
         self._tunit_combo.setCurrentIndex(0)  # Задача #64: единицы времени — секунды (дефолт)
         self._axes_check.setChecked(True)     # оси видимы

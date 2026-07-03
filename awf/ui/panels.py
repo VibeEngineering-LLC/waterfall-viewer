@@ -355,7 +355,7 @@ class SlicePanel(QtWidgets.QWidget):
         self._times = None
         self._live = None         # live_time_s по срезам — делитель cps (Задача #44)
         self._unit = "cps"        # единицы графиков: counts | cps (Задача #44; дефолт cps — #53)
-        self._spec_log = False    # лог-шкала Y графика спектра (Задача #43)
+        self._spec_log = True     # лог-шкала Y графика спектра (Задача #43/#177: дефолт ON)
         self._smooth = 0          # режим сглаживания спектра по энергии (Задача #163): 0/SMA/WMA
         self._raw_spec = None     # (energies, spec_raw, lt_total) последнего спектра (Задача #44)
         self._raw_series = None   # (times, band_raw) кривой полосы ROII (Задача #44)
@@ -395,6 +395,7 @@ class SlicePanel(QtWidgets.QWidget):
         # Задача #43: лог/лин шкала Y графика спектра среза
         self._log_check = QtWidgets.QCheckBox(tr("лог Y"))
         self._log_check.toggled.connect(self.set_spectrum_log)
+        self._log_check.setChecked(True)  # Задача #177: лог Y по умолчанию ON
         ewin_row.addWidget(self._log_check)
         # Задача #100: сброс зума/панорамы обоих графиков (спектр среза + временной ряд)
         self._reset_zoom_btn = QtWidgets.QPushButton(tr("Сброс зума"))
