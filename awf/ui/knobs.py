@@ -248,7 +248,7 @@ _SPECS = (
     ("gain",   "Усиление",    20, 500, 100, lambda v: f"{v / 100:.2f}×"),
     ("gamma",  "Гамма",       20, 300, 100, lambda v: f"{v / 100:.2f}"),
     ("clip",   "Отсечка",     80, 100, 100, lambda v: f"{v}%"),
-    ("smooth",  "Сглаживание",  0,   2,   0, lambda v: {0: "0", 1: "SMA", 2: "WMA"}[v]),
+    ("smooth",  "Сглаживание E",  0,   2,   0, lambda v: {0: "0", 1: "SMA", 2: "WMA"}[v]),
     ("tsmooth", "Сглаж. по t",  0,   6,   0,
      lambda v: {0:"0",1:"SMA×1",2:"SMA×2",3:"SMA×4",4:"WMA×1",5:"WMA×2",6:"WMA×4"}.get(v,"?")),
     ("light",   "Освещение",    0, 100,   0, lambda v: f"{v}%"),
@@ -275,6 +275,14 @@ class AdjustPanel(QtWidgets.QWidget):
             row.changed.connect(self.changed)
             self.rows[key] = row
             grid.addWidget(row, i, 0)           # Задача #58: одна колонка (ряды друг под другом)
+            if key == "tsmooth":                # Задача #175: чекбокс в отдельную колонку grid
+                self._tsmooth_by_seg_cb = QtWidgets.QCheckBox(tr("по сегм."), self)
+                self._tsmooth_by_seg_cb.setToolTip(tr(
+                    "Сглаживать по оси времени внутри каждого временного сегмента независимо"))
+                self._tsmooth_by_seg_cb.setChecked(True)
+                self._tsmooth_by_seg_cb.stateChanged.connect(lambda _: self.changed.emit())
+                grid.addWidget(self._tsmooth_by_seg_cb, i, 1)
+        grid.setColumnStretch(0, 1)             # #175: KnobRow занимают весь stretch колонки 0
 
         # Задача #91: общий выключатель «Регулировки: ВКЛ/ВЫКЛ» убран — он был нефункционален
         # (per-row тумблеры уже дают bypass на каждую ручку, а мастер-гейт по дефолту ВЫКЛ
@@ -292,12 +300,6 @@ class AdjustPanel(QtWidgets.QWidget):
         outer.setSpacing(6)
         outer.addLayout(top)
         outer.addLayout(grid)
-        self._tsmooth_by_seg_cb = QtWidgets.QCheckBox(tr("по сегм."), self)
-        self._tsmooth_by_seg_cb.setToolTip(tr(
-            "Сглаживать по оси времени внутри каждого временного сегмента независимо"))
-        self._tsmooth_by_seg_cb.setChecked(True)  # Задача #174: по умолчанию ВКЛ
-        self._tsmooth_by_seg_cb.stateChanged.connect(lambda _: self.changed.emit())
-        self.rows["tsmooth"].layout().addWidget(self._tsmooth_by_seg_cb)  # #174: в строку движка
         outer.addStretch(1)
 
     # --- реакции / API ---
