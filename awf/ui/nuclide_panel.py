@@ -167,10 +167,9 @@ class NuclidePanel(QtWidgets.QWidget):
         brow.addWidget(self._btn_none)
         root.addLayout(brow)
 
-        # --- Задача #127: модуль идентификации нуклидов по НАЙДЕННЫМ пикам ---
-        # Раньше панель называлась «Кандидаты по выбранному пику» и НИКОГДА не получала
-        # пиков (метод show_candidates не вызывался). Теперь main_window кормит её
-        # _found_peaks() из подсистемы поиска (#110/#111) — identify_peaks по библиотеке.
+        # --- Задача #127/#173: идентификация по найденным пикам — отдельный виджет для дока ---
+        self.ident_widget = QtWidgets.QWidget()
+        iroot = QtWidgets.QVBoxLayout(self.ident_widget)
         irow = QtWidgets.QHBoxLayout()
         self._ident_title = QtWidgets.QLabel(tr("Идентификация по найденным пикам"))
         irow.addWidget(self._ident_title)
@@ -185,19 +184,18 @@ class NuclidePanel(QtWidgets.QWidget):
         self._ident_min_conf.setToolTip(tr(
             "Порог уверенности: кандидаты ниже порога не показываются (меньше ложных)"))
         irow.addWidget(self._ident_min_conf)
-        root.addLayout(irow)
+        iroot.addLayout(irow)
         self._cand = QtWidgets.QTreeWidget()
         self._cand.setHeaderLabels(
             [tr("Нуклид"), tr("Уверен."), tr("Категория"), tr("Линий")])
         self._cand.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
-        root.addWidget(self._cand, stretch=2)
+        iroot.addWidget(self._cand, stretch=2)
         # Задача #127: «идентифицировано N нуклид(ов) по M пик(ам)».
         self._ident_status = QtWidgets.QLabel(tr("Идентификация") + ": —")
         self._ident_status.setWordWrap(True)
-        root.addWidget(self._ident_status)
-
+        iroot.addWidget(self._ident_status)
         self._status = QtWidgets.QLabel("")
-        root.addWidget(self._status)
+        iroot.addWidget(self._status)
 
         # --- сигналы ---
         self._min_int.valueChanged.connect(self._recompute)

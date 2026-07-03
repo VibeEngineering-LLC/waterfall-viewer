@@ -737,7 +737,7 @@ def test_isotopes_menu_opens_nuclides_dock(app):
     w = MainWindow()
     act = w._menus["isotopes"].actions()[0]
     assert act.isEnabled() and act.isCheckable()      # больше не заглушка, это переключатель
-    assert act is w._ndock.toggleViewAction()         # ведёт именно на док нуклидов
+    assert act is w._nlib_dock.toggleViewAction()     # ведёт на первый дока нуклидов (#173)
     s0 = act.isChecked()
     act.trigger()
     assert act.isChecked() != s0                      # клик переключил видимость окна
@@ -757,8 +757,9 @@ def test_tools_menu_lists_dock_windows(app):
     for label in ("Найденные пики", "Срезы / Сечения / Выборки",
                   "Сечения (3D)", "Регулировки отображения"):
         assert label in texts                         # каждое окно перечислено
-    # окно нуклидов тоже в списке (тот же QAction, что в «Изотопы», #79)
-    assert w._ndock.toggleViewAction() in tools.actions()
+    # оба дока нуклидов в списке (#173)
+    assert w._nlib_dock.toggleViewAction() in tools.actions()
+    assert w._nident_dock.toggleViewAction() in tools.actions()
     # пункт ведёт на свой док и переключает его видимость
     act = w._peaks_dock.toggleViewAction()
     assert act in tools.actions() and act.isCheckable() and act.isEnabled()
