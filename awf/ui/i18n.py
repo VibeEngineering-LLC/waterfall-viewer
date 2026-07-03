@@ -80,9 +80,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Энергия, кэВ": "Energy, keV",
         "Канал": "Channel",
         "Значимость": "Significance",
-        "Высота": "Height",
         "FWHM": "FWHM",
-        "Площадь": "Area",
         # Задача #123: единицы Высоты/Площади (отсчёты) + метка окна поиска
         "Высота, отсч.": "Height, cnt",
         "Площадь, отсч.": "Area, cnt",
@@ -127,9 +125,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Вид": "View",
         " Z-шкала: ": " Z-scale: ",
         # Заголовок окна и статусные сообщения
-        "AtomSpectra Waterfall Viewer": "AtomSpectra Waterfall Viewer",
+        "Waterfall Viewer": "Waterfall Viewer",
         "Ошибка загрузки": "Load error",
-        "Открыть файл": "Open file",
         # Подписи вкладок
         "3D Waterfall": "3D Waterfall",
         "2D Карта (Время×Энергия)": "2D Map (Time×Energy)",
@@ -184,7 +181,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Усиление": "Gain",
         "Гамма": "Gamma",
         "Отсечка": "Clip",
-        "Сглаживание": "Smoothing",
         "Сглаживание E": "Smoothing E",
         "Сглаж. по t": "t-smooth",
         "по сегм.": "by segs",
