@@ -5,6 +5,7 @@ from PySide6 import QtCore, QtWidgets
 from awf.ui.zscale import (apply_z_scale, DEFAULT_GAIN, DEFAULT_GAMMA, DEFAULT_CLIP,
                            smooth_by_mode)
 from awf.ui.colormaps import get_colormap
+from awf.ui.i18n import tr                 # Задача #169: локализация панелей
 from awf.analysis.peakmap import DEFAULT_WINDOWS
 from awf.model.dose import dose_rate_series  # Задача #104: мощность дозы (RadiaCode)
 from awf.model.background import background_window_like  # Задача #139: сырой фон, «лохматый как образец»
@@ -66,8 +67,8 @@ class HeatmapPanel(QtWidgets.QWidget):
         self._glw = pg.GraphicsLayoutWidget()
         layout.addWidget(self._glw)
         self._plot = self._glw.addPlot()
-        self._plot.setLabel("bottom", "Канал (энергия)")
-        self._plot.setLabel("left", "Время (срез)")
+        self._plot.setLabel("bottom", tr("Канал (энергия)"))
+        self._plot.setLabel("left", tr("Время (срез)"))
         self._plot.invertY(True)                 # время сверху вниз
         self._img = pg.ImageItem()
         self._img.setColorMap(get_colormap(self._cmap_name))  # палитра Insight по умолчанию
@@ -78,6 +79,11 @@ class HeatmapPanel(QtWidgets.QWidget):
         self._plot.addItem(self._roi)
         self._roi.setVisible(False)
         self._roi.sigRegionChangeFinished.connect(self._on_roi_finished)
+
+    def retranslate(self) -> None:
+        """Задача #169: подписи осей 2D-карты на текущем языке."""
+        self._plot.setLabel("bottom", tr("Канал (энергия)"))
+        self._plot.setLabel("left", tr("Время (срез)"))
 
     def set_spectrogram(self, sg) -> None:
         """Построить карту. Для огромных матриц (> DISPLAY_CELL_CAP ячеек) показываем
@@ -364,47 +370,48 @@ class SlicePanel(QtWidgets.QWidget):
         self._dose_visible = True # флаг показа оверлея дозы (Задача #104)
         self._view_mode = ("integral",)  # текущий вид (Задача #161): integral|slice|roi, для update_spectrogram
         layout = QtWidgets.QVBoxLayout(self)
-        self._header = QtWidgets.QLabel("Файл не загружен")
+        self._header = QtWidgets.QLabel(tr("Файл не загружен"))
         self._header.setWordWrap(True)
         layout.addWidget(self._header)
         # --- энергоокно временного профиля (Задача 19.3): пресет нуклида + ручной ввод границ ---
         ewin_row = QtWidgets.QHBoxLayout()
-        ewin_row.addWidget(QtWidgets.QLabel("Энергоокно:"))
+        self._ewin_label = QtWidgets.QLabel(tr("Энергоокно:"))   # Задача #169
+        ewin_row.addWidget(self._ewin_label)
         self._ewin_preset = QtWidgets.QComboBox()
         # Задача #94: пункт «— вручную —» убран (был пустышкой — его выбор ничего не делал).
         # Комбо держит только пресеты; «ручное» состояние = пустой выбор (currentIndex == -1).
         for w in DEFAULT_WINDOWS:
-            self._ewin_preset.addItem(f"{w.name} ({w.center:.0f} кэВ)")
+            self._ewin_preset.addItem(f"{w.name} ({w.center:.0f} {tr('кэВ')})")
         self._ewin_preset.setCurrentIndex(-1)   # старт без активного пресета (как прежняя «вручную»)
         ewin_row.addWidget(self._ewin_preset)
         self._ewin_lo = QtWidgets.QDoubleSpinBox()
         self._ewin_hi = QtWidgets.QDoubleSpinBox()
         for sb in (self._ewin_lo, self._ewin_hi):
-            sb.setDecimals(0); sb.setRange(0.0, 1.0); sb.setSuffix(" кэВ"); sb.setSingleStep(5.0)
+            sb.setDecimals(0); sb.setRange(0.0, 1.0); sb.setSuffix(" " + tr("кэВ")); sb.setSingleStep(5.0)
         ewin_row.addWidget(self._ewin_lo)
         ewin_row.addWidget(QtWidgets.QLabel("–"))
         ewin_row.addWidget(self._ewin_hi)
         ewin_row.addStretch(1)
         # Задача #43: лог/лин шкала Y графика спектра среза
-        self._log_check = QtWidgets.QCheckBox("лог Y")
+        self._log_check = QtWidgets.QCheckBox(tr("лог Y"))
         self._log_check.toggled.connect(self.set_spectrum_log)
         ewin_row.addWidget(self._log_check)
         # Задача #100: сброс зума/панорамы обоих графиков (спектр среза + временной ряд)
-        self._reset_zoom_btn = QtWidgets.QPushButton("Сброс зума")
-        self._reset_zoom_btn.setToolTip("Вернуть полный вид графиков среза и времени")
+        self._reset_zoom_btn = QtWidgets.QPushButton(tr("Сброс зума"))
+        self._reset_zoom_btn.setToolTip(tr("Вернуть полный вид графиков среза и времени"))
         self._reset_zoom_btn.clicked.connect(self.reset_zoom)
         ewin_row.addWidget(self._reset_zoom_btn)
         layout.addLayout(ewin_row)
         # Задача #165: спектр среза — ViewBox без mouse-pan (см. _NoPanViewBox).
         # Зум колесиком по-прежнему работает, pyqtgraph центрирует его в точке курсора.
         self._spectrum_plot = pg.PlotWidget(viewBox=_NoPanViewBox())
-        self._spectrum_plot.setLabel("bottom", "Энергия, кэВ")
-        self._spectrum_plot.setLabel("left", "Отсчёты")
+        self._spectrum_plot.setLabel("bottom", tr("Энергия, кэВ"))
+        self._spectrum_plot.setLabel("left", tr("Отсчёты"))
         self._spectrum_plot.showGrid(x=True, y=True, alpha=0.3)
         layout.addWidget(self._spectrum_plot)
         self._series_plot = pg.PlotWidget()
-        self._series_plot.setLabel("bottom", "Время, с")
-        self._series_plot.setLabel("left", "Отсчёты в полосе")
+        self._series_plot.setLabel("bottom", tr("Время, с"))
+        self._series_plot.setLabel("left", tr("Отсчёты в полосе"))
         self._series_plot.showGrid(x=True, y=True, alpha=0.3)
         layout.addWidget(self._series_plot)
         # Задача #41: кривая спектра среза — бирюза рамки плоскости Времени 3D (51,217,242)
@@ -415,21 +422,21 @@ class SlicePanel(QtWidgets.QWidget):
             [], [], pen=pg.mkPen((255, 165, 0), width=1, style=QtCore.Qt.DashLine))
         self._legend = self._series_plot.addLegend(offset=(-10, 10))
         self._series_curve = self._series_plot.plot([], [], pen=pg.mkPen("m", width=1),
-                                                    name="полоса ROI")
+                                                    name=tr("полоса ROI"))
         # жёлтая кривая — временной профиль энергоокна (Задача 19.2), независим от ROI
         self._ewin_curve = self._series_plot.plot([], [], pen=pg.mkPen("y", width=1),
-                                                  name="энергоокно")
+                                                  name=tr("энергоокно"))
         # Задача #104: вторая ось Y (правая) — мощность дозы RadiaCode
         self._dose_vb = pg.ViewBox()
         pi = self._series_plot.getPlotItem()
         pi.scene().addItem(self._dose_vb)
         self._dose_axis = pg.AxisItem("right")
-        self._dose_axis.setLabel("Мощность дозы, мЗв/ч")
+        self._dose_axis.setLabel(tr("Мощность дозы, ") + tr("мЗв/ч"))
         pi.layout.addItem(self._dose_axis, 2, 3)
         self._dose_axis.linkToView(self._dose_vb)
         self._dose_vb.setXLink(pi.vb)
         self._dose_curve = pg.PlotDataItem([], [],
-            pen=pg.mkPen((255, 170, 0), width=2), name="доза")
+            pen=pg.mkPen((255, 170, 0), width=2), name=tr("доза"))
         self._dose_vb.addItem(self._dose_curve)
         self._dose_in_legend = False  # #105: записи дозы в легенде ещё нет
         self._dose_axis.hide()
@@ -456,8 +463,8 @@ class SlicePanel(QtWidgets.QWidget):
         band = np.asarray(sg.band_time_series(0, sg.n_channels), dtype=np.float64)
         self._set_series(self._times, band)
         self._header.setText(
-            f"Загружено: срезов {sg.n_slices}, каналов {sg.n_channels}. "
-            f"Интегральный спектр и полная полоса.")
+            f"{tr('Загружено: срезов')} {sg.n_slices}, {tr('каналов')} {sg.n_channels}. "
+            f"{tr('Интегральный спектр и полная полоса.')}")
         # энергоокно (Задача 19): диапазон спинбоксов = диапазон энергий, дефолт — первое окно
         emin = float(self._energies.min()); emax = float(self._energies.max())
         for sb in (self._ewin_lo, self._ewin_hi):
@@ -700,8 +707,8 @@ class SlicePanel(QtWidgets.QWidget):
             self._dose_axis.hide()
             self._set_dose_legend(False)
             return
-        unit_lbl = "мкЗв/ч" if self._dose_unit == "uSv/h" else "мЗв/ч"
-        self._dose_axis.setLabel("Мощность дозы, " + unit_lbl)
+        unit_lbl = tr("мкЗв/ч") if self._dose_unit == "uSv/h" else tr("мЗв/ч")
+        self._dose_axis.setLabel(tr("Мощность дозы, ") + unit_lbl)
         self._dose_curve.setData(self._times, dose)
         self._dose_vb.autoRange()
         self._dose_axis.show()
@@ -712,7 +719,7 @@ class SlicePanel(QtWidgets.QWidget):
         """Задача #105: показать/скрыть запись кривой дозы в легенде графика отсчётов
         (кривая дозы в отдельном ViewBox, легенда сама её не подхватывает)."""
         if on and not self._dose_in_legend:
-            self._legend.addItem(self._dose_curve, "мощность дозы, " + unit_lbl)
+            self._legend.addItem(self._dose_curve, tr("мощность дозы, ") + unit_lbl)
             self._dose_in_legend = True
         elif not on and self._dose_in_legend:
             self._legend.removeItem(self._dose_curve)
@@ -721,11 +728,39 @@ class SlicePanel(QtWidgets.QWidget):
     def _apply_unit_labels(self) -> None:
         """Подписи осей Y графиков под текущие единицы (Задача #44)."""
         if self._unit == "cps":
-            self._spectrum_plot.setLabel("left", "Отсчёты/с")
-            self._series_plot.setLabel("left", "Скорость в полосе, отсч/с")
+            self._spectrum_plot.setLabel("left", tr("Отсчёты/с"))
+            self._series_plot.setLabel("left", tr("Скорость в полосе, отсч/с"))
         else:
-            self._spectrum_plot.setLabel("left", "Отсчёты")
-            self._series_plot.setLabel("left", "Отсчёты в полосе")
+            self._spectrum_plot.setLabel("left", tr("Отсчёты"))
+            self._series_plot.setLabel("left", tr("Отсчёты в полосе"))
+
+    def retranslate(self) -> None:
+        """Задача #169: подписи панели срезов на текущем языке."""
+        if self._sg is None:
+            self._header.setText(tr("Файл не загружен"))
+        self._ewin_label.setText(tr("Энергоокно:"))
+        for _i, w in enumerate(DEFAULT_WINDOWS):
+            self._ewin_preset.setItemText(_i, f"{w.name} ({w.center:.0f} {tr('кэВ')})")
+        for sb in (self._ewin_lo, self._ewin_hi):
+            sb.setSuffix(" " + tr("кэВ"))
+        self._log_check.setText(tr("лог Y"))
+        self._reset_zoom_btn.setText(tr("Сброс зума"))
+        self._reset_zoom_btn.setToolTip(tr("Вернуть полный вид графиков среза и времени"))
+        self._spectrum_plot.setLabel("bottom", tr("Энергия, кэВ"))
+        self._series_plot.setLabel("bottom", tr("Время, с"))
+        self._apply_unit_labels()
+        self._retranslate_legend()
+
+    def _retranslate_legend(self) -> None:
+        """Задача #169: подписи легенды графика отсчётов на текущем языке.
+        Запись дозы пересоздаётся через _draw_dose_overlay (текст задаётся при addItem)."""
+        try:
+            self._legend.getLabel(self._series_curve).setText(tr("полоса ROI"))
+            self._legend.getLabel(self._ewin_curve).setText(tr("энергоокно"))
+        except Exception:
+            pass  # старый pyqtgraph без getLabel — легенда останется на прежнем языке
+        self._set_dose_legend(False)
+        self._draw_dose_overlay()
 
     def set_unit_mode(self, mode: str) -> None:
         """Единицы всех графиков среза: 'counts' | 'cps' (Задача #44). Перерисовать из кэша."""
@@ -821,7 +856,7 @@ class SlicePanel(QtWidgets.QWidget):
         spec = np.asarray(self._sg.energy_spectrum(i), dtype=np.float64)
         self._plot_spectrum(self._energies, spec, self._sg.live_time_total(i, i + 1))
         t = float(self._times[i]) if self._times is not None and self._times.size > i else 0.0
-        self._header.setText(f"Срез времени #{i} (t = {t:.1f} с)")
+        self._header.setText(f"{tr('Срез времени')} #{i} (t = {t:.1f} {tr('с')})")
         self._view_mode = ("slice", i)   # Задача #161: запомнить вид для update_spectrogram
 
     @QtCore.Slot(int, int, int, int)
@@ -838,8 +873,8 @@ class SlicePanel(QtWidgets.QWidget):
         e_lo = float(self._energies[ch_lo]) if self._energies is not None else 0.0
         e_hi = float(self._energies[min(ch_hi, self._sg.n_channels) - 1]) if self._energies is not None else 0.0
         self._header.setText(
-            f"Выборка: срезы [{t_lo}:{t_hi}], каналы [{ch_lo}:{ch_hi}] "
-            f"({e_lo:.0f}–{e_hi:.0f} кэВ). Сумма отсчётов = {total}.")
+            f"{tr('Выборка: срезы')} [{t_lo}:{t_hi}], {tr('каналы')} [{ch_lo}:{ch_hi}] "
+            f"({e_lo:.0f}–{e_hi:.0f} {tr('кэВ')}). {tr('Сумма отсчётов')} = {total}.")
         self._view_mode = ("roi", t_lo, t_hi, ch_lo, ch_hi)   # Задача #161: для update_spectrogram
 
     def show_energy_window(self, e_lo, e_hi) -> None:

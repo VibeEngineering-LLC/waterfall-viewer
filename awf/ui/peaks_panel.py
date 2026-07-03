@@ -10,6 +10,8 @@ PeaksPanel(QWidget) отображает результаты find_peaks из Wa
 from __future__ import annotations
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from awf.ui.i18n import tr
+
 
 class PeaksPanel(QtWidgets.QWidget):
     """Задача #111: виджет панели найденных пиков.
@@ -54,24 +56,24 @@ class PeaksPanel(QtWidgets.QWidget):
 
         # --- регулятор чувствительности ---
         sigma_row = QtWidgets.QHBoxLayout()
-        sigma_label = QtWidgets.QLabel("Порог значимости, σ")
-        sigma_label.setObjectName("knobTitle")
+        self._sigma_label = QtWidgets.QLabel(tr("Порог значимости, σ"))
+        self._sigma_label.setObjectName("knobTitle")
         self._sigma_box = QtWidgets.QDoubleSpinBox()
         self._sigma_box.setObjectName("peaksSigmaBox")
         self._sigma_box.setRange(1.5, 6.0)
         self._sigma_box.setSingleStep(0.5)
         self._sigma_box.setValue(3.0)
         self._sigma_box.setDecimals(1)
-        self._sigma_box.setToolTip(
+        self._sigma_box.setToolTip(tr(
             "Порог значимости Currie L_C (σ): выше → меньше пиков, чище результат"
-        )
-        sigma_row.addWidget(sigma_label)
+        ))
+        sigma_row.addWidget(self._sigma_label)
         sigma_row.addWidget(self._sigma_box)
         sigma_row.addStretch(1)
         layout.addLayout(sigma_row)
 
         # --- метка «Найдено: N» ---
-        self._count_label = QtWidgets.QLabel("Найдено: 0")
+        self._count_label = QtWidgets.QLabel(f"{tr('Найдено: ')}0")
         self._count_label.setObjectName("knobTitle")
         layout.addWidget(self._count_label)
 
@@ -81,19 +83,19 @@ class PeaksPanel(QtWidgets.QWidget):
         # интеграла. Дополнительно отмечаются транзиентные пики (Задача #113).
         self._win_slices = None
         self._win_seconds = None
-        self._window_label = QtWidgets.QLabel("Окно поиска: —")
+        self._window_label = QtWidgets.QLabel(f"{tr('Окно поиска')}: —")
         self._window_label.setObjectName("knobTitle")
         self._window_label.setWordWrap(True)
-        self._window_label.setToolTip(
+        self._window_label.setToolTip(tr(
             "Пики ищутся в суммарном по времени (интегральном) спектре всего файла; "
             "дополнительно отмечаются транзиентные пики, значимые в отдельных срезах "
             "(Задача #113). «Высота» и «Площадь» — в отсчётах (сумма по всему файлу)."
-        )
+        ))
         layout.addWidget(self._window_label)
 
         # --- таблица пиков ---
         self._table = QtWidgets.QTableWidget(0, len(self._COL_HEADERS_RU))
-        self._table.setHorizontalHeaderLabels(self._COL_HEADERS_RU)
+        self._table.setHorizontalHeaderLabels([tr(h) for h in self._COL_HEADERS_RU])
         self._table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self._table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self._table.setAlternatingRowColors(True)
@@ -215,7 +217,7 @@ class PeaksPanel(QtWidgets.QWidget):
                 self._table.setItem(row, k + 1, item)   # сдвиг на колонку чекбокса
 
         n = len(peaks)
-        self._count_label.setText(f"Найдено: {n}")
+        self._count_label.setText(f"{tr('Найдено: ')}{n}")
 
         # Восстанавливаем сортировку
         self._table.setSortingEnabled(True)
@@ -264,5 +266,15 @@ class PeaksPanel(QtWidgets.QWidget):
         except (ValueError, IndexError):
             n = 0
         self._count_label.setText(f"{tr('Найдено: ')}{n}")
+        # Задача #169: метка и тултипы порога σ + тултип окна поиска
+        self._sigma_label.setText(tr("Порог значимости, σ"))
+        self._sigma_box.setToolTip(tr(
+            "Порог значимости Currie L_C (σ): выше → меньше пиков, чище результат"
+        ))
+        self._window_label.setToolTip(tr(
+            "Пики ищутся в суммарном по времени (интегральном) спектре всего файла; "
+            "дополнительно отмечаются транзиентные пики, значимые в отдельных срезах "
+            "(Задача #113). «Высота» и «Площадь» — в отсчётах (сумма по всему файлу)."
+        ))
         # Задача #123: метка временно́го окна тоже зависит от языка
         self._render_window_label()
