@@ -155,21 +155,21 @@ _T_SMOOTH_MAP = {
 
 
 def _smooth_by_segs(arr, mode, radius, t_centers, seg_bounds_sec):
-    """Задача #172/#174/#175: сглаживание по t (axis=0) в каждом сегменте отдельно.
-    Краевые эффекты устранены: контекст ±radius точек за пределами сегмента берётся из
-    несглаженного массива (arr), в out записывается только центральная часть."""
+    """Задача #172/#174/#175/#176: сглаживание по t (axis=0) в каждом сегменте отдельно.
+    Краевые артефакты устранены: reflect-паддинг 2*radius строк из данных самого сегмента.
+    Соседние сегменты не используются — их уровень может резко отличаться."""
     t = np.asarray(t_centers, dtype=np.float64)
-    nt = arr.shape[0]
     out = arr.copy()
     for t0, t1 in seg_bounds_sec:
         idx = np.where((t >= float(t0)) & (t <= float(t1)))[0]
-        if len(idx) < 2:
+        n = len(idx)
+        if n < 2:
             continue
-        i0 = max(0, int(idx[0]) - radius)
-        i1 = min(nt, int(idx[-1]) + radius + 1)
-        smoothed = smooth_by_mode(arr[i0:i1], mode, axis=0, radius=radius)
-        inner = int(idx[0]) - i0
-        out[idx] = smoothed[inner: inner + len(idx)]
+        seg = arr[idx]
+        r = min(2 * radius, n - 1)
+        padded = np.pad(seg, ((r, r), (0, 0)), mode='reflect')
+        smoothed_padded = smooth_by_mode(padded, mode, axis=0, radius=radius)
+        out[idx] = smoothed_padded[r: r + n]
     return out
 
 
