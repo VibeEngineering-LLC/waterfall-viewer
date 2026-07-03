@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 import sys
 from pathlib import Path
 import numpy as np
@@ -137,19 +137,28 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # левый док: библиотека нуклидов; выбор -> вертикальные маркеры энергий на спектре
         self._nuclides = NuclidePanel(default_library())
-        ndock = QtWidgets.QDockWidget(tr("Нуклиды"), self)
-        ndock.setObjectName("dock_nuclides")   # Задача #40
-        self._register_i18n(ndock.setWindowTitle, "Нуклиды")   # Задача #169
+        ndock = QtWidgets.QDockWidget(tr("Библиотека нуклидов"), self)
+        ndock.setObjectName("dock_nuclide_lib")   # Задача #173
+        self._register_i18n(ndock.setWindowTitle, "Библиотека нуклидов")
         ndock.setWidget(self._nuclides)
         ndock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, ndock)
-        self._ndock = ndock   # Задача #79: ссылка для пункта меню «Изотопы»
+        self._nlib_dock = ndock
+        nidock = QtWidgets.QDockWidget(tr("Идентификация по найденным пикам"), self)
+        nidock.setObjectName("dock_nuclide_ident")   # Задача #173
+        self._register_i18n(nidock.setWindowTitle, "Идентификация по найденным пикам")
+        nidock.setWidget(self._nuclides.ident_widget)
+        nidock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
+        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, nidock)
+        self.tabifyDockWidget(ndock, nidock)
+        self._nident_dock = nidock
 
         # Задача #35: правило QSS «QDockWidget > QWidget» красит тело панелей только при
         # WA_StyledBackground — кастомные QWidget-подклассы иначе игнорируют background из
         # таблицы стилей, и откреплённый (floating) док показывает системный светлый фон.
         # Сцены pyqtgraph внутри SlicePanel не затронуты — они потомки панели, не дока.
-        for _panel in (self._slices, self._sections, self._nuclides):
+        for _panel in (self._slices, self._sections, self._nuclides,
+                       self._nuclides.ident_widget):
             _panel.setAttribute(QtCore.Qt.WA_StyledBackground, True)
 
         self._nuclides.linesChanged.connect(self._slices.set_nuclide_lines)
@@ -314,11 +323,13 @@ class MainWindow(QtWidgets.QMainWindow):
             m = bar.addMenu(title)
             self._register_i18n(m.setTitle, title)   # Задача #106: подпись меню через tr()
             if key == "isotopes":
-                # Задача #79: действующая ссылка на окно (док) с изотопами/нуклидами.
-                # toggleViewAction открывает/прячет док, галочкой отражая его видимость.
-                act = self._ndock.toggleViewAction()
-                self._register_i18n(act.setText, "Окно изотопов (нуклиды)")
+                # Задача #173: два дока нуклидов — библиотека и идентификация.
+                act = self._nlib_dock.toggleViewAction()
+                self._register_i18n(act.setText, "Библиотека нуклидов")
                 m.addAction(act)
+                act2 = self._nident_dock.toggleViewAction()
+                self._register_i18n(act2.setText, "Идентификация по найденным пикам")
+                m.addAction(act2)
             elif key == "analysis":
                 self._build_analysis_menu(m)   # Задача #96: фон и вычитание
             elif key == "tools":
@@ -436,8 +447,9 @@ class MainWindow(QtWidgets.QMainWindow):
             act = dock.toggleViewAction()
             self._register_i18n(act.setText, label)
             m.addAction(act)
-        # окно нуклидов: тот же toggleViewAction, что в «Изотопы» (#79) — без повторной i18n
-        m.addAction(self._ndock.toggleViewAction())
+        # Задача #173: два дока нуклидов
+        m.addAction(self._nlib_dock.toggleViewAction())
+        m.addAction(self._nident_dock.toggleViewAction())
 
     def _build_toolbar(self) -> None:
         tb = self.addToolBar("Вид")
