@@ -248,8 +248,9 @@ _SPECS = (
     ("gain",   "Усиление",    20, 500, 100, lambda v: f"{v / 100:.2f}×"),
     ("gamma",  "Гамма",       20, 300, 100, lambda v: f"{v / 100:.2f}"),
     ("clip",   "Отсечка",     80, 100, 100, lambda v: f"{v}%"),
-    ("smooth", "Сглаживание",  0,   2,   0, lambda v: {0: "0", 1: "SMA", 2: "WMA"}[v]),
-    ("light",  "Освещение",    0, 100,   0, lambda v: f"{v}%"),
+    ("smooth",  "Сглаживание",  0,   2,   0, lambda v: {0: "0", 1: "SMA", 2: "WMA"}[v]),
+    ("tsmooth", "Сглаж. по t",  0,   2,   0, lambda v: {0: "0", 1: "SMA", 2: "WMA"}[v]),
+    ("light",   "Освещение",    0, 100,   0, lambda v: f"{v}%"),
     ("tbin",   "Окно t",      25, 400, 100, lambda v: f"{v / 100:.2f}×"),
 )
 
@@ -290,17 +291,25 @@ class AdjustPanel(QtWidgets.QWidget):
         outer.setSpacing(6)
         outer.addLayout(top)
         outer.addLayout(grid)
+        self._tsmooth_by_seg_cb = QtWidgets.QCheckBox(tr("по сегм."), self)
+        self._tsmooth_by_seg_cb.setToolTip(tr(
+            "Сглаживать по оси времени внутри каждого временного сегмента независимо"))
+        self._tsmooth_by_seg_cb.stateChanged.connect(lambda _: self.changed.emit())
+        outer.addWidget(self._tsmooth_by_seg_cb)
         outer.addStretch(1)
 
     # --- реакции / API ---
     def values(self) -> dict:
         """Эффективные значения регулировок: по каждому ряду — значение, если ряд включён,
         иначе его дефолт (per-row bypass). Задача #91: общий выключатель убран."""
-        return {k: r.effective_value() for k, r in self.rows.items()}
+        d = {k: r.effective_value() for k, r in self.rows.items()}
+        d["tsmooth_by_seg"] = int(self._tsmooth_by_seg_cb.isChecked())
+        return d
 
     def retranslate(self) -> None:
         """Задача #169: перерисовать подписи панели и всех рядов на текущем языке."""
         self._reset_all.setText(tr("Сброс всех"))
+        self._tsmooth_by_seg_cb.setText(tr("по сегм."))
         for r in self.rows.values():
             r.retranslate()
 
@@ -308,6 +317,9 @@ class AdjustPanel(QtWidgets.QWidget):
         """Сброс всей панели к умолчанию (#60): значения = дефолты, все ряды ВЫКЛ
         (стартовое состояние). Сигналы рядов глушим — пересчёт отображения один раз в конце.
         Гашение ручек делает _on_toggle при set_on(False) (сигнал _chk не заглушён)."""
+        self._tsmooth_by_seg_cb.blockSignals(True)
+        self._tsmooth_by_seg_cb.setChecked(False)
+        self._tsmooth_by_seg_cb.blockSignals(False)
         for r in self.rows.values():
             r.blockSignals(True)
             r.set_on(False)

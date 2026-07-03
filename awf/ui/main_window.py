@@ -806,6 +806,7 @@ class MainWindow(QtWidgets.QMainWindow):
         segs = segment_by_time(sg, pen_factor=float(pen_factor))
         sidents = identify_segments(sg, self._nuclides.library(), segs, fwhm_model=fwhm_model)
         self._segments_panel.set_segments(sidents)
+        self._view3d.set_segment_bounds(segs)   # Задача #172: границы для посегментного сглаживания
 
     def _on_segments_action(self) -> None:
         """Задача #131: пункт меню «Сегментация по времени…» — показать док и пересчитать."""
@@ -943,6 +944,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self._view3d.set_smoothing(r)
             self._heatmap.set_smoothing(r)
             self._slices.set_smoothing(r)
+        if v["tsmooth"] != last.get("tsmooth", 0) or v["tsmooth_by_seg"] != last.get("tsmooth_by_seg", 0):
+            self._view3d.set_t_smoothing(int(v["tsmooth"]), bool(v["tsmooth_by_seg"]))
         if v["light"] != last["light"]:
             self._view3d.set_light_intensity(v["light"] / 100.0)
         if v["tbin"] != last["tbin"]:                       # Задача #56: ширина выборки по t
