@@ -321,6 +321,7 @@ def test_surface_visibility_toggle(app):
 
 def test_slice_spectrum_y_floor_linear(app):
     p = SlicePanel()
+    p.set_spectrum_log(False)                           # явно линейный режим (дефолт #177 — лог)
     p.set_spectrogram(_make_sg(ns=6, nc=12))
     ymin, _ = p._spectrum_plot.getViewBox().state["limits"]["yLimits"]
     assert ymin == 0.0                                  # лин.: 0 прибит к низу (счёт ≥ 0)
