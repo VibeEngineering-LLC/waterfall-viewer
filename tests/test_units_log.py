@@ -129,6 +129,7 @@ def test_series_section_markers_cleared_on_new_file(app):
 def test_slice_spectrum_cps_scaled(app):
     sg = _make_sg(ns=10, nc=20, t_step=2.0)
     p = SlicePanel()
+    p.set_spectrum_log(False)                        # #177: лог Y ON по умолчанию — тест линейного режима
     p.set_spectrogram(sg)                            # интегральный спектр, lt_total = 20 с
     p.set_unit_mode("cps")
     y = p._spectrum_curve.getData()[1]
@@ -148,6 +149,7 @@ def test_slice_series_cps_scaled(app):
 def test_slice_unit_back_to_counts(app):
     sg = _make_sg(ns=10, nc=20)
     p = SlicePanel()
+    p.set_spectrum_log(False)                        # #177: лог Y ON по умолчанию — тест линейного режима
     p.set_spectrogram(sg)
     p.set_unit_mode("cps")
     p.set_unit_mode("counts")
