@@ -1,4 +1,4 @@
-# Installing AtomSpectra Waterfall Viewer from Scratch
+# Installing Waterfall Viewer from Scratch
 
 Step-by-step instructions: what to install and how to run the waterfall spectrogram viewer
 on Windows. No Python experience required.
