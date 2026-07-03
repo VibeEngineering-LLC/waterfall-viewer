@@ -1,4 +1,4 @@
-# Known Issues & Compatibility — atomspectra-waterfall-viewer
+# Known Issues & Compatibility — waterfall-viewer
 
 Краткий справочник: на чём проверено, какие проблемы ловятся чаще всего и что с ними
 делать. Установка с нуля — в [`INSTALL.md`](INSTALL.md).
