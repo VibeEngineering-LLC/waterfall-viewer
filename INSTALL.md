@@ -1,4 +1,4 @@
-# Установка AtomSpectra Waterfall Viewer с нуля
+# Установка Waterfall Viewer с нуля
 
 Пошаговая инструкция: что поставить и как запустить просмотрщик waterfall-спектрограмм
 на Windows. Не предполагает опыта работы с Python.
