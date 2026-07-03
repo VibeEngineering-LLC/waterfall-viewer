@@ -47,6 +47,7 @@ def test_slice_bg_hidden_until_overlay_enabled(app):
 def test_slice_bg_unit_scaling(app):
     # live_time на срез = 2 с -> в counts кривая фона = bg_cps * 2, в cps = bg_cps
     p = SlicePanel()
+    p.set_spectrum_log(False)                                # #177: лог Y ON по умолчанию — тест линейного режима
     p.set_spectrogram(_make_sg(ns=3, nc=8))
     p.show_time_slice(0)                                # окно среза, lt_total = 2 c
     p.set_background(np.ones(8))

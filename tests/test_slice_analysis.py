@@ -31,6 +31,7 @@ def test_point_spectrum_matches_slice(app):
     # «спектр в точке» (Задача 19.1): show_time_slice рисует ровно energy_spectrum(i) при smooth=0
     sg = _make_sg()
     s = SlicePanel()
+    s.set_spectrum_log(False)          # #177: лог Y ON по умолчанию — тест линейного режима
     s.set_spectrogram(sg)
     s.set_unit_mode("counts")          # Задача #53: дефолт cps — тест сверяет сырые counts
     s.show_time_slice(5)
@@ -143,6 +144,7 @@ def test_update_spectrogram_keeps_time_slice_view(app):
     # срез на интегральный вид, но данные подтягивает свежие (не залипают на старой sg)
     sg = _make_sg()
     s = SlicePanel()
+    s.set_spectrum_log(False)          # #177: лог Y ON по умолчанию — тест линейного режима
     s.set_spectrogram(sg)
     s.set_unit_mode("counts")
     s.show_time_slice(5)
