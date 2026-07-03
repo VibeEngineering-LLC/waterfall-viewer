@@ -1,8 +1,8 @@
-# CLAUDE.md — atomspectra-waterfall-viewer
+# CLAUDE.md — waterfall-viewer
 
 Рабочая конвенция этого проекта. Действует для всех будущих сессий Claude Code здесь.
 
-> ⚠️ Репозиторий **публичный** (`VibeEngineering-LLC/atomspectra-waterfall-viewer`). В коммиты и
+> ⚠️ Репозиторий **публичный** (`VibeEngineering-LLC/waterfall-viewer`). В коммиты и
 > любые файлы репо — **никаких** секретов/PII: device ID, серийники, GUID, IP/MAC, GPS-координаты,
 > пути с именем оператора, e-mail, токены, пароли. Этот файл держать обезличенным.
 

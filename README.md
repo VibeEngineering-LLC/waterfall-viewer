@@ -33,7 +33,7 @@
 **Вариант A — venv (изолированно, рекомендуется):**
 
 ```bat
-cd "путь\к\atomspectra-waterfall-viewer"
+cd "путь\к\waterfall-viewer"
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
