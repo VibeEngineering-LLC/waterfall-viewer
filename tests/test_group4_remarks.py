@@ -837,6 +837,7 @@ def test_slice_update_expands_y_after_normalization(app):
     «спектр не нормализовался»). update_spectrogram() должен подрастить верхнюю границу Y,
     сохраняя нижнюю и пользовательский X-зум."""
     sp = SlicePanel()
+    sp.set_spectrum_log(False)                           # явно линейный режим (дефолт #177 — лог)
     sg = _make_sg(ns=30, nc=50, t_step=2.0)
     sp.set_spectrogram(sg)
     vb = sp._spectrum_plot.getViewBox()

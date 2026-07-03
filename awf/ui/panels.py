@@ -395,7 +395,6 @@ class SlicePanel(QtWidgets.QWidget):
         # Задача #43: лог/лин шкала Y графика спектра среза
         self._log_check = QtWidgets.QCheckBox(tr("лог Y"))
         self._log_check.toggled.connect(self.set_spectrum_log)
-        self._log_check.setChecked(True)  # Задача #177: лог Y по умолчанию ON
         ewin_row.addWidget(self._log_check)
         # Задача #100: сброс зума/панорамы обоих графиков (спектр среза + временной ряд)
         self._reset_zoom_btn = QtWidgets.QPushButton(tr("Сброс зума"))
@@ -406,6 +405,7 @@ class SlicePanel(QtWidgets.QWidget):
         # Задача #165: спектр среза — ViewBox без mouse-pan (см. _NoPanViewBox).
         # Зум колесиком по-прежнему работает, pyqtgraph центрирует его в точке курсора.
         self._spectrum_plot = pg.PlotWidget(viewBox=_NoPanViewBox())
+        self._log_check.setChecked(True)  # Задача #177: лог Y по умолчанию ON (после создания _spectrum_plot)
         self._spectrum_plot.setLabel("bottom", tr("Энергия, кэВ"))
         self._spectrum_plot.setLabel("left", tr("Отсчёты"))
         self._spectrum_plot.showGrid(x=True, y=True, alpha=0.3)

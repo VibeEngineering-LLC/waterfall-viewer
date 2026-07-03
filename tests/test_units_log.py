@@ -267,7 +267,7 @@ def test_mainwindow_light_slider(app):
 
 def _assert_display_defaults(w):
     assert w._z_combo.currentIndex() == 2
-    assert w._cmap_name == "insight"             # Задача #102: палитра-дефолт — Insight
+    assert w._cmap_name == "jet"                 # Задача #102/#177: палитра-дефолт — Jet
     assert w._unit_combo.currentIndex() == 1     # Задача #53: дефолт — cps
     assert w._axes_check.isChecked() is True
     assert w._hl_check.isChecked() is False
