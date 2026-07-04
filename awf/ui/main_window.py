@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 import sys
 from pathlib import Path
 import numpy as np
@@ -28,6 +28,7 @@ from awf.ui.knobs import AdjustPanel
 from awf.ui.cyclebutton import CycleButton   # Задача #74: переключатель-перебор вместо QComboBox
 from awf.ui.style import APP_QSS
 from awf.ui import i18n          # Задача #106: переключение языка интерфейса RU↔EN
+from awf.ui.help_dialogs import show_help, show_about   # Задача #182: диалоги Помощь/О программе
 from awf.ui.i18n import tr       # короткий доступ к переводу: tr("Файл") -> "File" / "Файл"
 
 # Задача #40: организация/приложение для QSettings (запоминание расположения окон между
@@ -71,7 +72,7 @@ class MainWindow(QtWidgets.QMainWindow):
         i18n.set_language(saved_lang)
         self._i18n_widgets: list[tuple[object, str]] = []
         i18n.signals.changed.connect(self._on_language_changed)
-        self._register_i18n(self.setWindowTitle, "AtomSpectra Waterfall Viewer")
+        self._register_i18n(self.setWindowTitle, "Waterfall Viewer")
         self.resize(1280, 800)
         # Задача #117: тему ставим и на уровне ПРИЛОЖЕНИЯ, не только окна. Контекстные
         # меню pyqtgraph (ViewBoxMenu) — popup БЕЗ QWidget-родителя, поэтому stylesheet
@@ -336,6 +337,18 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._build_tools_menu(m)      # Задача #115: окна-доки
             elif key == "service":
                 self._build_service_menu(m)    # Задача #106: подменю «Язык» (RU/EN)
+            elif key == "help":
+                # Задача #182: пункт «Справка…» открывает окно с оглавлением по функциям.
+                act_help = QtGui.QAction("Справка…", self)
+                act_help.triggered.connect(lambda: show_help(self))
+                self._register_i18n(act_help.setText, "Справка…")
+                m.addAction(act_help)
+            elif key == "about":
+                # Задача #182: пункт «О программе…» — версия, стек, лицензия, ссылка на репо.
+                act_about = QtGui.QAction("О программе…", self)
+                act_about.triggered.connect(lambda: show_about(self))
+                self._register_i18n(act_about.setText, "О программе…")
+                m.addAction(act_about)
             else:
                 stub = QtGui.QAction("— наполняется позже —", self)
                 stub.setEnabled(False)   # каркас: действие будет подключено позже
@@ -577,6 +590,7 @@ class MainWindow(QtWidgets.QMainWindow):
                             "Вернуть настройки отображения к значениям по умолчанию")
         self._reset_btn.clicked.connect(self._on_reset_display)
         tb.addWidget(self._reset_btn)
+        self._apply_colormap("jet")            # #178-fix2: применить палитру Jet к view3d/heatmap при старте
 
     @QtCore.Slot()
     def _on_reset_display(self) -> None:
@@ -947,7 +961,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if v["tsmooth"] != last.get("tsmooth", 0) or v["tsmooth_by_seg"] != last.get("tsmooth_by_seg", 0):
             self._view3d.set_t_smoothing(int(v["tsmooth"]), bool(v["tsmooth_by_seg"]))
             # Задача #174: первое включение «по сегм.» → авто-сегментация если ещё не было
-            if v["tsmooth_by_seg"] and not last.get("tsmooth_by_seg", 0) and not self._view3d.has_segments:
+            if int(v["tsmooth"]) > 0 and v["tsmooth_by_seg"] and not self._view3d.has_segments:
                 self._on_segment_recompute()
         if v["light"] != last["light"]:
             self._view3d.set_light_intensity(v["light"] / 100.0)
@@ -979,7 +993,7 @@ class MainWindow(QtWidgets.QMainWindow):
         значения + синхронизация дока срезов (#38) и 2D-карты (#39) с выбранными сечениями."""
         self._view3d.set_plane(axis, slot, frac, visible)
         value, unit = self._view3d.plane_value(axis, frac)
-        self._sections.set_value_label(axis, slot, f"{value:.1f} {unit}")
+        self._sections.set_value_label(axis, slot, f"{value:.1f} {tr(unit)}")
         state = self._view3d.active_plane_values()
         self._slices.sync_sections(state["time"], state["energy"])
         self._heatmap.set_section_markers(state["time"], state["energy"])
@@ -1024,6 +1038,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._redistribute(reset=True)   # Задача #161: новый файл -> полный сброс окна срезов
         # Задача #104: после redistribute явно синхронизировать видимость дозы
         self._slices.set_dose_overlay(is_rcspg)
+        # #178-fix1b: при загрузке нового файла авто-запустить сегментацию если tsmooth>0 и by_seg
+        adj = self._adjust.values()
+        if int(adj.get("tsmooth", 0)) > 0 and adj.get("tsmooth_by_seg", 0):
+            self._on_segment_recompute()
         total = int(np.asarray(sg.counts).sum(dtype=np.int64))
         t0 = sg.t0_iso if sg.t0_iso else "—"
         src = sg.source_path if sg.source_path else "?"

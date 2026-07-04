@@ -154,20 +154,47 @@ _T_SMOOTH_MAP = {
 }
 
 
+def _extrap_lin(block, r_out, direction):
+    n = block.shape[0]
+    if n < 2:
+        edge = block[0] if direction < 0 else block[-1]
+        return np.broadcast_to(edge, (r_out, block.shape[1])).copy()
+    x = np.arange(n, dtype=np.float64)
+    xm = x.mean()
+    xc = x - xm
+    denom = float((xc ** 2).sum())
+    bm = block.mean(axis=0)
+    slope = (xc[:, None] * (block - bm)).sum(axis=0) / denom
+    intercept = bm - slope * xm
+    if direction > 0:
+        xe = np.arange(n, n + r_out, dtype=np.float64)
+    else:
+        xe = np.arange(-r_out, 0, dtype=np.float64)
+    return np.clip(slope[None, :] * xe[:, None] + intercept[None, :], 0.0, None)
+
+
 def _smooth_by_segs(arr, mode, radius, t_centers, seg_bounds_sec):
-    """Задача #172/#174/#175/#176: сглаживание по t (axis=0) в каждом сегменте отдельно.
-    Краевые артефакты устранены: reflect-паддинг 2*radius строк из данных самого сегмента.
-    Соседние сегменты не используются — их уровень может резко отличаться."""
     t = np.asarray(t_centers, dtype=np.float64)
     out = arr.copy()
-    for t0, t1 in seg_bounds_sec:
-        idx = np.where((t >= float(t0)) & (t <= float(t1)))[0]
+    segs = np.asarray(seg_bounds_sec, dtype=np.float64)
+    if len(segs) == 0:
+        return smooth_by_mode(arr, mode, axis=0, radius=radius)
+    assignment = np.zeros(len(t), dtype=np.int64)
+    for bi in range(len(t)):
+        tc = t[bi]
+        dists = np.maximum(0.0, tc - segs[:, 1]) + np.maximum(0.0, segs[:, 0] - tc)
+        assignment[bi] = int(np.argmin(dists))
+    for si in range(len(segs)):
+        idx = np.where(assignment == si)[0]
         n = len(idx)
         if n < 2:
             continue
         seg = arr[idx]
         r = min(2 * radius, n - 1)
-        padded = np.pad(seg, ((r, r), (0, 0)), mode='reflect')
+        fw = n
+        left_pad = _extrap_lin(seg[:fw], r, -1)
+        right_pad = _extrap_lin(seg[-fw:], r, +1)
+        padded = np.concatenate([left_pad, seg, right_pad], axis=0)
         smoothed_padded = smooth_by_mode(padded, mode, axis=0, radius=radius)
         out[idx] = smoothed_padded[r: r + n]
     return out
@@ -206,7 +233,7 @@ class Waterfall3DView(gl.GLViewWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setBackgroundColor(pg.mkColor(15, 15, 20))
-        self.setCameraPosition(distance=300, elevation=35, azimuth=-60)
+        self.setCameraPosition(distance=300, elevation=30, azimuth=-45)  # #178-fix3: изометрия
         self._surface = None          # текущий GLSurfacePlotItem (или None)
         self._surface_on = True       # Задача #143: тумблер видимости рельефа-«простыни образца»
         self._surface_style = "palette"  # Задача #145: стиль простыни образца (palette|solid|wire)
@@ -424,6 +451,7 @@ class Waterfall3DView(gl.GLViewWidget):
         # Регулировок (set_contrast/set_smoothing/set_light_intensity/set_time_bins/set_z_scale/
         # set_colormap/set_unit_mode передают тот же self._sg) сохраняют зум/панораму пользователя.
         if is_new:
+            self._seg_bounds_sec = []  # #178-fix1a: старые сегменты не переносить на новый файл
             span = float(max(nt, nc, 10))
             self.setCameraPosition(distance=span * 1.6)
         self._rebuild_grid()
@@ -909,15 +937,18 @@ class Waterfall3DView(gl.GLViewWidget):
         y_time = (ymax if sy > 0 else ymin) + sy * pad     # край подписи времени (вынос наружу)
         x_en = xmax if sx > 0 else xmin                     # край оси энергии (зубцы и подписи)
         x_en_lab = x_en + sx * pad
-        # ось времени (X): значение в выбранной единице + единица на каждом делении (Задача #64/#66)
+        # ось времени (X): значение в выбранной единице + единица на каждом делении (Задача #64/#66).
+        # Задача #183: единица оси через tr() для RU↔EN.
         dv, wx, unit = self._time_ticks()
+        unit_lbl = tr(unit)
         for tv, x in zip(dv, wx):
-            self._add_text((float(x), y_time, 0.0), f"{tv:g} {unit}", font)
+            self._add_text((float(x), y_time, 0.0), f"{tv:g} {unit_lbl}", font)
         # ось энергии (Y): значение в кэВ + единица на каждом делении (Задача #66).
         # Задача #80: вертикальные оливковые зубцы-отрезки (IV-R2/#77) убраны — только подписи.
+        keV_lbl = tr("кэВ")
         ev, wy = self._energy_ticks()
         for en, y in zip(ev, wy):
-            self._add_text((x_en_lab, float(y), 0.0), f"{en:g} кэВ", font)
+            self._add_text((x_en_lab, float(y), 0.0), f"{en:g} {keV_lbl}", font)
 
     def _viewer_sides(self):
         """Задача #77: знаки X/Y-направления «на зрителя» (камера → центр сцены, центр в 0,0).
