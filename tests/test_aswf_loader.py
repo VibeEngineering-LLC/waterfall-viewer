@@ -139,3 +139,43 @@ def test_default_calibration_when_missing(tmp_path):
     sg = load_aswf(path)
     assert sg.energies()[0] == pytest.approx(0.0)
     assert sg.energies()[1] == pytest.approx(1.0)
+
+
+# Задача #180: v2 — row_stride > n_channels*2, per-row row_time uint16 после отсчётов, saved_rows=0.
+def _build_aswf_v2(tmp_path, header, rows_counts, rows_time_s, header_len=4096):
+    body = json.dumps(header).encode("utf-8")
+    if len(body) < header_len:
+        body += b"\x00" * (header_len - len(body))
+    parts = []
+    for cnts, t in zip(rows_counts, rows_time_s):
+        parts.append(np.array(cnts, dtype="<u2").tobytes())
+        parts.append(struct.pack("<H", int(t)))
+    path = tmp_path / "synthetic_v2.aswf"
+    with open(path, "wb") as f:
+        f.write(b"ASWF" + struct.pack("<I", header_len) + body + b"".join(parts))
+    return str(path)
+
+
+def _header_v2(**over):
+    d = {"format": "atomspectra-waterfall", "version": 2, "channels": 4, "interval_sec": 5,
+         "calibration": [0.0, 1.0], "started_at": 1700000000, "saved_rows": 0, "serial": "TESTV2",
+         "row_stride": 4 * 2 + 2, "row_time": {"dtype": "uint16", "unit": "sec", "offset": 4 * 2}}
+    d.update(over)
+    return d
+
+
+def test_v2_saved_rows_zero_falls_back_to_size(tmp_path):
+    path = _build_aswf_v2(tmp_path, _header_v2(),
+                          [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]], [60, 60, 60])
+    sg = load_aswf(path)
+    assert sg.n_slices == 3 and sg.n_channels == 4
+    np.testing.assert_array_equal(sg.counts[0], [1, 2, 3, 4])
+    np.testing.assert_array_equal(sg.counts[-1], [9, 10, 11, 12])
+
+
+def test_v2_row_time_per_row(tmp_path):
+    path = _build_aswf_v2(tmp_path, _header_v2(), [[0, 0, 0, 0]] * 3, [30, 45, 90])
+    sg = load_aswf(path)
+    np.testing.assert_allclose(sg.real_time_s, [30.0, 45.0, 90.0])
+    np.testing.assert_allclose(sg.time_offsets_s, [0.0, 30.0, 75.0])
+    np.testing.assert_allclose(sg.live_time_s, [30.0, 45.0, 90.0])

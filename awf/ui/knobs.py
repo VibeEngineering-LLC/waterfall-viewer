@@ -67,6 +67,9 @@ class Knob(QtWidgets.QWidget):
     # --- управление мышью: горизонтальный drag (Задача #58; вправо = +, влево = −) ---
     def mousePressEvent(self, e):
         if e.button() == QtCore.Qt.LeftButton:
+            x0, x1 = 7.0, max(8.0, self.width() - 7.0)
+            frac = max(0.0, min(1.0, (e.position().x() - x0) / (x1 - x0)))
+            self.setValue(self._min + frac * (self._max - self._min))
             self._drag_x = e.position().x()
             self._drag_v0 = self._val
             e.accept()
@@ -114,9 +117,11 @@ class Knob(QtWidgets.QWidget):
             p.setPen(QtCore.Qt.NoPen)
             p.setBrush(QtGui.QBrush(fill))
             p.drawRoundedRect(QtCore.QRectF(x0 + 1.0, gy + 1.0, hx - x0, 5.0), 2.0, 2.0)
-        p.setPen(QtGui.QPen(QtGui.QColor("#55585e"), 1.0))   # риски-шкала сверху/снизу паза
-        for k in range(5):
-            tx = x0 + track_w * k / 4.0
+        p.setPen(QtGui.QPen(QtGui.QColor("#55585e"), 1.0))
+        span = self._max - self._min
+        n_ticks = (span + 1) if 0 < span <= 10 else 5
+        for k in range(n_ticks):
+            tx = x0 + track_w * k / max(1, n_ticks - 1)
             p.drawLine(QtCore.QPointF(tx, cy + 6.0), QtCore.QPointF(tx, cy + 9.0))
             p.drawLine(QtCore.QPointF(tx, cy - 9.0), QtCore.QPointF(tx, cy - 6.0))
         self._draw_cap(p, cy, hx, h)

@@ -616,13 +616,19 @@ def test_top_menus_skeleton_present(app):
     for expected in ("Изотопы", "Анализ", "Инструменты", "Сервис", "Помощь", "О программе"):
         assert expected in titles
     assert set(w._menus) == {"isotopes", "analysis", "tools", "service", "help", "about"}
-    # остальные пункты пока неактивны (каркас); «Изотопы» наполнено в #79, «Анализ» — в #96,
-    # «Сервис» — в #106 (подменю «Язык»), «Инструменты» — в #115 (toggleViewAction доков).
+    # #79 «Изотопы», #96 «Анализ», #106 «Сервис/Язык», #115 «Инструменты», #182 «Помощь»/«О программе»
+    # — все меню наполнены. Меню «Анализ» и «Инструменты» имеют пункты, disabled до выбора фона
+    # или до старта поиска пиков — это норма, проверяем только что stub «— наполняется позже —» ушёл.
     for key, m in w._menus.items():
-        if key in ("isotopes", "analysis", "service", "tools"):
-            continue
         acts = m.actions()
-        assert acts and all(not a.isEnabled() for a in acts)
+        assert acts, f"меню {key!r} пустое"
+        stubs = [a for a in acts if a.text() == "— наполняется позже —"]
+        assert not stubs, f"stub-пункт остался в меню {key!r}"
+    # Задача #182: пункты «Справка…» и «О программе…» — активные QAction.
+    help_acts = w._menus["help"].actions()
+    about_acts = w._menus["about"].actions()
+    assert any(a.text() == "Справка…" and a.isEnabled() for a in help_acts)
+    assert any(a.text() == "О программе…" and a.isEnabled() for a in about_acts)
     # Задача #106: «Сервис» содержит подменю «Язык» с двумя активными пунктами Русский/English
     service_acts = w._menus["service"].actions()
     assert any(a.text() == "Язык" for a in service_acts)
