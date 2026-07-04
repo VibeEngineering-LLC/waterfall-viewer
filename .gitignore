@@ -21,6 +21,8 @@ sample_data/*.aswf
 build/
 dist/
 *.spec
+# #186: рецепт сборки exe (#184/#185) версионируется — исключение из *.spec
+!waterfall-viewer.spec
 
 # Сборка пакета (pip wheel / setuptools build)
 *.egg-info/
