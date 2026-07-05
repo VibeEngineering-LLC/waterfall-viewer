@@ -436,6 +436,7 @@ class SlicePanel(QtWidgets.QWidget):
                                                   name=tr("энергоокно"))
         # Задача #104: вторая ось Y (правая) — мощность дозы RadiaCode
         self._dose_vb = pg.ViewBox()
+        self._dose_vb.setMouseEnabled(x=False, y=False)  # Задача #198: не перехватывать события мыши
         pi = self._series_plot.getPlotItem()
         pi.scene().addItem(self._dose_vb)
         self._dose_axis = pg.AxisItem("right")
@@ -491,9 +492,13 @@ class SlicePanel(QtWidgets.QWidget):
         self._ewin_preset.blockSignals(True); self._ewin_preset.setCurrentIndex(_preset_sel)
         self._ewin_preset.blockSignals(False)
         self.show_energy_window(lo, hi)
-        # Задача #104: мощность дозы — только для RadiaCode .rcspg (калибровка RC-103)
+        # Задача #104/#197: мощность дозы — v3 ASWF (прямое поле) или .rcspg (калибровка RC-103)
         src = getattr(sg, "source_path", None) or ""
-        if src.lower().endswith(".rcspg"):
+        v3_dose = getattr(sg, "dose_rate_usv_h", None)
+        if v3_dose is not None and np.isfinite(v3_dose).any():
+            self._dose = np.asarray(v3_dose, dtype=np.float64)
+            self._dose_unit = "uSv/h"
+        elif src.lower().endswith(".rcspg"):
             d_msvh = dose_rate_series(sg, unit="mSv/h")
             if float(d_msvh.max()) < 1.0:
                 self._dose = dose_rate_series(sg, unit="uSv/h")
@@ -533,8 +538,13 @@ class SlicePanel(QtWidgets.QWidget):
         воспринимает это как «спектр не нормализовался»)."""
         if self._ewin_active is not None:
             self.show_energy_window(*self._ewin_active)
+        # Задача #104/#197: мощность дозы — v3 ASWF (прямое поле) или .rcspg (калибровка RC-103)
         src = getattr(sg, "source_path", None) or ""
-        if src.lower().endswith(".rcspg"):
+        v3_dose = getattr(sg, "dose_rate_usv_h", None)
+        if v3_dose is not None and np.isfinite(v3_dose).any():
+            self._dose = np.asarray(v3_dose, dtype=np.float64)
+            self._dose_unit = "uSv/h"
+        elif src.lower().endswith(".rcspg"):
             d_msvh = dose_rate_series(sg, unit="mSv/h")
             if float(d_msvh.max()) < 1.0:
                 self._dose = dose_rate_series(sg, unit="uSv/h")

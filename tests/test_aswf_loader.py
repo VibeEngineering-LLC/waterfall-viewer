@@ -179,3 +179,192 @@ def test_v2_row_time_per_row(tmp_path):
     np.testing.assert_allclose(sg.real_time_s, [30.0, 45.0, 90.0])
     np.testing.assert_allclose(sg.time_offsets_s, [0.0, 30.0, 75.0])
     np.testing.assert_allclose(sg.live_time_s, [30.0, 45.0, 90.0])
+
+
+# ===== Задача #197: v3 тесты =====
+
+def _build_aswf_v3(tmp_path, header, rows_data, baseline_counts=None,
+                   header_len=4096, fname="synthetic_v3.aswf"):
+    """Собрать бинарный v3-файл. rows_data — list[dict] с ключами из row_fields."""
+    body = json.dumps(header).encode("utf-8")
+    body = body + b"\x00" * max(0, header_len - len(body))
+    bl_bytes = b""
+    if baseline_counts is not None:
+        bl_bytes = b"".join(struct.pack("<I", int(v)) for v in baseline_counts)
+    row_stride = int(header.get("row_stride", 0))
+    n_channels  = int(header["channels"])
+    payload_parts = []
+    for row in rows_data:
+        rb = bytearray(row_stride)
+        spec = row.get("spectrum", [0] * n_channels)
+        struct.pack_into(f"<{n_channels}H", rb, 0, *spec)
+        for fd in header.get("row_fields", []):
+            nm = fd["name"]
+            if nm == "spectrum":
+                continue
+            off   = int(fd["offset"])
+            dtype = fd.get("dtype", "uint16")
+            val   = row.get(nm, 0)
+            if dtype == "uint16":
+                struct.pack_into("<H", rb, off, int(val))
+            elif dtype == "uint32":
+                struct.pack_into("<I", rb, off, int(val))
+            elif dtype == "float32":
+                struct.pack_into("<f", rb, off, float(val))
+        payload_parts.append(bytes(rb))
+    path = tmp_path / fname
+    with open(path, "wb") as f:
+        f.write(b"ASWF" + struct.pack("<I", header_len) + body + bl_bytes)
+        for p in payload_parts:
+            f.write(p)
+    return str(path)
+
+
+def _header_v3(**over):
+    """Базовый v3-заголовок: 4 канала, поля spectrum+duration."""
+    n = 4
+    d = {
+        "format": "atomspectra-waterfall", "version": 3, "channels": n,
+        "interval_sec": 10, "calibration": [0.0, 1.0],
+        "started_at": 1700000000, "saved_rows": 3,
+        "row_stride": n * 2 + 2,
+        "row_fields": [
+            {"name": "spectrum", "dtype": "uint16", "offset": 0, "count": n},
+            {"name": "duration", "dtype": "uint16", "offset": n * 2},
+        ],
+    }
+    d.update(over)
+    return d
+
+
+def test_v3_uncompressed_basic(tmp_path):
+    header = _header_v3()
+    rows = [
+        {"spectrum": [10, 20, 30, 40], "duration": 60},
+        {"spectrum": [11, 21, 31, 41], "duration": 45},
+        {"spectrum": [12, 22, 32, 42], "duration": 30},
+    ]
+    path = _build_aswf_v3(tmp_path, header, rows)
+    sg = load_aswf(path)
+    assert sg.n_slices == 3 and sg.n_channels == 4
+    np.testing.assert_array_equal(sg.counts[0], [10, 20, 30, 40])
+    np.testing.assert_array_equal(sg.counts[1], [11, 21, 31, 41])
+    np.testing.assert_allclose(sg.real_time_s, [60.0, 45.0, 30.0])
+    np.testing.assert_allclose(sg.time_offsets_s, [0.0, 60.0, 105.0])
+    assert sg.baseline is None
+    assert sg.dose_rate_usv_h is None
+    assert sg.gps_track is None
+
+
+def test_v3_baseline_section(tmp_path):
+    header = _header_v3()
+    header["baseline"] = {"count": 4}
+    bl = [100, 200, 300, 400]
+    rows = [{"spectrum": [1, 2, 3, 4], "duration": 10}] * 2
+    header["saved_rows"] = 2
+    path = _build_aswf_v3(tmp_path, header, rows, baseline_counts=bl)
+    sg = load_aswf(path)
+    assert sg.baseline is not None
+    assert sg.baseline.dtype == np.int64
+    np.testing.assert_array_equal(sg.baseline, [100, 200, 300, 400])
+
+
+def test_v3_dose_and_gps(tmp_path):
+    n = 4
+    # spectrum(8) + duration(2) + dose_rate_usv_h(4) + latitude(4) + longitude(4) = 22
+    stride = n * 2 + 2 + 4 + 4 + 4
+    header = {
+        "format": "atomspectra-waterfall", "version": 3, "channels": n,
+        "interval_sec": 10, "calibration": [0.0, 1.0],
+        "started_at": 1700000000, "saved_rows": 2,
+        "row_stride": stride,
+        "row_fields": [
+            {"name": "spectrum",        "dtype": "uint16",  "offset": 0,       "count": n},
+            {"name": "duration",        "dtype": "uint16",  "offset": n * 2},
+            {"name": "dose_rate_usv_h", "dtype": "float32", "offset": n * 2 + 2},
+            {"name": "latitude",        "dtype": "float32", "offset": n * 2 + 6},
+            {"name": "longitude",       "dtype": "float32", "offset": n * 2 + 10},
+        ],
+    }
+    rows = [
+        {"spectrum": [1, 2, 3, 4], "duration": 60,
+         "dose_rate_usv_h": 0.5, "latitude": 55.75, "longitude": 37.62},
+        {"spectrum": [5, 6, 7, 8], "duration": 60,
+         "dose_rate_usv_h": 0.7, "latitude": 55.76, "longitude": 37.63},
+    ]
+    path = _build_aswf_v3(tmp_path, header, rows)
+    sg = load_aswf(path)
+    assert sg.dose_rate_usv_h is not None
+    np.testing.assert_allclose(sg.dose_rate_usv_h, [0.5, 0.7], rtol=1e-5)
+    assert sg.gps_track is not None
+    assert sg.gps_track.shape == (2, 2)
+    np.testing.assert_allclose(sg.gps_track[0], [55.75, 37.62], rtol=1e-5)
+    np.testing.assert_allclose(sg.gps_track[1], [55.76, 37.63], rtol=1e-5)
+
+
+def test_v3_per_row_timestamp(tmp_path):
+    n = 4; t0 = 1700000000
+    # spectrum(8) + duration(2) + timestamp(4) = 14
+    stride = n * 2 + 2 + 4
+    header = {
+        "format": "atomspectra-waterfall", "version": 3, "channels": n,
+        "interval_sec": 10, "calibration": [0.0, 1.0],
+        "started_at": t0, "saved_rows": 3,
+        "row_stride": stride,
+        "row_fields": [
+            {"name": "spectrum",   "dtype": "uint16", "offset": 0,       "count": n},
+            {"name": "duration",   "dtype": "uint16", "offset": n * 2},
+            {"name": "timestamp",  "dtype": "uint32",  "offset": n * 2 + 2},
+        ],
+    }
+    rows = [
+        {"spectrum": [1, 0, 0, 0], "duration": 60, "timestamp": t0},
+        {"spectrum": [2, 0, 0, 0], "duration": 60, "timestamp": t0 + 100},
+        {"spectrum": [3, 0, 0, 0], "duration": 60, "timestamp": t0 + 250},
+    ]
+    path = _build_aswf_v3(tmp_path, header, rows)
+    sg = load_aswf(path)
+    np.testing.assert_allclose(sg.time_offsets_s, [0.0, 100.0, 250.0])
+
+
+def test_v3_compressed_rle(tmp_path):
+    n = 4
+    header = {
+        "format": "atomspectra-waterfall", "version": 3, "channels": n,
+        "interval_sec": 10, "calibration": [0.0, 1.0],
+        "started_at": 1700000000, "saved_rows": 0,
+        "compressed": True,
+        "row_fields": [
+            {"name": "spectrum", "dtype": "uint16", "offset": 0, "count": n},
+            {"name": "duration", "dtype": "uint16", "offset": 0},
+        ],
+    }
+    # Row 0: spectrum [5,0,0,7] = literal 5, zero-run 2, literal 7; duration=30
+    # Row 1: spectrum [0,0,0,0] = zero-run 4; duration=45
+    payload = b""
+    payload += struct.pack("<H", 5)           # literal 5
+    payload += struct.pack("<H", 0x8002)      # 2 zeros
+    payload += struct.pack("<H", 7)           # literal 7
+    payload += struct.pack("<H", 30)          # duration row 0
+    payload += struct.pack("<H", 0x8004)      # 4 zeros
+    payload += struct.pack("<H", 45)          # duration row 1
+
+    body = json.dumps(header).encode("utf-8")
+    body += b"\x00" * (4096 - len(body))
+    path = tmp_path / "v3_rle.aswf"
+    with open(path, "wb") as f:
+        f.write(b"ASWF" + struct.pack("<I", 4096) + body + payload)
+    sg = load_aswf(str(path))
+    assert sg.n_slices == 2 and sg.n_channels == 4
+    np.testing.assert_array_equal(sg.counts[0], [5, 0, 0, 7])
+    np.testing.assert_array_equal(sg.counts[1], [0, 0, 0, 0])
+    np.testing.assert_allclose(sg.real_time_s, [30.0, 45.0])
+
+
+def test_v3_rle_direct():
+    from awf.io.aswf_loader import _rle_decode_row
+    # [5, 0, 0, 7] encoded as: literal 5, zero-run 2, literal 7
+    buf = struct.pack("<HHH", 5, 0x8002, 7)
+    spec, pos = _rle_decode_row(buf, 0, 4)
+    assert list(spec) == [5, 0, 0, 7]
+    assert pos == 6

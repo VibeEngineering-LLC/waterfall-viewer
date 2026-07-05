@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 import struct
@@ -7,8 +7,11 @@ import warnings
 import numpy as np
 from awf.model.spectrogram import Calibration, Spectrogram
 
+_DTYPE_SIZE = {"uint16": 2, "uint32": 4, "float32": 4}
+_DTYPE_FMT  = {"uint16": "<H", "uint32": "<I", "float32": "<f"}
+
+
 def _epoch_s_to_iso(sec) -> str | None:
-    """Unix-время в СЕКУНДАХ -> ISO-8601 UTC (или None при ошибке/None)."""
     if sec is None:
         return None
     try:
@@ -16,97 +19,224 @@ def _epoch_s_to_iso(sec) -> str | None:
     except (OSError, OverflowError, ValueError):
         return None
 
+
+def _read_scalar(buf: bytes, off: int, dtype: str):
+    fmt = _DTYPE_FMT.get(dtype)
+    if fmt is None:
+        raise ValueError(f"ASWF: неизвестный dtype {dtype!r}")
+    return struct.unpack_from(fmt, buf, off)[0]
+
+
+def _rle_decode_row(buf: bytes, pos: int, n_channels: int):
+    """Декодирует один RLE-спектр v3. Возвращает (tuple_counts, new_pos)."""
+    spec: list[int] = []
+    while len(spec) < n_channels:
+        if pos + 2 > len(buf):
+            raise ValueError(f"ASWF: RLE: EOF при декодировании спектра (pos={pos})")
+        v = struct.unpack_from("<H", buf, pos)[0]
+        pos += 2
+        if v < 0x8000:
+            spec.append(v)
+        elif v < 0xFFFF:
+            spec.extend([0] * (v & 0x7FFF))
+        else:
+            raise ValueError("ASWF: RLE: зарезервированное значение 0xFFFF")
+    return tuple(spec[:n_channels]), pos
+
+
 def load_aswf(path, *, max_slices: int | None = None) -> Spectrogram:
     path = Path(path)
     with open(path, "rb") as f:
-        # Чтение сигнатуры и длины заголовка
         head = f.read(8)
-        # #191/P1-aswf-1: файл короче 8 байт → внятная ошибка вместо struct.error.
         if len(head) < 8:
             raise ValueError(f"ASWF: файл обрезан (< 8 байт): {path}")
-        magic = head[:4]
-        if magic != b"ASWF":
+        if head[:4] != b"ASWF":
             raise ValueError(f"ASWF: неверная сигнатура файла: {path}")
         header_len = struct.unpack("<I", head[4:8])[0]
 
-        # Чтение и парсинг заголовка
         raw_header = f.read(header_len)
-        # #191/P1-aswf-2: файл обрезан посреди заголовка → UnicodeDecodeError/JSONDecodeError
-        # превращаем в диагностичный ValueError вместо сырого traceback.
         try:
-            header_raw = raw_header.split(b"\x00")[0].strip()
-            hdr = json.loads(header_raw.decode("utf-8"))
+            hdr = json.loads(raw_header.split(b"\x00")[0].strip().decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise ValueError(f"ASWF: повреждённый/обрезанный заголовок в {path}: {exc}") from exc
+            raise ValueError(f"ASWF: повреждённый/обрезанный заголовок {path}: {exc}") from exc
 
-        # Проверка числа каналов
         n_channels = int(hdr.get("channels") or 0)
         if n_channels <= 0:
             raise ValueError(f"ASWF: неверное число каналов: {n_channels}")
-
-        # Задача #180: v2-раскладка — row_stride из header (может включать per-row row_time поле).
-        # Для v1 header row_stride отсутствует → fallback на n_channels*2 (совместимо).
+        version  = int(hdr.get("version") or 1)
+        interval = float(hdr.get("interval_sec") or 0.0)
         counts_bytes = n_channels * 2
-        row_stride = int(hdr.get("row_stride") or counts_bytes)
-        if row_stride < counts_bytes:
+
+        # --- Задача #197: baseline section (v3) ---
+        baseline_arr = None
+        baseline_bytes = 0
+        if version >= 3 and "baseline" in hdr:
+            bi = hdr["baseline"]
+            bl_count = int(bi.get("count") or n_channels)
+            baseline_bytes = bl_count * 4
+            bl_raw = f.read(baseline_bytes)
+            if len(bl_raw) < baseline_bytes:
+                warnings.warn(f"ASWF: {path}: baseline section обрезан ({len(bl_raw)} < {baseline_bytes} байт)")
+                baseline_bytes = len(bl_raw)
+            else:
+                baseline_arr = np.frombuffer(bl_raw, dtype="<u4").astype(np.int64)
+
+        f.seek(0, 2)
+        file_size = f.tell()
+        data_off  = 8 + header_len + baseline_bytes
+
+        # --- row_fields (v3) vs row_time (v2) vs v1 ---
+        use_fields = version >= 3 and "row_fields" in hdr
+        compressed = use_fields and bool(hdr.get("compressed", False))
+
+        if use_fields:
+            all_fields = {fd["name"]: fd for fd in hdr["row_fields"]}
+            # non-spectrum fields sorted by offset
+            nonspec = sorted(
+                [(fd["name"], fd) for fd in hdr["row_fields"] if fd["name"] != "spectrum"],
+                key=lambda x: int(x[1]["offset"]))
+            row_stride = int(hdr.get("row_stride") or 0)
+        else:
+            all_fields = {}
+            nonspec    = []
+            row_stride = int(hdr.get("row_stride") or counts_bytes)
+
+        if not compressed and row_stride < counts_bytes:
             raise ValueError(f"ASWF: row_stride={row_stride} < counts_bytes={counts_bytes}")
 
-        # Определение размера данных
-        data_off = 8 + header_len
-        f.seek(0, 2)  # EOF
-        file_size = f.tell()
-        n_rows_file = (file_size - data_off) // row_stride
-        # #191/P1-aswf-3: неполная последняя строка (краш прибора) — логируем потерю.
-        _tail = (file_size - data_off) % row_stride
-        if _tail:
-            warnings.warn(
-                f"ASWF: {path}: {_tail} байт неполного последнего интервала отброшены "
-                f"(файл усечён крашем прибора?)"
-            )
+        # --- row count ---
+        if compressed:
+            n_rows_file = None
+        else:
+            n_rows_file = (file_size - data_off) // row_stride
+            _tail = (file_size - data_off) % row_stride
+            if _tail:
+                warnings.warn(f"ASWF: {path}: {_tail} байт неполного последнего интервала отброшены")
 
-        # Задача #180: saved_rows==0 (прошивка v2 не обновила метку при выгрузке) → берём n_rows_file.
         saved_rows = hdr.get("saved_rows")
         if saved_rows is None or int(saved_rows) <= 0:
             n_rows = n_rows_file
         else:
-            n_rows = min(int(saved_rows), n_rows_file)
+            n_rows = int(saved_rows)
+            if n_rows_file is not None:
+                n_rows = min(n_rows, n_rows_file)
 
-        if max_slices is not None:
+        if max_slices is not None and n_rows is not None:
             n_rows = min(n_rows, max_slices)
 
-        if n_rows < 1:
-            raise ValueError(f"ASWF: нет строк данных: {path}")
-
-        # Задача #180: читаем row_stride байт на строку; counts — первые counts_bytes байт строки.
         f.seek(data_off)
-        raw_rows = np.frombuffer(f.read(n_rows * row_stride), dtype=np.uint8).reshape(n_rows, row_stride)
-        counts = np.ascontiguousarray(raw_rows[:, :counts_bytes]).view("<u2").reshape(n_rows, n_channels).astype(np.uint16, copy=True)
+        payload = f.read()
 
-        # Задача #180: real_time_s per-row — из row_time поля v2 (offset+dtype в pardefines),
-        # для v1 fallback на interval_sec. time_offsets_s = кумулятивная сумма длительностей.
-        interval = float(hdr.get("interval_sec") or 0.0)
-        rt_meta = hdr.get("row_time") or None
-        if rt_meta and row_stride > counts_bytes:
-            off = int(rt_meta.get("offset") or counts_bytes)
-            npdt = "<u4" if str(rt_meta.get("dtype") or "uint16") == "uint32" else "<u2"
-            sz = 4 if npdt == "<u4" else 2
-            real_time_s = np.ascontiguousarray(raw_rows[:, off:off+sz]).view(npdt).ravel().astype(np.float64)
+    # ========================= UNCOMPRESSED =========================
+    if not compressed:
+        if not n_rows or n_rows < 1:
+            raise ValueError(f"ASWF: нет строк данных: {path}")
+        raw_rows = (np.frombuffer(payload[:n_rows * row_stride], dtype=np.uint8)
+                    .reshape(n_rows, row_stride))
+        counts = (np.ascontiguousarray(raw_rows[:, :counts_bytes])
+                  .view("<u2").reshape(n_rows, n_channels).astype(np.uint16, copy=True))
+
+        # duration
+        if use_fields and "duration" in all_fields:
+            fd = all_fields["duration"]
+            off = int(fd["offset"]); sz = _DTYPE_SIZE.get(fd.get("dtype", "uint16"), 2)
+            npdt = "<u4" if sz == 4 else "<u2"
+            real_time_s = (np.ascontiguousarray(raw_rows[:, off:off+sz])
+                           .view(npdt).ravel().astype(np.float64))
         else:
-            real_time_s = np.full(n_rows, interval if interval > 0 else np.nan, dtype=np.float64)
-        time_offsets_s = np.zeros(n_rows, dtype=np.float64)
-        if n_rows > 1:
-            time_offsets_s[1:] = np.cumsum(real_time_s[:-1])
-        live_time_s = real_time_s.copy()
+            rt_meta = hdr.get("row_time") or None
+            if rt_meta and row_stride > counts_bytes:
+                off  = int(rt_meta.get("offset") or counts_bytes)
+                npdt = "<u4" if str(rt_meta.get("dtype","uint16")) == "uint32" else "<u2"
+                sz   = 4 if npdt == "<u4" else 2
+                real_time_s = (np.ascontiguousarray(raw_rows[:, off:off+sz])
+                               .view(npdt).ravel().astype(np.float64))
+            else:
+                real_time_s = np.full(n_rows, interval if interval > 0 else np.nan, dtype=np.float64)
 
-        # Калибровка
-        cal = hdr.get("calibration")
-        if cal:
-            calibration = Calibration(coeffs=np.asarray(cal, dtype=np.float64))
-        else:
-            calibration = Calibration(coeffs=np.array([0.0, 1.0], dtype=np.float64))
+        # timestamp (v3)
+        timestamps = None
+        if use_fields and "timestamp" in all_fields:
+            fd = all_fields["timestamp"]; off = int(fd["offset"])
+            timestamps = (np.ascontiguousarray(raw_rows[:, off:off+4])
+                          .view("<u4").ravel().astype(np.float64))
 
-        # Время начала записи
-        t0_iso = _epoch_s_to_iso(hdr.get("started_at"))
+        # GPS (v3)
+        gps_track = None
+        if use_fields and "latitude" in all_fields and "longitude" in all_fields:
+            lat_fd = all_fields["latitude"]; lon_fd = all_fields["longitude"]
+            lats = (np.ascontiguousarray(raw_rows[:, int(lat_fd["offset"]):int(lat_fd["offset"])+4])
+                    .view("<f4").ravel().astype(np.float64))
+            lons = (np.ascontiguousarray(raw_rows[:, int(lon_fd["offset"]):int(lon_fd["offset"])+4])
+                    .view("<f4").ravel().astype(np.float64))
+            gps_track = np.column_stack([lats, lons])
+
+        # dose_rate_usv_h (v3)
+        dose_rate_usv_h = None
+        if use_fields and "dose_rate_usv_h" in all_fields:
+            fd = all_fields["dose_rate_usv_h"]; off = int(fd["offset"])
+            dose_rate_usv_h = (np.ascontiguousarray(raw_rows[:, off:off+4])
+                               .view("<f4").ravel().astype(np.float64))
+
+    # ========================== COMPRESSED ==========================
+    else:
+        rows_counts: list = []
+        field_vals: dict[str, list] = {name: [] for name, _ in nonspec}
+        pos = 0
+        while pos < len(payload):
+            if max_slices is not None and len(rows_counts) >= max_slices:
+                break
+            spec_tuple, pos = _rle_decode_row(payload, pos, n_channels)
+            rows_counts.append(spec_tuple)
+            for name, fd in nonspec:
+                dtype = fd.get("dtype", "uint16")
+                field_vals[name].append(_read_scalar(payload, pos, dtype))
+                pos += _DTYPE_SIZE.get(dtype, 2)
+
+        n_rows = len(rows_counts)
+        if n_rows < 1:
+            raise ValueError(f"ASWF: нет строк данных (compressed): {path}")
+        counts = np.array(rows_counts, dtype=np.uint16)
+
+        dur_list = field_vals.get("duration")
+        real_time_s = (np.array(dur_list, dtype=np.float64) if dur_list
+                       else np.full(n_rows, interval if interval > 0 else np.nan, dtype=np.float64))
+
+        ts_list = field_vals.get("timestamp")
+        timestamps = np.array(ts_list, dtype=np.float64) if ts_list else None
+
+        lat_list = field_vals.get("latitude")
+        lon_list = field_vals.get("longitude")
+        gps_track = (np.column_stack([lat_list, lon_list])
+                     if lat_list and lon_list else None)
+
+        dose_list = field_vals.get("dose_rate_usv_h")
+        dose_rate_usv_h = np.array(dose_list, dtype=np.float64) if dose_list else None
+
+    # ========================= TIME AXIS ===========================
+    real_time_s_adj = real_time_s.copy()
+    if interval > 0:
+        real_time_s_adj[real_time_s_adj == 0.0] = interval
+
+    time_offsets_s = np.zeros(n_rows, dtype=np.float64)
+    if n_rows > 1:
+        time_offsets_s[1:] = np.cumsum(real_time_s_adj[:-1])
+
+    # override with per-row absolute timestamps where valid (v3)
+    if timestamps is not None:
+        started_at = float(hdr.get("started_at") or 0.0)
+        if started_at > 0:
+            valid = (timestamps > 0) & np.isfinite(timestamps)
+            if valid.any():
+                time_offsets_s[valid] = timestamps[valid] - started_at
+
+    live_time_s = real_time_s_adj.copy()
+
+    # ====================== CALIBRATION / t0 =======================
+    cal = hdr.get("calibration")
+    calibration = (Calibration(coeffs=np.asarray(cal, dtype=np.float64)) if cal
+                   else Calibration(coeffs=np.array([0.0, 1.0], dtype=np.float64)))
+    t0_iso = _epoch_s_to_iso(hdr.get("started_at"))
 
     return Spectrogram(
         counts=counts,
@@ -115,5 +245,8 @@ def load_aswf(path, *, max_slices: int | None = None) -> Spectrogram:
         real_time_s=real_time_s,
         live_time_s=live_time_s,
         t0_iso=t0_iso,
-        source_path=str(path)
+        source_path=str(path),
+        baseline=baseline_arr,
+        dose_rate_usv_h=dose_rate_usv_h,
+        gps_track=gps_track,
     )
