@@ -701,16 +701,16 @@ def test_axis_labels_follow_viewer_side(app):
         en = [it for it in texts if "кэВ" in it.text]
         tm = [it for it in texts if "кэВ" not in it.text]
         return tm, en
-    tm0, en0 = split()    # дефолт azimuth=-60: время y<0, энергия x>0
+    tm0, en0 = split()    # #205 azimuth=45: камера в (+X,+Y) → время y>0, энергия x>0
     assert tm0 and en0
-    assert all(it.pos[1] < 0 for it in tm0)
+    assert all(it.pos[1] > 0 for it in tm0)
     assert all(it.pos[0] > 0 for it in en0)
-    # поворот в противоположный квадрант: cos(120)<0 -> энергия x<0, sin(120)>0 -> время y>0
-    v.setCameraPosition(azimuth=120, elevation=35)
+    # поворот в противоположный квадрант (-X,-Y): cos(225)<0, sin(225)<0
+    v.setCameraPosition(azimuth=225, elevation=35)
     v._maybe_reorient_labels()
     tm1, en1 = split()
     assert tm1 and en1
-    assert all(it.pos[1] > 0 for it in tm1)
+    assert all(it.pos[1] < 0 for it in tm1)
     assert all(it.pos[0] < 0 for it in en1)
 
 

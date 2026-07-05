@@ -25,6 +25,11 @@ dist/
 *.spec
 # #186: рецепт сборки exe (#184/#185) версионируется — исключение из *.spec
 !waterfall-viewer.spec
+# Релизные архивы (грузятся в GitHub Releases, не версионируются в git)
+*.zip
+# Артефакты прогонов (build_log.txt от PyInstaller, вывод pytest)
+build_log.txt
+test_out.txt
 
 # Сборка пакета (pip wheel / setuptools build)
 *.egg-info/

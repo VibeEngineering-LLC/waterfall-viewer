@@ -28,7 +28,7 @@ from awf.ui.knobs import AdjustPanel
 from awf.ui.cyclebutton import CycleButton   # Задача #74: переключатель-перебор вместо QComboBox
 from awf.ui.style import APP_QSS
 from awf.ui import i18n          # Задача #106: переключение языка интерфейса RU↔EN
-from awf.ui.help_dialogs import show_help, show_about   # Задача #182: диалоги Помощь/О программе
+from awf.ui.help_dialogs import show_help, show_about, check_for_updates   # Задача #182/#202
 from awf.ui.i18n import tr       # короткий доступ к переводу: tr("Файл") -> "File" / "Файл"
 
 # Задача #40: организация/приложение для QSettings (запоминание расположения окон между
@@ -344,11 +344,16 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._register_i18n(act_help.setText, "Справка…")
                 m.addAction(act_help)
             elif key == "about":
-                # Задача #182: пункт «О программе…» — версия, стек, лицензия, ссылка на репо.
+                # Задача #182: пункт «О программе…»
                 act_about = QtGui.QAction("О программе…", self)
                 act_about.triggered.connect(lambda: show_about(self))
                 self._register_i18n(act_about.setText, "О программе…")
                 m.addAction(act_about)
+                # Задача #202: пункт «Проверить обновления»
+                act_upd = QtGui.QAction("Проверить обновления", self)
+                act_upd.triggered.connect(lambda: check_for_updates(self))
+                self._register_i18n(act_upd.setText, "Проверить обновления")
+                m.addAction(act_upd)
             else:
                 stub = QtGui.QAction("— наполняется позже —", self)
                 stub.setEnabled(False)   # каркас: действие будет подключено позже
