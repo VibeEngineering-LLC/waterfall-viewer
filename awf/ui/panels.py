@@ -589,7 +589,9 @@ class SlicePanel(QtWidgets.QWidget):
                     maxes.append(float(arr.max()))
         if not maxes:
             return
-        vb.setYRange(0.0, max(maxes) * 1.05, padding=0)
+        y_top = max(maxes) * 1.05
+        vb.setYRange(0.0, y_top, padding=0)
+        vb.setLimits(yMax=y_top * 4, maxYRange=y_top * 4)  # Задача #196: лимит Y сверху
 
     def _lock_views_to_data(self) -> None:
         """Задача #89: привязать X-домен графиков к экстенту данных, чтобы они не «уезжали»
@@ -614,6 +616,7 @@ class SlicePanel(QtWidgets.QWidget):
                 vb.setLimits(yMin=0.0)
                 if tmax > tmin:
                     vb.setLimits(xMin=tmin, xMax=tmax, maxXRange=tmax - tmin)
+        self._expand_series_y_if_needed()  # Задача #196: Y сверху нижнего графика
 
     def reset_zoom(self) -> None:
         """Задача #100: сброс зума/панорамы графиков среза и времени к полному виду данных.
@@ -661,12 +664,18 @@ class SlicePanel(QtWidgets.QWidget):
         disp = np.asarray(smooth_by_mode(disp, self._smooth, axis=-1), dtype=np.float64)
         if not self._spec_log:
             vb.setLimits(yMin=0.0)
+            if disp.size and float(disp.max()) > 0:
+                y_top = float(disp.max())
+                vb.setLimits(yMax=y_top * 2, maxYRange=y_top * 2)  # Задача #196
             return
         pos = disp[disp > 0.0]
         # Задача #166: пол в лог-режиме — 10-й перцентиль pos (не min): ВЭ-выбросы после
         # ε-нормировки тянут абсолютный min на ~1 декаду ниже плотной части кривой.
         floor = float(np.percentile(pos, 10.0)) if pos.size else 1e-3
         vb.setLimits(yMin=float(np.log10(floor)))
+        if pos.size:  # Задача #196: лимит Y сверху (лог)
+            y_top = float(np.log10(float(pos.max()))) + 1.0
+            vb.setLimits(yMax=y_top, maxYRange=y_top - float(np.log10(floor)) + 1.0)
 
     def set_smoothing(self, mode: int) -> None:
         """Режим сглаживания спектра по энергии (Задача #163): 0/SMA/WMA; перерисовать кривую."""
