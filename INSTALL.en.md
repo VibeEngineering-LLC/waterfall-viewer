@@ -10,6 +10,7 @@ on Windows. No Python experience required.
 
 ## Table of Contents
 
+0. [Option 0: Pre-built exe (no Python required)](#option-0-pre-built-exe)
 1. [What you'll end up with](#what-youll-end-up-with)
 2. [System requirements](#system-requirements)
 3. [Step 1: Install Python](#step-1-install-python)
@@ -19,6 +20,24 @@ on Windows. No Python experience required.
 7. [Step 5: Open a spectrogram and verify](#step-5-open-a-spectrogram-and-verify)
 8. [Tests](#tests)
 9. [Troubleshooting](#troubleshooting)
+
+---
+
+## Option 0: Pre-built exe
+
+**The easiest way.** No Python installation required.
+
+1. Open the [Releases](https://github.com/VibeEngineering-LLC/waterfall-viewer/releases/latest) page.
+2. Download `waterfall-viewer-vX.Y.Z-win64.zip`.
+3. Extract the archive to any folder.
+4. Run `waterfall-viewer.exe` inside the extracted folder.
+
+**Requirements:** Windows 10/11 x64, GPU with OpenGL 3.x support (for the 3D waterfall tab).
+
+> If Windows SmartScreen blocks the launch — click "More info" → "Run anyway".
+> The executable is not signed with a publisher certificate.
+
+Steps 1–5 below are only needed if you want to run **from source** (with Python).
 
 ---
 
