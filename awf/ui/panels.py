@@ -30,6 +30,20 @@ class _PanViewBox(pg.ViewBox):
             ev.ignore()
 
 
+class _SeriesPanViewBox(pg.ViewBox):
+    """Задача #199: нижний временной график — LMB pan только по X, RMB игнорируется."""
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.setMouseMode(pg.ViewBox.PanMode)
+
+    def mouseDragEvent(self, ev, axis=None):  # noqa: D401
+        if ev.button() == QtCore.Qt.MouseButton.LeftButton:
+            super().mouseDragEvent(ev, axis=0)  # axis=0 → только X-пан, Y не сдвигается
+        else:
+            ev.ignore()
+
+
 class HeatmapPanel(QtWidgets.QWidget):
     """2D-карта Время(ось Y)×Энергия/канал(ось X). Цвет = log(1+counts). Прямоугольная выборка
     (pg.RectROI) задаёт окно [t_lo:t_hi, ch_lo:ch_hi] в ПОЛНЫХ индексах исходной матрицы.
@@ -417,7 +431,7 @@ class SlicePanel(QtWidgets.QWidget):
         self._spectrum_plot.setLabel("left", tr("Отсчёты"))
         self._spectrum_plot.showGrid(x=True, y=True, alpha=0.3)
         layout.addWidget(self._spectrum_plot)
-        self._series_plot = pg.PlotWidget(viewBox=_PanViewBox())  # Задача #199: LMB pan + wheel zoom как у спектра
+        self._series_plot = pg.PlotWidget(viewBox=_SeriesPanViewBox())  # Задача #199: LMB pan только X, wheel zoom
         self._series_plot.setLabel("bottom", tr("Время, с"))
         self._series_plot.setLabel("left", tr("Отсчёты в полосе"))
         self._series_plot.showGrid(x=True, y=True, alpha=0.3)
