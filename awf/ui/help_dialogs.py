@@ -79,8 +79,15 @@ _ABOUT_EN = (
 )
 
 
+def _ver_tuple(s: str) -> tuple:
+    try:
+        return tuple(int(x) for x in s.split("."))
+    except ValueError:
+        return (0,)
+
+
 def _check_updates(parent: QtWidgets.QWidget | None, current_ver: str) -> None:
-    """Zadacha #200: proverit nalichie novoj versii na GitHub Releases (timeout 5 s)."""
+    """Задача #200/#202: проверить наличие новой версии на GitHub Releases (timeout 5 s)."""
     try:
         req = urllib.request.Request(_RELEASES_API, headers={"User-Agent": "waterfall-viewer"})
         with urllib.request.urlopen(req, timeout=5) as resp:
@@ -96,7 +103,7 @@ def _check_updates(parent: QtWidgets.QWidget | None, current_ver: str) -> None:
         )
         return
 
-    if tag == current_ver:
+    if _ver_tuple(tag) <= _ver_tuple(current_ver):
         QtWidgets.QMessageBox.information(
             parent,
             tr("Проверка обновлений"),
@@ -133,6 +140,11 @@ def show_about(parent: QtWidgets.QWidget | None = None) -> None:
     box.exec()
     if box.clickedButton() is upd_btn:
         _check_updates(parent, _APP_VERSION)
+
+
+def check_for_updates(parent: QtWidgets.QWidget | None = None) -> None:
+    """Публичная обёртка — вызов из меню «О программе» (Задача #202)."""
+    _check_updates(parent, _APP_VERSION)
 
 
 # ---------- Помощь (большое окно с оглавлением) ----------

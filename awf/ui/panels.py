@@ -525,6 +525,10 @@ class SlicePanel(QtWidgets.QWidget):
             self._dose_unit = "mSv/h"
         self._draw_dose_overlay()
         self._lock_views_to_data()    # Задача #89: графики не «уезжают» за окно данных
+        # Задача #204: pyqtgraph применяет autoRange при первом рендере (после show()), переопределяя
+        # setYRange из _lock_views_to_data. singleShot(0) откладывает повторный вызов до следующего
+        # события Qt — уже после первого paint — гарантируя правильный начальный Y-масштаб.
+        QtCore.QTimer.singleShot(0, self._expand_series_y_if_needed)
 
     def update_spectrogram(self, sg) -> None:
         """Задача #161: лёгкое обновление данных (toggle фона/нормализации #96/#156) — БЕЗ
@@ -604,18 +608,23 @@ class SlicePanel(QtWidgets.QWidget):
         vb = self._series_plot.getViewBox()
         if vb is None:
             return
-        maxes = []
-        for raw in (self._raw_series, self._raw_ewin):
-            if raw is not None:
-                _, arr_raw = raw
-                arr = np.asarray(self._series_to_unit(arr_raw), dtype=np.float64)
-                if arr.size:
-                    maxes.append(float(arr.max()))
-        if not maxes:
+        # Масштаб по ROI band (_raw_series) — она основная. Energy window вспомогательная
+        # и не должна раздувать Y-ось при случайно больших значениях.
+        if self._raw_series is None:
             return
-        y_top = max(maxes) * 1.05
+        _, arr_raw = self._raw_series
+        arr = np.asarray(self._series_to_unit(arr_raw), dtype=np.float64)
+        arr = arr[np.isfinite(arr)]
+        if not arr.size:
+            return
+        y_top = float(arr.max()) * 1.05
+        vb.disableAutoRange()  # гарантированно отключить autoRange перед setYRange
+        # Задача #204: setLimits ДО setYRange. Метод вызывается дважды за загрузку — сначала с
+        # полной полосой (band 0..n_ch), затем singleShot с ROI-полосой (центр, меньше). Старый
+        # minYRange от полной полосы не давал setYRange ужать диапазон, а последующий maxYRange
+        # прижимал Y к потолку y_top*4. Ставим новые лимиты первыми — они и управляют ужатием.
+        vb.setLimits(yMax=y_top * 4, maxYRange=y_top * 4, minYRange=y_top)  # Задача #203: нельзя уменьшить Y-диапазон
         vb.setYRange(0.0, y_top, padding=0)
-        vb.setLimits(yMax=y_top * 4, maxYRange=y_top * 4)  # Задача #196: лимит Y сверху
 
     def _lock_views_to_data(self) -> None:
         """Задача #89: привязать X-домен графиков к экстенту данных, чтобы они не «уезжали»
@@ -639,7 +648,10 @@ class SlicePanel(QtWidgets.QWidget):
                 # независим и не затрагивается.
                 vb.setLimits(yMin=0.0)
                 if tmax > tmin:
-                    vb.setLimits(xMin=tmin, xMax=tmax, maxXRange=tmax - tmin)
+                    span = tmax - tmin
+                    vb.setLimits(xMin=tmin, xMax=tmax,
+                                 maxXRange=span, minXRange=max(1.0, span / 100.0))
+                    vb.setXRange(tmin, tmax, padding=0)  # Задача #201: нач. вид = весь диапазон = мин. зум
         self._expand_series_y_if_needed()  # Задача #196: Y сверху нижнего графика
 
     def reset_zoom(self) -> None:

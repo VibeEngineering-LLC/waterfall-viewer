@@ -233,7 +233,7 @@ class Waterfall3DView(gl.GLViewWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setBackgroundColor(pg.mkColor(15, 15, 20))
-        self.setCameraPosition(distance=300, elevation=30, azimuth=-45)  # #178-fix3: изометрия
+        self.setCameraPosition(distance=300, elevation=30, azimuth=-45)  # #205: 0,0 наверху (center задаётся при загрузке)
         self._surface = None          # текущий GLSurfacePlotItem (или None)
         self._surface_on = True       # Задача #143: тумблер видимости рельефа-«простыни образца»
         self._surface_style = "palette"  # Задача #145: стиль простыни образца (palette|solid|wire)
@@ -481,7 +481,11 @@ class Waterfall3DView(gl.GLViewWidget):
         if is_new:
             self._seg_bounds_sec = []  # #178-fix1a: старые сегменты не переносить на новый файл
             span = float(max(nt, nc, 10))
-            self.setCameraPosition(distance=span * 1.6)
+            # Задача #205: azimuth=45 → камера в (+X,+Y) квадранте → (0,0) = дальний = наверху экрана
+            self.setCameraPosition(
+                distance=span * 1.6,
+                azimuth=45,
+            )
         self._rebuild_grid()
         # 7) переразместить активные секущие плоскости/подписи/маркеры нуклидов на плоскостях
         self._refresh_all_planes()
