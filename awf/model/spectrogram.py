@@ -150,13 +150,28 @@ class Spectrogram:
 
     def counts_in_unit(self, mode: str) -> np.ndarray:
         """Полноразмерная матрица в выбранных единицах (Задача #44): 'counts' -> отсчёты как есть,
-        'cps' -> по-срезовая скорость counts[k]/live_time_s[k] (срез с live_time<=0 -> 0)."""
+        'cps' -> по-срезовая скорость counts[k]/live_time_s[k] (срез с live_time<=0 -> 0).
+        Кешируется по mode (Задача P-2): self.counts не переприсваивается после __init__,
+        поэтому один расчёт на объект достаточен — устраняет повторные float64-копии
+        (~57 МБ на реальном файле) при нескольких вызовах за один rebuild."""
+        cache = getattr(self, "_counts_in_unit_cache", None)
+        if cache is None:
+            cache = {}
+            self._counts_in_unit_cache = cache
+        cached = cache.get(mode)
+        if cached is not None:
+            return cached
+
         base = self.counts.astype(np.float64)
         if mode != "cps":
-            return base
-        lt = np.asarray(self.live_time_s, dtype=np.float64)
-        safe = np.where(lt > 0.0, lt, np.inf)   # деление на inf -> 0 для «мёртвых» срезов
-        return base / safe[:, None]
+            result = base
+        else:
+            lt = np.asarray(self.live_time_s, dtype=np.float64)
+            safe = np.where(lt > 0.0, lt, np.inf)   # деление на inf -> 0 для «мёртвых» срезов
+            result = base / safe[:, None]
+
+        cache[mode] = result
+        return result
 
     def trimmed_channels(self, drop_last: int = 1) -> "Spectrogram":
         """Вернуть новую спектрограмму без последних drop_last каналов (Замечание IV-R5:
