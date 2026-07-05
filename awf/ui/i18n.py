@@ -211,6 +211,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Отсчёты (выс.)": "Counts (height)",
         "Файл не загружен": "No file loaded",
         "Энергоокно:": "Energy window:",
+        "— откл —": "— off —",
+        "— вручную —": "— manual —",
         "лог Y": "log Y",
         "Сброс зума": "Reset zoom",
         "Вернуть полный вид графиков среза и времени":
