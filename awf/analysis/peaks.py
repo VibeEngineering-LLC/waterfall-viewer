@@ -1065,9 +1065,16 @@ def find_peaks(
             b = float(b_left + (b_right - b_left) * (ch - c_left) / (c_right - c_left))
         else:
             b = 0.5 * (b_left + b_right)
-        net_height = max(counts[ch] - b, 0.0)
-        if net_height <= 0:
+        net_height = counts[ch] - b
+        if net_height <= 0.0:
+            # #188: пик прошёл Currie significance (significance > sigma_arr), но локальный
+            # фон из плеч превысил counts[ch]. При SNIP-режиме counts уже net-спектр —
+            # b является артефактом двойного вычета → fallback на counts[ch].
+            # В gross-режиме (snip_iterations==0) канал реально ниже фона → skip.
+            net_height = float(counts[ch]) if snip_iterations != 0 else 0.0
+        if net_height <= 0.0:
             continue
+        net_height = max(net_height, 0.0)
         # Спайк-фильтр (порт F-139, search.py:413–431)
         if spike_min_fwhm_frac > 0.0 and net_height >= 10.0 and local_fwhm >= 4.0:
             half_level = b + 0.5 * net_height

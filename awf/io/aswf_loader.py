@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import struct
 import json
+import warnings
 import numpy as np
 from awf.model.spectrogram import Calibration, Spectrogram
 
@@ -20,6 +21,9 @@ def load_aswf(path, *, max_slices: int | None = None) -> Spectrogram:
     with open(path, "rb") as f:
         # Чтение сигнатуры и длины заголовка
         head = f.read(8)
+        # #191/P1-aswf-1: файл короче 8 байт → внятная ошибка вместо struct.error.
+        if len(head) < 8:
+            raise ValueError(f"ASWF: файл обрезан (< 8 байт): {path}")
         magic = head[:4]
         if magic != b"ASWF":
             raise ValueError(f"ASWF: неверная сигнатура файла: {path}")
@@ -27,8 +31,13 @@ def load_aswf(path, *, max_slices: int | None = None) -> Spectrogram:
 
         # Чтение и парсинг заголовка
         raw_header = f.read(header_len)
-        header_raw = raw_header.split(b"\x00")[0].strip()
-        hdr = json.loads(header_raw.decode("utf-8"))
+        # #191/P1-aswf-2: файл обрезан посреди заголовка → UnicodeDecodeError/JSONDecodeError
+        # превращаем в диагностичный ValueError вместо сырого traceback.
+        try:
+            header_raw = raw_header.split(b"\x00")[0].strip()
+            hdr = json.loads(header_raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError(f"ASWF: повреждённый/обрезанный заголовок в {path}: {exc}") from exc
 
         # Проверка числа каналов
         n_channels = int(hdr.get("channels") or 0)
@@ -45,7 +54,15 @@ def load_aswf(path, *, max_slices: int | None = None) -> Spectrogram:
         # Определение размера данных
         data_off = 8 + header_len
         f.seek(0, 2)  # EOF
-        n_rows_file = (f.tell() - data_off) // row_stride
+        file_size = f.tell()
+        n_rows_file = (file_size - data_off) // row_stride
+        # #191/P1-aswf-3: неполная последняя строка (краш прибора) — логируем потерю.
+        _tail = (file_size - data_off) % row_stride
+        if _tail:
+            warnings.warn(
+                f"ASWF: {path}: {_tail} байт неполного последнего интервала отброшены "
+                f"(файл усечён крашем прибора?)"
+            )
 
         # Задача #180: saved_rows==0 (прошивка v2 не обновила метку при выгрузке) → берём n_rows_file.
         saved_rows = hdr.get("saved_rows")

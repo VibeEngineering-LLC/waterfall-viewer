@@ -393,6 +393,30 @@ class Waterfall3DView(gl.GLViewWidget):
             z_int = z_int[:, :keep]
             ch_centers = ch_centers[:keep]
         self._z_counts_int = z_int
+        # #192: подавление одиночных временных игл (артефакт LOD method="max" — одиночный
+        # граничный срез с аномальным счётом захватывается как max всего LOD-бина и стоит
+        # иглой над соседними бинами). Трёхточечная медиана по оси t: если бин > 6×median
+        # (prev, self, next) → замена медианой. Два смежных ненулевых бина = настоящий
+        # источник, median = высокое → не подавляется. Граничные строки (строка 0: prev=self,
+        # строка nt-1: next=self) при равенстве median==self → никогда не подавляются.
+        if z_counts.shape[0] >= 3:
+            _pr = np.concatenate([z_counts[:1], z_counts[:-1]], axis=0)
+            _nx = np.concatenate([z_counts[1:], z_counts[-1:]], axis=0)
+            _med3 = np.median(np.stack([_pr, z_counts, _nx], axis=0), axis=0)
+            _spike = z_counts > (6.0 * np.maximum(_med3, 1e-10))
+            if _spike.any():
+                z_counts = np.where(_spike, _med3, z_counts).astype(np.float32)
+        # #193: подавление одиночных энергетических игл на правом краю спектра. Аналог #192
+        # но по оси E (axis=1). Порог 10× консервативнее 6× по t: реальные фотопики NaI
+        # span ≥6 LOD-бинов по E → median высокий → не давится. Одиночный граничный канал
+        # с аномальным счётом → median(left, spike, 0) = left → подавляется.
+        if z_counts.shape[1] >= 3:
+            _epr = np.concatenate([z_counts[:, :1], z_counts[:, :-1]], axis=1)
+            _enx = np.concatenate([z_counts[:, 1:], z_counts[:, -1:]], axis=1)
+            _emed3 = np.median(np.stack([_epr, z_counts, _enx], axis=0), axis=0)
+            _espike = z_counts > (10.0 * np.maximum(_emed3, 1e-10))
+            if _espike.any():
+                z_counts = np.where(_espike, _emed3, z_counts).astype(np.float32)
         # 1b) сглаживание спектра по энергетической оси (axis=1) — Замечание IV-R4 / #163
         z_counts = smooth_by_mode(z_counts, self._smooth, axis=1)
         # 1c) сглаживание по оси времени (axis=0) — Задача #172/#174
@@ -1129,6 +1153,10 @@ class Waterfall3DView(gl.GLViewWidget):
         if self._sg is None:
             return []
         sg = self._sg_analysis if self._sg_analysis is not None else self._sg
+        # #190/F11: кэш — пики не зависят от положения секущих плоскостей/регулировок вида.
+        _ck = (id(sg), self._peak_sigma)
+        if getattr(self, '_peaks_cache_key', None) == _ck:
+            return self._peaks_cache
         counts = np.asarray(sg.total_spectrum(), dtype=np.float64)
         energies = np.asarray(sg.energies(), dtype=np.float64)
         # Задача #120: автокалибровка модели разрешения под реальный детектор (один раз —
@@ -1152,8 +1180,11 @@ class Waterfall3DView(gl.GLViewWidget):
         # Поиск идёт по полному спектру, но выше _MAX_ENERGY_KEV ни рельеф, ни сетка не
         # рисуются — значит пик там не нужен (в таблице всплывал «мусорный» 3345 кэВ).
         # Задача #153: снизу — граница _MIN_ENERGY_KEV (50 кэВ), отсекает рентгеновский край.
-        return [pk for pk in peaks
-                if _MIN_ENERGY_KEV <= float(pk.energy) <= _MAX_ENERGY_KEV]
+        result = [pk for pk in peaks
+                  if _MIN_ENERGY_KEV <= float(pk.energy) <= _MAX_ENERGY_KEV]
+        self._peaks_cache_key = _ck
+        self._peaks_cache = result
+        return result
 
     def _found_peak_energies(self) -> list:
         """Задача #114: производное от _found_peaks() — только энергии (кэВ)."""

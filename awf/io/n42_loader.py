@@ -1,5 +1,6 @@
 from __future__ import annotations
 import re
+import warnings
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -84,6 +85,14 @@ def _decode_channel_text(text: str) -> np.ndarray:
     if not text or not text.strip():
         return np.zeros(0, dtype=np.int64)
     toks = np.fromstring(text, dtype=np.float64, sep=" ").astype(np.int64)
+    # #191/P1-n42-2: np.fromstring тихо останавливается на нечисловом/повреждённом токене.
+    # Сравниваем разобранное число токенов с числом слов — расхождение = усечённый/мусорный файл.
+    n_raw = len(text.split())
+    if len(toks) < n_raw:
+        warnings.warn(
+            f"N42: ChannelData повреждён — разобрано {len(toks)} из {n_raw} токенов; "
+            f"хвост спектра потерян (файл усечён?)"
+        )
     return decode_counted_zeroes_vec(toks)
 
 def load_n42(path, *, max_slices: int | None = None) -> Spectrogram:
@@ -97,36 +106,49 @@ def load_n42(path, *, max_slices: int | None = None) -> Spectrogram:
     spectra: list[np.ndarray] = []
 
     # Потоковый разбор. recover=True — терпеть мелкие синтаксические дефекты.
-    context = etree.iterparse(str(path), events=("end",), recover=True, huge_tree=True)
-    for _event, elem in context:
-        tag = _local(elem.tag)
-        if tag == "CoefficientValues":
-            if cal_coeffs_text is None:
-                cal_coeffs_text = (elem.text or "").strip()
-        elif tag == "StartDateTime":
-            start_times.append((elem.text or "").strip())
-        elif tag == "RealTimeDuration":
-            real_times.append((elem.text or "").strip())
-        elif tag == "LiveTimeDuration":
-            live_times.append((elem.text or "").strip())
-        elif tag == "ChannelData":
-            spectra.append(_decode_channel_text(elem.text or ""))
-            if max_slices is not None and len(spectra) >= max_slices:
-                # достигнут лимит — очистить и прекратить
+    # #187: resolve_entities=False + no_network=True → защита от XXE (N42 гуляет между операторами).
+    # #191/P1-n42-1: try/finally → детерминированное закрытие file handle на Windows.
+    context = etree.iterparse(
+        str(path), events=("end",), recover=True, huge_tree=True,
+        resolve_entities=False, no_network=True,
+    )
+    try:
+        for _event, elem in context:
+            tag = _local(elem.tag)
+            if tag == "CoefficientValues":
+                if cal_coeffs_text is None:
+                    cal_coeffs_text = (elem.text or "").strip()
+            elif tag == "StartDateTime":
+                start_times.append((elem.text or "").strip())
+            elif tag == "RealTimeDuration":
+                real_times.append((elem.text or "").strip())
+            elif tag == "LiveTimeDuration":
+                live_times.append((elem.text or "").strip())
+            elif tag == "ChannelData":
+                spectra.append(_decode_channel_text(elem.text or ""))
+                if max_slices is not None and len(spectra) >= max_slices:
+                    # достигнут лимит — очистить и прекратить
+                    elem.clear()
+                    break
+            # Освобождение памяти: после закрытия крупных контейнеров чистим поддерево и
+            # удаляем уже обработанных предыдущих сиблингов (классический паттерн lxml).
+            if tag in ("RadMeasurement", "Spectrum", "RadInstrumentInformation",
+                       "EnergyCalibration", "DerivedData"):
                 elem.clear()
-                break
-        # Освобождение памяти: после закрытия крупных контейнеров чистим поддерево и
-        # удаляем уже обработанных предыдущих сиблингов (классический паттерн lxml).
-        if tag in ("RadMeasurement", "Spectrum", "RadInstrumentInformation",
-                   "EnergyCalibration", "DerivedData"):
-            elem.clear()
-            prev = elem.getprevious()
-            parent = elem.getparent()
-            while prev is not None and parent is not None:
-                del parent[0]
                 prev = elem.getprevious()
-    del context
-
+                parent = elem.getparent()
+                while prev is not None and parent is not None:
+                    del parent[0]
+                    prev = elem.getprevious()
+    finally:
+        # #191/P1-n42-1: del → детерминированный вызов __dealloc__ и закрытие file handle.
+        _err_log = context.error_log
+        del context
+    if _err_log:
+        warnings.warn(
+            f"N42: {len(_err_log)} предупреждений XML-парсера в {path} "
+            f"(файл повреждён или усечён?)"
+        )
     if not spectra:
         raise ValueError(f"N42: в файле не найдено ChannelData: {path}")
 
