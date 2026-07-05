@@ -9,7 +9,7 @@
 
 | Документ | Путь |
 |---|---|
-| Полные проектные инструкции + журнал задач `#1..#193`, `#REL-*`, `#CI-*` | [`docs/dev/CLAUDE_NOTES.md`](docs/dev/CLAUDE_NOTES.md) |
+| Полные проектные инструкции + журнал задач `#1..#193`, `#REL-*`, `#CI-*`, аудит P-2/P-3 | [`docs/dev/CLAUDE_NOTES.md`](docs/dev/CLAUDE_NOTES.md) |
 | Подробный журнал всех задач (200 КБ) | [`docs/dev/TASKS.md`](docs/dev/TASKS.md) |
 | План реализации | [`docs/dev/IMPLEMENTATION_PLAN.md`](docs/dev/IMPLEMENTATION_PLAN.md) |
 | Известные проблемы и совместимость | [`docs/dev/KNOWN_ISSUES.md`](docs/dev/KNOWN_ISSUES.md) |
@@ -25,7 +25,7 @@
 - **Зоны агентов (§12):** это моя зона (скилл `atomspectra-waterfall-viewer-dev`). Чужие зоны
   (ESP32, SpectraVibe `gamma-spectrum-analysis` и т.п.) — read-only / писать промпт владельцу.
 - **Тесты:** `pytest` под headless-Qt — `QT_QPA_PLATFORM=offscreen`, `PYTHONIOENCODING=utf-8`.
-  Полный прогон на момент `#193` — 625 passed (локально, со scipy + sample-файлом).
+  Полный прогон на момент v0.1.2 (аудит P-2/P-3, #172/#173) — 625 passed (локально, со scipy + sample-файлом).
 - **Зависимости:** `scipy` — жёсткая production-зависимость (`awf/analysis/peaks.py` `curve_fit`,
   `awf/analysis/deconvolve.py` `lsq_linear`), прописана в `requirements.txt` и `pyproject.toml`.
 - **Общение с оператором — только на русском** (глобальный §5).
