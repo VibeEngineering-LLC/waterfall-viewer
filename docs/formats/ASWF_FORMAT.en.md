@@ -364,9 +364,128 @@ def merge_aswf(paths_sorted, out_path):
 
 ---
 
+## v3 — Self-Describing Rows (Extended Format)
+
+v3 replaces the fixed row layout with a fully self-describing `row_fields` array in the header.
+Each row may carry arbitrary typed fields: spectrum, duration, per-row timestamp, GPS coordinates,
+dose rate, and any future extension — without breaking older parsers that ignore unknown fields.
+
+### File Layout (v3)
+
+```
+ASWF(4) + hlen(4) + JSON(hlen) + baseline_section(B) + payload(N rows)
+```
+
+`B = baseline.count × 4` (zero when no `baseline` key in header).  
+`payload_offset = 8 + hlen + B`.
+
+### v3 Header Fields
+
+| Key            | Type             | v3   | Description |
+|----------------|------------------|:----:|-------------|
+| `version`      | int              | yes  | `3` |
+| `row_fields`   | array of objects | yes  | Field descriptors — see below |
+| `row_stride`   | int              | no*  | Row size in bytes; **absent** when `compressed=true` |
+| `compressed`   | bool             | no   | `true` → RLE-encoded rows (default `false`) |
+| `baseline`     | object           | no   | `{"count": N}` — N uint32 LE values follow JSON header |
+
+(*) Required for uncompressed v3; absent for compressed.
+
+#### `row_fields` descriptor
+
+```json
+{
+  "name":   "spectrum",
+  "dtype":  "uint16",
+  "offset": 0,
+  "count":  8192
+}
+```
+
+| Field    | Description |
+|----------|-------------|
+| `name`   | `"spectrum"`, `"duration"`, `"timestamp"`, `"latitude"`, `"longitude"`, `"dose_rate_usv_h"`, or any future name |
+| `dtype`  | `"uint16"`, `"uint32"`, `"float32"` |
+| `offset` | Byte offset of the field **within each row** (uncompressed); in compressed mode fields follow the RLE spectrum sequentially in offset-sort order |
+| `count`  | Number of elements; present for `spectrum` (= `channels`); scalar fields omit or set `1` |
+
+### Baseline Section
+
+If the header contains `"baseline": {"count": N}`, a binary block of `N × 4` uint32 LE values
+is inserted between the JSON area and the payload. This represents the cumulative spectrum
+accumulated before the current session started (used for background subtraction).
+
+```
+payload_offset = 8 + hlen + (baseline.count × 4)
+```
+
+### Uncompressed v3
+
+`row_stride` is required. Each row is `row_stride` bytes; fields are at their `offset` positions.
+The spectrum occupies bytes `[0 .. channels×2 - 1]`.
+
+### RLE-Compressed v3 (`compressed: true`)
+
+`row_stride` is absent. Each row in the payload is encoded as:
+1. **RLE spectrum** (variable length) — see encoding below.
+2. **Non-spectrum fields** in ascending `offset` order, each at its natural dtype width.
+
+#### RLE Encoding
+
+Each element is a uint16 LE word:
+
+| Word value         | Meaning |
+|--------------------|---------|
+| `v < 0x8000`       | Literal channel value `v` |
+| `0x8000 ≤ v < 0xFFFF` | `v & 0x7FFF` consecutive zero channels |
+| `0xFFFF`           | Reserved — parser must raise an error |
+
+### Supported `name` Values (v3)
+
+| Name               | dtype     | Description |
+|--------------------|-----------|-------------|
+| `spectrum`         | uint16    | Per-interval counts, `channels` elements |
+| `duration`         | uint16    | Actual live time, seconds (0 → use `interval_sec`) |
+| `timestamp`        | uint32    | Unix timestamp of this row (UTC, epoch seconds); overrides cumsum when > 0 |
+| `latitude`         | float32   | GPS latitude (degrees); NaN if no fix |
+| `longitude`        | float32   | GPS longitude (degrees); NaN if no fix |
+| `dose_rate_usv_h`  | float32   | Dose rate, µSv/h; NaN if unavailable |
+
+### Example v3 Header (uncompressed)
+
+```json
+{
+  "format":       "atomspectra-waterfall",
+  "version":      3,
+  "channels":     8192,
+  "dtype":        "uint16",
+  "byte_order":   "little",
+  "interval_sec": 60,
+  "started_at":   1783157403,
+  "saved_rows":   128,
+  "saved_at":     1783165103,
+  "serial":       "AS-003",
+  "calibration":  [0.0, 0.298, 0.0],
+  "row_stride":   16406,
+  "baseline":     {"count": 8192},
+  "row_fields": [
+    {"name": "spectrum",       "dtype": "uint16",  "offset": 0,     "count": 8192},
+    {"name": "duration",       "dtype": "uint16",  "offset": 16384},
+    {"name": "dose_rate_usv_h","dtype": "float32", "offset": 16386},
+    {"name": "latitude",       "dtype": "float32", "offset": 16390},
+    {"name": "longitude",      "dtype": "float32", "offset": 16394},
+    {"name": "timestamp",      "dtype": "uint32",  "offset": 16398},
+    {"name": "dose_rate_msvh", "dtype": "float32", "offset": 16402}
+  ]
+}
+```
+
+---
+
 ## Format Version History
 
 | Version | Changes |
 |---------|---------|
 | v1      | 16384 bytes per row. No duration field. `row_stride` absent from header. |
 | v2      | +2-byte uint16 LE duration appended to each row. `row_stride=16386`, `row_time` added to header. |
+| v3      | Self-describing `row_fields`; optional `baseline` section; optional RLE compression; per-row `timestamp`, GPS, and `dose_rate_usv_h`. |

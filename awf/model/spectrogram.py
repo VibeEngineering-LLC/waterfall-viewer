@@ -69,7 +69,10 @@ class Spectrogram:
                  real_time_s: np.ndarray,
                  live_time_s: np.ndarray,
                  t0_iso: str | None = None,
-                 source_path: str | None = None):
+                 source_path: str | None = None,
+                 baseline: np.ndarray | None = None,
+                 dose_rate_usv_h: np.ndarray | None = None,
+                 gps_track: np.ndarray | None = None):
         if counts.ndim != 2:
             raise ValueError("counts должен быть двумерным массивом")
         n_slices, n_channels = counts.shape
@@ -95,6 +98,9 @@ class Spectrogram:
         self.live_time_s = live_time_s
         self.t0_iso = t0_iso
         self.source_path = source_path
+        self.baseline = baseline              # ASWF v3: кумулятивный спектр до сессии (uint32/int64)
+        self.dose_rate_usv_h = dose_rate_usv_h  # ASWF v3: мощность дозы мкЗв/ч (float64, NaN=нет)
+        self.gps_track = gps_track            # ASWF v3: (n_rows, 2) lat/lon float64 (NaN=нет)
 
     @property
     def n_slices(self) -> int:
@@ -190,6 +196,9 @@ class Spectrogram:
             live_time_s=self.live_time_s,
             t0_iso=self.t0_iso,
             source_path=self.source_path,
+            baseline=self.baseline,
+            dose_rate_usv_h=self.dose_rate_usv_h,
+            gps_track=self.gps_track,
         )
 
     def roi_sum(self, t_lo: int, t_hi: int, ch_lo: int, ch_hi: int) -> int:
