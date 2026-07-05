@@ -23,7 +23,13 @@ Architectural inspiration — [InterSpec (Sandia)](https://github.com/sandialabs
 - **Nuclide library** — select a nuclide/family (21 nuclides, LSRM SpectraLine data) to highlight gamma-line energies with vertical markers on the spectrum; intensity filter included.
 - **Unlimited scale** — day-long recordings (tens of thousands of slices) are loaded streaming (`lxml.iterparse`, bounded memory); 3D and 2D are rendered via LOD downsampling (`Spectrogram.downsample`).
 
-## Installation
+## Download Ready-to-Run Distribution
+
+**Pre-built Windows executable** — available on the [Releases](https://github.com/VibeEngineering-LLC/waterfall-viewer/releases/latest) page.  
+Download `waterfall-viewer-vX.Y.Z-win64.zip`, extract, and run `waterfall-viewer.exe`.  
+No Python required.
+
+## Installation from Source
 
 > Step-by-step installation from scratch (no Python experience required) — see [`INSTALL.en.md`](INSTALL.en.md).
 > Known issues and compatibility — see [`KNOWN_ISSUES.md`](docs/dev/KNOWN_ISSUES.md).
