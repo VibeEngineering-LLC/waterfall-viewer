@@ -273,6 +273,7 @@ class Waterfall3DView(gl.GLViewWidget):
         self._nt = 0
         self._nc = 0
         self._height_scale = 1.0
+        self._zmax_sample = 0.0       # zmax образца до floor-сдвига (Задача P-3, reuse в _add_bg_sheet)
         self._z_surface = None        # (nt, nc) высоты рельефа (дисплейные)
         self._z_counts = None         # (nt, nc) исходные counts бинов (max-LOD, для оси счёта/рельефа)
         self._z_counts_sum = None     # (nt, nc) sum-LOD: интеграл counts в бине (Задача #52 — спектр окна)
@@ -432,6 +433,9 @@ class Waterfall3DView(gl.GLViewWidget):
         # 2) Z-шкала контраста, затем нормировка для высоты и цвета (защита от нулевого максимума)
         z_disp = apply_z_scale(z_counts, self._z_mode, gain=self._gain,
                                gamma=self._gamma, clip=self._clip)
+        # Задача P-3: запомнить zmax образца ДО floor-сдвига — тот же расчёт, что делал
+        # _add_bg_sheet повторным вызовом apply_z_scale(self._z_counts, ...) только ради max().
+        self._zmax_sample = float(z_disp.max()) if z_disp.size else 0.0
         # Задача #168 (итер.3): поканальный floor-сдвиг для лин режима — обрезаем «отрицательные
         # пики» (провалы 0-count бинов на фоне поднятой ε-нормировкой #156 простыни). floor_col =
         # локальный уровень «1 отсчёт» колонки (с потолком по «дырявым» колонкам); 0 и 1 отсчёт
@@ -701,9 +705,9 @@ class Waterfall3DView(gl.GLViewWidget):
         простыня ложится точно поверх рельефа."""
         z_disp = apply_z_scale(np.asarray(z_bg, dtype=np.float64), self._z_mode,
                                gain=self._gain, gamma=self._gamma, clip=self._clip)
-        z_smp = apply_z_scale(np.asarray(self._z_counts, dtype=np.float64), self._z_mode,
-                              gain=self._gain, gamma=self._gamma, clip=self._clip)
-        zmax = float(z_smp.max()) if z_smp.size else 0.0
+        # Задача P-3: zmax образца уже посчитан в set_spectrogram (self._zmax_sample) —
+        # не гонять apply_z_scale по self._z_counts ещё раз только ради .max().
+        zmax = self._zmax_sample
         zn = z_disp / zmax if zmax > 0 else z_disp
         z = (zn * self._height_scale).astype(np.float32)
         colors = get_colormap(self._cmap_name).map(zn, mode="float").astype(np.float32)
