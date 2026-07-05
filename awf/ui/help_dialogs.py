@@ -1,4 +1,4 @@
-"""Задача #182/#183: диалоги «Помощь» и «О программе» верхнего меню.
+﻿"""Задача #182/#183: диалоги «Помощь» и «О программе» верхнего меню.
 
 `show_help(parent)` — модальное окно QTextBrowser с оглавлением-якорями по всем ключевым
 функциям приложения. `show_about(parent)` — компактный QMessageBox с версией, ссылкой на
@@ -8,7 +8,9 @@ GitHub, лицензией и краткой строкой стека (Python/Q
 """
 from __future__ import annotations
 
+import json
 import sys
+import urllib.request
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
@@ -18,6 +20,7 @@ from awf.ui.i18n import tr
 
 
 REPO_URL = "https://github.com/VibeEngineering-LLC/waterfall-viewer"
+_RELEASES_API = "https://api.github.com/repos/VibeEngineering-LLC/waterfall-viewer/releases/latest"
 
 
 def _stack_line() -> str:
@@ -76,8 +79,46 @@ _ABOUT_EN = (
 )
 
 
+def _check_updates(parent: QtWidgets.QWidget | None, current_ver: str) -> None:
+    """Zadacha #200: proverit nalichie novoj versii na GitHub Releases (timeout 5 s)."""
+    try:
+        req = urllib.request.Request(_RELEASES_API, headers={"User-Agent": "waterfall-viewer"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read())
+        tag = data.get("tag_name", "").lstrip("v")
+        if not tag:
+            raise ValueError("empty tag_name in response")
+    except Exception as exc:
+        QtWidgets.QMessageBox.warning(
+            parent,
+            tr("Проверка обновлений"),
+            f"{tr('Ошибка при проверке обновлений:')} {exc}",
+        )
+        return
+
+    if tag == current_ver:
+        QtWidgets.QMessageBox.information(
+            parent,
+            tr("Проверка обновлений"),
+            tr("Нет новых версий. Установлена последняя: {ver}").format(ver=current_ver),
+        )
+    else:
+        box = QtWidgets.QMessageBox(parent)
+        box.setWindowTitle(tr("Проверка обновлений"))
+        box.setText(
+            tr("Доступна новая версия: {latest}. Установлена: {current}.").format(
+                latest=tag, current=current_ver
+            )
+        )
+        dl_btn = box.addButton(tr("Скачать"), QtWidgets.QMessageBox.AcceptRole)
+        box.addButton(QtWidgets.QMessageBox.Close)
+        box.exec()
+        if box.clickedButton() is dl_btn:
+            QtGui.QDesktopServices.openUrl(QtCore.QUrl(REPO_URL + "/releases/latest"))
+
+
 def show_about(parent: QtWidgets.QWidget | None = None) -> None:
-    """Задача #182/#183: диалог «О программе». Локализованное HTML-содержимое."""
+    """Zadacha #182/#183/#200: dialog 'O programme'. Knopka 'Proverit obnovlenija'."""
     stack = _stack_line()
     tmpl = _ABOUT_EN if i18n.current_language() == i18n.LANG_EN else _ABOUT_RU
     html = tmpl.format(ver=_APP_VERSION, stack=stack, url=REPO_URL)
@@ -87,8 +128,11 @@ def show_about(parent: QtWidgets.QWidget | None = None) -> None:
     box.setTextInteractionFlags(QtCore.Qt.TextBrowserInteraction)
     box.setIconPixmap(QtGui.QPixmap())
     box.setText(html)
-    box.setStandardButtons(QtWidgets.QMessageBox.Ok)
+    upd_btn = box.addButton(tr("Проверить обновления"), QtWidgets.QMessageBox.ActionRole)
+    box.addButton(QtWidgets.QMessageBox.Ok)
     box.exec()
+    if box.clickedButton() is upd_btn:
+        _check_updates(parent, _APP_VERSION)
 
 
 # ---------- Помощь (большое окно с оглавлением) ----------

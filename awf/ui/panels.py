@@ -417,7 +417,7 @@ class SlicePanel(QtWidgets.QWidget):
         self._spectrum_plot.setLabel("left", tr("Отсчёты"))
         self._spectrum_plot.showGrid(x=True, y=True, alpha=0.3)
         layout.addWidget(self._spectrum_plot)
-        self._series_plot = pg.PlotWidget()
+        self._series_plot = pg.PlotWidget(viewBox=_PanViewBox())  # Задача #199: LMB pan + wheel zoom как у спектра
         self._series_plot.setLabel("bottom", tr("Время, с"))
         self._series_plot.setLabel("left", tr("Отсчёты в полосе"))
         self._series_plot.showGrid(x=True, y=True, alpha=0.3)

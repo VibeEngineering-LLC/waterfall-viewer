@@ -910,7 +910,7 @@ def test_slice_spectrum_pan_viewbox(app):
     xr0, yr0 = tuple(vb.viewRange()[0]), tuple(vb.viewRange()[1])
     vb.mouseDragEvent(_RmbEv())                          # #194: RMB игнорируется → viewRange без изменений
     assert tuple(vb.viewRange()[0]) == xr0 and tuple(vb.viewRange()[1]) == yr0
-    assert not isinstance(sp._series_plot.getViewBox(), _PanViewBox)  # нижний график цел
+    assert isinstance(sp._series_plot.getViewBox(), _PanViewBox)  # #199: нижний график тоже _PanViewBox
 
 
 # ---------- #166: лог-Y низ окна «Срезы» после нормализации ----------
