@@ -13,6 +13,8 @@ sample_data/*.rcspg
 # Нативные waterfall AtomSpectra (.aswf, заголовок: serial/IP-источник) — тоже не в git
 sample_data/*.aswf
 *.aswf
+# Тестовые фикстуры — разрешаем явно
+!tests/data/*.aswf
 
 # Логи прогона (run.bat пишет stderr сюда)
 *.log
