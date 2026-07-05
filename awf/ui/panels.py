@@ -14,14 +14,20 @@ from awf.model.background import background_window_like  # Задача #139: с
 # рисовались здесь, на спектре среза; оператор попросил вести поиск на 3D-спектрограмме.
 
 
-class _NoPanViewBox(pg.ViewBox):
-    """Задача #165: ViewBox без mouse-pan. Оператор: «спектр в окне срезы не должен цепляться
-    мышью и перемещаться, нужен зум колесиком относительно указателя мыши». Left/middle/right-drag
-    игнорируем (pyqtgraph по умолчанию ловит left-drag как pan). Wheel-zoom не трогаем — pyqtgraph
-    сам центрирует его в точке курсора (см. ViewBox.wheelEvent: scaleBy(anchor=ev.pos()))."""
+class _PanViewBox(pg.ViewBox):
+    """Задача #194: ViewBox с pan по ЛКМ + зум колесиком по курсору. RMB/MMB-drag игнорируем.
+    До #194 был _NoPanViewBox (#165) — drag был отключён вовсе по запросу оператора; теперь
+    оператор попросил pan обратно, но только по ЛКМ."""
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.setMouseMode(pg.ViewBox.PanMode)
 
     def mouseDragEvent(self, ev, axis=None):  # noqa: D401
-        ev.ignore()
+        if ev.button() == QtCore.Qt.MouseButton.LeftButton:
+            super().mouseDragEvent(ev, axis)
+        else:
+            ev.ignore()
 
 
 class HeatmapPanel(QtWidgets.QWidget):
@@ -378,11 +384,12 @@ class SlicePanel(QtWidgets.QWidget):
         self._ewin_label = QtWidgets.QLabel(tr("Энергоокно:"))   # Задача #169
         ewin_row.addWidget(self._ewin_label)
         self._ewin_preset = QtWidgets.QComboBox()
-        # Задача #94: пункт «— вручную —» убран (был пустышкой — его выбор ничего не делал).
-        # Комбо держит только пресеты; «ручное» состояние = пустой выбор (currentIndex == -1).
+        # Задача #195: idx 0 = «откл», idx 1 = «вручную», idx 2+ = пресеты нуклидов.
+        self._ewin_preset.addItem(tr("— откл —"))     # idx 0
+        self._ewin_preset.addItem(tr("— вручную —"))  # idx 1
         for w in DEFAULT_WINDOWS:
             self._ewin_preset.addItem(f"{w.name} ({w.center:.0f} {tr('кэВ')})")
-        self._ewin_preset.setCurrentIndex(-1)   # старт без активного пресета (как прежняя «вручную»)
+        self._ewin_preset.setCurrentIndex(-1)   # старт без выбора (до загрузки файла)
         ewin_row.addWidget(self._ewin_preset)
         self._ewin_lo = QtWidgets.QDoubleSpinBox()
         self._ewin_hi = QtWidgets.QDoubleSpinBox()
@@ -402,9 +409,9 @@ class SlicePanel(QtWidgets.QWidget):
         self._reset_zoom_btn.clicked.connect(self.reset_zoom)
         ewin_row.addWidget(self._reset_zoom_btn)
         layout.addLayout(ewin_row)
-        # Задача #165: спектр среза — ViewBox без mouse-pan (см. _NoPanViewBox).
-        # Зум колесиком по-прежнему работает, pyqtgraph центрирует его в точке курсора.
-        self._spectrum_plot = pg.PlotWidget(viewBox=_NoPanViewBox())
+        # Задача #194: спектр среза — LMB pan + wheel zoom (см. _PanViewBox).
+        # X домен ограничен до 3000 кэВ в _lock_views_to_data.
+        self._spectrum_plot = pg.PlotWidget(viewBox=_PanViewBox())
         self._log_check.setChecked(True)  # Задача #177: лог Y по умолчанию ON (после создания _spectrum_plot)
         self._spectrum_plot.setLabel("bottom", tr("Энергия, кэВ"))
         self._spectrum_plot.setLabel("left", tr("Отсчёты"))
@@ -466,8 +473,8 @@ class SlicePanel(QtWidgets.QWidget):
         self._header.setText(
             f"{tr('Загружено: срезов')} {sg.n_slices}, {tr('каналов')} {sg.n_channels}. "
             f"{tr('Интегральный спектр и полная полоса.')}")
-        # энергоокно (Задача 19): диапазон спинбоксов = диапазон энергий, дефолт — первое окно
-        emin = float(self._energies.min()); emax = float(self._energies.max())
+        # энергоокно (Задача 19): диапазон спинбоксов ограничен 3000 кэВ (#194), дефолт — первое окно
+        emin = float(self._energies.min()); emax = min(float(self._energies.max()), 3000.0)
         for sb in (self._ewin_lo, self._ewin_hi):
             sb.blockSignals(True); sb.setRange(emin, emax); sb.blockSignals(False)
         w0 = DEFAULT_WINDOWS[0]
@@ -476,8 +483,13 @@ class SlicePanel(QtWidgets.QWidget):
         if hi <= lo:    # окно вне диапазона спектра -> взять центральную треть
             lo = emin + (emax - emin) / 3.0
             hi = emin + 2.0 * (emax - emin) / 3.0
+            _preset_sel = 1  # «вручную»
+        else:
+            _preset_sel = 2  # первый пресет (#195)
         self._ewin_lo.blockSignals(True); self._ewin_lo.setValue(lo); self._ewin_lo.blockSignals(False)
         self._ewin_hi.blockSignals(True); self._ewin_hi.setValue(hi); self._ewin_hi.blockSignals(False)
+        self._ewin_preset.blockSignals(True); self._ewin_preset.setCurrentIndex(_preset_sel)
+        self._ewin_preset.blockSignals(False)
         self.show_energy_window(lo, hi)
         # Задача #104: мощность дозы — только для RadiaCode .rcspg (калибровка RC-103)
         src = getattr(sg, "source_path", None) or ""
@@ -586,7 +598,8 @@ class SlicePanel(QtWidgets.QWidget):
         Y верхнего графика (спектр) — отдельно в _lock_spectrum_y (#101, лог/лин). Y нижнего
         графика (профиль) — здесь (#128): он всегда линейный и ≥0, «0» прибит к низу."""
         if self._energies is not None and self._energies.size:
-            emin = float(self._energies.min()); emax = float(self._energies.max())
+            emin = float(self._energies.min())
+            emax = min(float(self._energies.max()), 3000.0)  # #194: лимит 3000 кэВ
             vb = self._spectrum_plot.getViewBox()
             if vb is not None and emax > emin:
                 vb.setLimits(xMin=emin, xMax=emax, maxXRange=emax - emin)
@@ -740,8 +753,10 @@ class SlicePanel(QtWidgets.QWidget):
         if self._sg is None:
             self._header.setText(tr("Файл не загружен"))
         self._ewin_label.setText(tr("Энергоокно:"))
+        self._ewin_preset.setItemText(0, tr("— откл —"))
+        self._ewin_preset.setItemText(1, tr("— вручную —"))
         for _i, w in enumerate(DEFAULT_WINDOWS):
-            self._ewin_preset.setItemText(_i, f"{w.name} ({w.center:.0f} {tr('кэВ')})")
+            self._ewin_preset.setItemText(_i + 2, f"{w.name} ({w.center:.0f} {tr('кэВ')})")
         for sb in (self._ewin_lo, self._ewin_hi):
             sb.setSuffix(" " + tr("кэВ"))
         self._log_check.setText(tr("лог Y"))
@@ -925,26 +940,29 @@ class SlicePanel(QtWidgets.QWidget):
 
     @QtCore.Slot(int)
     def _on_ewin_preset(self, idx: int) -> None:
-        """Выбран пресет нуклида: выставить границы спинбоксов (с клиппингом к диапазону спектра)
-        и перерисовать временной профиль."""
-        # Задача #94: «вручную» убран — пресеты теперь с индекса 0; пустой выбор (idx == -1) = ручное.
-        if self._sg is None or idx < 0 or idx >= len(DEFAULT_WINDOWS):
+        """Задача #195: 0=откл, 1=вручную, 2+=пресет нуклида."""
+        if idx < 0: return
+        if idx == 0:   # откл
+            self._ewin_active = None; self._ewin_curve.setData([], []); return
+        if idx == 1:   # вручную: спинбоксы → профиль
+            if self._sg is not None:
+                self.show_energy_window(float(self._ewin_lo.value()), float(self._ewin_hi.value()))
             return
-        w = DEFAULT_WINDOWS[idx]
-        emin = float(self._energies.min()); emax = float(self._energies.max())
-        lo = max(emin, min(emax, float(w.e_lo)))
-        hi = max(emin, min(emax, float(w.e_hi)))
-        self._ewin_lo.blockSignals(True); self._ewin_lo.setValue(lo); self._ewin_lo.blockSignals(False)
-        self._ewin_hi.blockSignals(True); self._ewin_hi.setValue(hi); self._ewin_hi.blockSignals(False)
+        p = idx - 2
+        if self._sg is None or p >= len(DEFAULT_WINDOWS): return
+        w = DEFAULT_WINDOWS[p]
+        e0, e1 = float(self._energies.min()), float(self._energies.max())
+        lo = max(e0, min(e1, float(w.e_lo))); hi = max(e0, min(e1, float(w.e_hi)))
+        for sb, v in ((self._ewin_lo, lo), (self._ewin_hi, hi)):
+            sb.blockSignals(True); sb.setValue(v); sb.blockSignals(False)
         self.show_energy_window(lo, hi)
 
     @QtCore.Slot()
     def _on_ewin_spin(self) -> None:
-        """Ручная правка границ энергоокна -> снять активный пресет (пустой выбор, Задача #94)
-        и перерисовать профиль."""
+        """Ручная правка спинбоксов → переключить комбо в «вручную» (#195) и перерисовать."""
         if self._sg is None:
             return
         lo = float(self._ewin_lo.value()); hi = float(self._ewin_hi.value())
-        self._ewin_preset.blockSignals(True); self._ewin_preset.setCurrentIndex(-1)
+        self._ewin_preset.blockSignals(True); self._ewin_preset.setCurrentIndex(1)  # «вручную»
         self._ewin_preset.blockSignals(False)
         self.show_energy_window(lo, hi)

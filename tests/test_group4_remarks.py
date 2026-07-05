@@ -892,26 +892,25 @@ def test_slice_update_full_y_autofit_log_mode(app):
     assert yr_after[1] == pytest.approx(hi_expect + 0.2, abs=0.05)  # Y-верх покрывает log10(max)+запас
 
 
-def test_slice_spectrum_no_mouse_pan(app):
-    """Задача #165: спектр среза не должен «цепляться мышью и перемещаться».
-    Проверяем: mouseDragEvent на ViewBox спектра — no-op (ignore, без сдвига viewRange);
-    mouseEnabled по обеим осям остался True (иначе pyqtgraph отключит и wheel-zoom).
-    Регрессия: ViewBox нижнего графика (_series_plot) — прежний, drag там работает."""
-    from awf.ui.panels import _NoPanViewBox
+def test_slice_spectrum_pan_viewbox(app):
+    """Задача #194: спектр среза — LMB-drag панирует (_PanViewBox), RMB игнорируется,
+    wheel-zoom работает (mouseEnabled сохранён). ViewBox нижнего графика — не _PanViewBox."""
+    from awf.ui.panels import _PanViewBox
     sp = SlicePanel()
     sp.set_spectrogram(_make_sg(ns=20, nc=40, t_step=1.0))
     vb = sp._spectrum_plot.getViewBox()
-    assert isinstance(vb, _NoPanViewBox)                 # #165: подмена ViewBox прошла
-    assert vb.state["mouseEnabled"] == [True, True]      # #165: wheel-zoom не отключён
+    assert isinstance(vb, _PanViewBox)                   # #194: _PanViewBox установлен
+    assert vb.state["mouseEnabled"] == [True, True]      # #194: wheel-zoom не отключён
 
-    class _Ev:                                           # фейковый MouseDragEvent
+    class _RmbEv:                                        # фейковый RMB MouseDragEvent
         def __init__(self): self.accepted = False
+        def button(self): return QtCore.Qt.MouseButton.RightButton
         def ignore(self): self.accepted = False
         def accept(self): self.accepted = True
     xr0, yr0 = tuple(vb.viewRange()[0]), tuple(vb.viewRange()[1])
-    vb.mouseDragEvent(_Ev())                             # #165: игнорируется
+    vb.mouseDragEvent(_RmbEv())                          # #194: RMB игнорируется → viewRange без изменений
     assert tuple(vb.viewRange()[0]) == xr0 and tuple(vb.viewRange()[1]) == yr0
-    assert not isinstance(sp._series_plot.getViewBox(), _NoPanViewBox)  # регрессия: нижний график цел
+    assert not isinstance(sp._series_plot.getViewBox(), _PanViewBox)  # нижний график цел
 
 
 # ---------- #166: лог-Y низ окна «Срезы» после нормализации ----------
