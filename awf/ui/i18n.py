@@ -52,6 +52,13 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # Задача #183: диалоги help/about — кнопка «Закрыть», плейсхолдер для отсутствующей версии
         "Закрыть": "Close",
         "н/д": "n/a",
+        # Задача #200: проверка обновлений в «О программе»
+        "Проверить обновления": "Check for updates",
+        "Проверка обновлений": "Update check",
+        "Ошибка при проверке обновлений:": "Error checking for updates:",
+        "Нет новых версий. Установлена последняя: {ver}": "No updates available. You have the latest: {ver}",
+        "Доступна новая версия: {latest}. Установлена: {current}.": "New version available: {latest}. Installed: {current}.",
+        "Скачать": "Download",
         "— наполняется позже —": "— coming later —",
         "Окно изотопов (нуклиды)": "Isotopes (nuclides) window",
         # Задача #115: меню «Инструменты» — окна-доки
