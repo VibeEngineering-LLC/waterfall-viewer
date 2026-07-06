@@ -261,6 +261,21 @@
 
 `#221/#222/#223/#224` (оператор) — **правки 2D-карты + диалога калибровки** (`awf/ui/panels.py` — `HeatmapPanel._ch_pen` width=1→2 (толще перекрестье); поле `self._floor_visible=True` + метод `_apply_cmap()`: при `_floor_visible=False` берёт `cmap.getLookupTable(0.0,1.0,256,alpha=True).copy()`, зануляет `lut[:13,3]=0` (нижние ~5% LUT прозрачны — аналог 3D `_FLOOR_FRAC`), `_img.setLookupTable(lut)`; иначе `_img.setColorMap(cmap)`; публичный `set_floor_visible(on)`; `set_colormap` теперь вызывает `_apply_cmap`; `awf/ui/main_window.py:_on_floor_toggled` — доп. вызов `self._heatmap.set_floor_visible(on)` (Подложка теперь работает и на 2D). `awf/ui/calibration_dialog.py` — таблица расширена до 4 колонок: новая `_COL_ENABLED=0` (чекбокс), остальные сдвинуты (+1); `_add_row` вставляет `QTableWidgetItem` с `ItemIsUserCheckable | ItemIsEnabled` и `Checked` в col 0; `_collect_pairs` пропускает строки где `checkState() != Checked`; `_on_table_changed` реагирует на смену чекбокса → `_update_row_dimming(row)` красит текст `#c0c0c0`/`#555555`; поле `self._active_nuclides: set = set(PRESETS.keys())` + UI-строка «Нуклиды: N/total ▼» (`QMenu` с чекбоксами `PRESETS`) и кнопка «Подобрать E ▼»; `_on_pick_energy` строит `sorted((abs(e-e_ref), n, e) for n in active for e in PRESETS[n])` — топ-25 в `QMenu`, выбор записывает в `E_TRUE`. Splits <25 net-стр каждый (§16). Запросы оператора: «сделай линию перекрестья чуть толще», «И отключение подложки не работает на 2Д», «сделай чтобы можно было отключать отдельные пики», «сделай чтобы можно было в окне Еист выбрать из списка нужную энергию нужного ближайшего по энергии нуклида из набора». **Полный pytest — 759 passed, exit 0** (teardown-warnings pyqtgraph LabelItem/_SeriesPanViewBox после summary — безобидный shiboken cleanup, не в моих правках).
 
+`#REL-6` (2026-07-05) — **релиз v0.1.6** (`awf/__version__="0.1.6"`; коммит `5ce9960`; PyInstaller onedir → `dist/waterfall-viewer-0.1.6-windows-x64.zip` ~241 МБ; `gh release create v0.1.6`). **Полный pytest — 759 passed.**
+
+`#BQ2` (2026-07-06) — **BecqMoni StartTime/EndTime: attach local TZ** (`awf/io/becqmoni_writer.py` — при `mea_time.tzinfo is None` → `mea_time.astimezone()` (attach системного TZ); оба поля `StartTime`/`EndTime` форматируются `isoformat(timespec="seconds")` с суффиксом `+HH:MM`). Запрос оператора: «старт-стоп время в бекмони без TZ».
+
+`#MENU-2..5` (2026-07-06) — **реструктурировать меню + хоткеи + статусбар** (`awf/ui/main_window.py`, `awf/ui/i18n.py`):
+- `#MENU-2`: убраны верхнеуровневые «Изотопы» и «О программе»; «Инструменты»→«Вид»; новый порядок Файл→Вид→Анализ→Калибровка→Сервис→Справка; «О программе» смёржено в «Справка» (Windows-конвенция); F1 → «Справка…».
+- `#MENU-3`: меню «Анализ» реструктурировано через подменю «Фон» / «Пики» / «Эффективность» + «Мощность дозы» отдельным пунктом; Python-ref `self._bg_menu`/`_peaks_menu`/`_eff_menu` против GC.
+- `#MENU-4`: хоткеи Ctrl+E экспорт, Ctrl+F поиск пиков, Ctrl+B выбор фона, Ctrl+Shift+B вычет фона, Ctrl+K калибровка, Ctrl+T сегментация.
+- `#MENU-5`: `_act_eff_info` (disabled-пункт меню с именем кривой ε(E)) удалён; вместо него постоянный `QLabel self._eff_info_label` в `statusBar().addPermanentWidget(…)`, обновляется через `_update_eff_info()`.
+- i18n: +3 строки «Фон»→«Background», «Пики»→«Peaks», «Эффективность»→«Efficiency».
+- Тесты обновлены: `tests/test_group4_remarks.py` (новая структура меню, подменю Фон через `w._bg_menu`), `tests/test_segments_ui.py` (`_menus["view"]`), `tests/test_efficiency.py` (`_eff_info_label`).
+**Полный pytest — 761 passed.**
+
+`#REL-7` (2026-07-07) — **релиз v0.1.7** (`awf/__version__="0.1.7"`; коммиты `527f9bb`+`458bca9`; PyInstaller onedir → `dist/waterfall-viewer-0.1.7-windows-x64.zip` ~99 МБ zip / 241 МБ распакованный; `gh release create v0.1.7`). **Полный pytest — 761 passed.**
+
 ## Ориентация по проекту
 
 Десктоп-вьюер waterfall-спектрограмм гамма-спектрометра. Оси спектрограммы: **время × энергия**
