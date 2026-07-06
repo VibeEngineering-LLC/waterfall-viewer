@@ -613,9 +613,10 @@ def test_top_menus_skeleton_present(app):
     i18n.reset_for_tests()
     w = MainWindow()
     titles = [m.title() for m in w.menuBar().findChildren(QtWidgets.QMenu)]
-    for expected in ("Изотопы", "Анализ", "Калибровка", "Инструменты", "Сервис", "Помощь", "О программе"):
+    # #MENU-2: Изотопы/О программе убраны из верхнего уровня, Инструменты→Вид, Помощь→Справка
+    for expected in ("Вид", "Анализ", "Калибровка", "Сервис", "Справка"):
         assert expected in titles
-    assert set(w._menus) == {"isotopes", "analysis", "calibration", "tools", "service", "help", "about"}
+    assert set(w._menus) == {"view", "analysis", "calibration", "service", "help"}
     # #79 «Изотопы», #96 «Анализ», #106 «Сервис/Язык», #115 «Инструменты», #182 «Помощь»/«О программе»
     # — все меню наполнены. Меню «Анализ» и «Инструменты» имеют пункты, disabled до выбора фона
     # или до старта поиска пиков — это норма, проверяем только что stub «— наполняется позже —» ушёл.
@@ -624,18 +625,19 @@ def test_top_menus_skeleton_present(app):
         assert acts, f"меню {key!r} пустое"
         stubs = [a for a in acts if a.text() == "— наполняется позже —"]
         assert not stubs, f"stub-пункт остался в меню {key!r}"
-    # Задача #182: пункты «Справка…» и «О программе…» — активные QAction.
+    # Задача #182 + #MENU-2: «Справка…» и «О программе…» — оба в меню «Справка» (About смёржен).
     help_acts = w._menus["help"].actions()
-    about_acts = w._menus["about"].actions()
     assert any(a.text() == "Справка…" and a.isEnabled() for a in help_acts)
-    assert any(a.text() == "О программе…" and a.isEnabled() for a in about_acts)
+    assert any(a.text() == "О программе…" and a.isEnabled() for a in help_acts)
     # Задача #106: «Сервис» содержит подменю «Язык» с двумя активными пунктами Русский/English
     service_acts = w._menus["service"].actions()
     assert any(a.text() == "Язык" for a in service_acts)
-    # Задача #96: меню «Анализ» наполнено — «Выбор фона…» активен, «Наложение/Вычет» до выбора нет
-    analysis_titles = [a.text() for a in w._menus["analysis"].actions()]
-    assert "Выбор фона…" in analysis_titles
-    assert "Наложение фона" in analysis_titles and "Вычет фона" in analysis_titles
+    # #96 + #MENU-3: меню «Анализ» → подменю «Фон» с пунктами «Выбор фона…»/«Наложение»/«Вычет»
+    bg_menu = w._bg_menu
+    assert bg_menu is not None, "подменю «Фон» не найдено в меню «Анализ»"
+    bg_titles = [a.text() for a in bg_menu.actions()]
+    assert "Выбор фона…" in bg_titles
+    assert "Наложение фона" in bg_titles and "Вычет фона" in bg_titles
     assert w._act_bg_overlay.isEnabled() is False and w._act_bg_subtract.isEnabled() is False
     w.close()
 
@@ -735,15 +737,16 @@ def test_energy_axis_capped_at_3000(app):
         assert float(ev.max()) <= _MAX_ENERGY_KEV                # сетка/деления обрезаны
 
 
-# ---------- #79: меню «Изотопы» — ссылка на окно нуклидов ----------
+# ---------- #79 + #MENU-2: доки нуклидов теперь в меню «Вид» ----------
 def test_isotopes_menu_opens_nuclides_dock(app):
-    """Задача #79: пункт «Изотопы» — действующая ссылка (toggleViewAction дока нуклидов),
-    переключает видимость окна нуклидов."""
+    """Задача #79 + #MENU-2: пункт нуклидов — действующая ссылка (toggleViewAction дока нуклидов),
+    после MENU-2 живёт в меню «Вид» (было отдельное «Изотопы»)."""
     from awf.ui.main_window import MainWindow
     w = MainWindow()
-    act = w._menus["isotopes"].actions()[0]
-    assert act.isEnabled() and act.isCheckable()      # больше не заглушка, это переключатель
-    assert act is w._nlib_dock.toggleViewAction()     # ведёт на первый дока нуклидов (#173)
+    view_acts = w._menus["view"].actions()
+    act = w._nlib_dock.toggleViewAction()
+    assert act in view_acts
+    assert act.isEnabled() and act.isCheckable()      # переключатель, не заглушка
     s0 = act.isChecked()
     act.trigger()
     assert act.isChecked() != s0                      # клик переключил видимость окна
@@ -758,7 +761,7 @@ def test_tools_menu_lists_dock_windows(app):
     toggleViewAction соответствующего дока (checkable, переключает видимость окна)."""
     from awf.ui.main_window import MainWindow
     w = MainWindow()
-    tools = w._menus["tools"]
+    tools = w._menus["view"]  # #MENU-2: «Инструменты» → «Вид»
     texts = [a.text() for a in tools.actions()]
     for label in ("Найденные пики", "Срезы / Сечения / Выборки",
                   "Сечения (3D)", "Регулировки отображения"):

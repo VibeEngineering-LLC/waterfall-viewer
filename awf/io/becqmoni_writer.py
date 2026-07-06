@@ -40,9 +40,12 @@ def write_becqmoni_xml(path, counts, *, live_time_s: float, real_time_s: float,
 
     if mea_time is None:
         mea_time = datetime.now(timezone.utc)
-    mea_time_str = mea_time.strftime("%Y-%m-%dT%H:%M:%S")
+    # BQ2: BecqMoni (C#) без TZ читает как UTC — крутит время. Naive → attach local.
+    if mea_time.tzinfo is None:
+        mea_time = mea_time.astimezone()
+    mea_time_str = mea_time.isoformat(timespec="seconds")
     end_dt = mea_time + timedelta(seconds=float(real_time_s))
-    end_dt_str = end_dt.strftime("%Y-%m-%dT%H:%M:%S")
+    end_dt_str = end_dt.isoformat(timespec="seconds")
 
     root = ET.Element("ResultDataFile")
     ET.SubElement(root, "FormatVersion").text = FORMAT_VERSION

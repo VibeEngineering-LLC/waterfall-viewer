@@ -307,6 +307,7 @@ class MainWindow(QtWidgets.QMainWindow):
         menu.addAction(act_save_as)
         # Задача #217: экспорт агрегированного спектра в BecqMoni/LSRM/InterSpec
         act_export = QtGui.QAction("Экспорт спектра…", self)
+        act_export.setShortcut(QtGui.QKeySequence("Ctrl+E"))  # #MENU-4
         act_export.triggered.connect(self._export_spectrum)
         self._register_i18n(act_export.setText, "Экспорт спектра…")
         menu.addAction(act_export)
@@ -319,66 +320,37 @@ class MainWindow(QtWidgets.QMainWindow):
         self._build_stub_menus()   # Задача #75: каркас верхних меню (наполнение позже)
 
     def _build_stub_menus(self) -> None:
-        """Задача #75: каркас выпадающих меню верхней панели (Изотопы/Анализ/Сервис/
-        Помощь/О программе). Меню «Изотопы» наполнено (Задача #79: пункт-ссылка на окно
-        нуклидов через toggleViewAction дока); остальные — disabled-заглушка до наполнения."""
+        """#MENU-2 (после #75): порядок Файл→Вид→Анализ→Калибровка→Сервис→Справка.
+        «Изотопы» и «О программе» верхнего уровня убраны — доки нуклидов в «Вид»,
+        About/Updates в «Справке» (Windows-конвенция)."""
         bar = self.menuBar()
         self._menus = {}
         spec = [
-            ("isotopes", "Изотопы"),
+            ("view", "Вид"),                 # #MENU-2: было «Инструменты»
             ("analysis", "Анализ"),
-            ("calibration", "Калибровка"),   # Задача #215: перекалибровка спектрограммы
-            ("tools", "Инструменты"),   # Задача #115: список окон-доков
+            ("calibration", "Калибровка"),   # #215: перекалибровка
             ("service", "Сервис"),
-            ("help", "Помощь"),
-            ("about", "О программе"),
+            ("help", "Справка"),             # #MENU-2: было «Помощь» + смёржено «О программе»
         ]
         for key, title in spec:
             m = bar.addMenu(title)
             self._register_i18n(m.setTitle, title)   # Задача #106: подпись меню через tr()
-            if key == "isotopes":
-                # Задача #173: два дока нуклидов — библиотека и идентификация.
-                act = self._nlib_dock.toggleViewAction()
-                self._register_i18n(act.setText, "Библиотека нуклидов")
-                m.addAction(act)
-                act2 = self._nident_dock.toggleViewAction()
-                self._register_i18n(act2.setText, "Идентификация по найденным пикам")
-                m.addAction(act2)
+            if key == "view":
+                self._build_view_menu(m)         # #MENU-2: доки (было _build_tools_menu)
             elif key == "analysis":
-                self._build_analysis_menu(m)   # Задача #96: фон и вычитание
+                self._build_analysis_menu(m)     # #96: фон и вычитание
             elif key == "calibration":
-                self._build_calibration_menu(m)   # Задача #215
-            elif key == "tools":
-                self._build_tools_menu(m)      # Задача #115: окна-доки
+                self._build_calibration_menu(m)  # #215
             elif key == "service":
-                self._build_service_menu(m)    # Задача #106: подменю «Язык» (RU/EN)
+                self._build_service_menu(m)      # #106: язык RU/EN
             elif key == "help":
-                # Задача #182: пункт «Справка…» открывает окно с оглавлением по функциям.
-                act_help = QtGui.QAction("Справка…", self)
-                act_help.triggered.connect(lambda: show_help(self))
-                self._register_i18n(act_help.setText, "Справка…")
-                m.addAction(act_help)
-            elif key == "about":
-                # Задача #182: пункт «О программе…»
-                act_about = QtGui.QAction("О программе…", self)
-                act_about.triggered.connect(lambda: show_about(self))
-                self._register_i18n(act_about.setText, "О программе…")
-                m.addAction(act_about)
-                # Задача #202: пункт «Проверить обновления»
-                act_upd = QtGui.QAction("Проверить обновления", self)
-                act_upd.triggered.connect(lambda: check_for_updates(self))
-                self._register_i18n(act_upd.setText, "Проверить обновления")
-                m.addAction(act_upd)
-            else:
-                stub = QtGui.QAction("— наполняется позже —", self)
-                stub.setEnabled(False)   # каркас: действие будет подключено позже
-                self._register_i18n(stub.setText, "— наполняется позже —")
-                m.addAction(stub)
+                self._build_help_menu(m)         # #MENU-2: Справка + About + Updates
             self._menus[key] = m
 
     def _build_calibration_menu(self, m) -> None:
         """Задача #215: пункты меню «Калибровка»."""
         act_fit = QtGui.QAction("Калибровка по пикам…", self)
+        act_fit.setShortcut(QtGui.QKeySequence("Ctrl+K"))  # #MENU-4
         act_fit.triggered.connect(self._open_calibration_dialog)
         self._register_i18n(act_fit.setText, "Калибровка по пикам…")
         m.addAction(act_fit)
@@ -387,22 +359,28 @@ class MainWindow(QtWidgets.QMainWindow):
         """Задача #96: пункты «Анализ» — фон и вычитание. «Выбор фона» задаёт поканальный фон
         (диапазон срезов текущего файла или отдельный файл); «Наложение» рисует фон поверх
         спектра среза; «Вычет» вычитает фон из всего водопада (3D/2D/срез), отрицательное -> 0."""
+        # #MENU-3: группа «Фон» — подменю. #MENU-4: хоткеи Ctrl+B / Ctrl+Shift+B.
+        bg_menu = m.addMenu("Фон")
+        self._bg_menu = bg_menu  # держим Python-ref: PySide6 иначе может GC-нуть wrapper подменю
+        self._register_i18n(bg_menu.setTitle, "Фон")
         act_sel = QtGui.QAction("Выбор фона…", self)
+        act_sel.setShortcut(QtGui.QKeySequence("Ctrl+B"))
         act_sel.triggered.connect(self._on_bg_select)
         self._register_i18n(act_sel.setText, "Выбор фона…")
-        m.addAction(act_sel)
+        bg_menu.addAction(act_sel)
         self._act_bg_overlay = QtGui.QAction("Наложение фона", self)
         self._act_bg_overlay.setCheckable(True)
-        self._act_bg_overlay.setEnabled(False)   # до выбора фона недоступно
+        self._act_bg_overlay.setEnabled(False)
         self._act_bg_overlay.toggled.connect(self._on_bg_overlay_toggled)
         self._register_i18n(self._act_bg_overlay.setText, "Наложение фона")
-        m.addAction(self._act_bg_overlay)
+        bg_menu.addAction(self._act_bg_overlay)
         self._act_bg_subtract = QtGui.QAction("Вычет фона", self)
+        self._act_bg_subtract.setShortcut(QtGui.QKeySequence("Ctrl+Shift+B"))
         self._act_bg_subtract.setCheckable(True)
-        self._act_bg_subtract.setEnabled(False)   # до выбора фона недоступно
+        self._act_bg_subtract.setEnabled(False)
         self._act_bg_subtract.toggled.connect(self._on_bg_subtract_toggled)
         self._register_i18n(self._act_bg_subtract.setText, "Вычет фона")
-        m.addAction(self._act_bg_subtract)
+        bg_menu.addAction(self._act_bg_subtract)
         m.addSeparator()
         # Задача #104: оверлей мощности дозы (только RadiaCode .rcspg, калибровка RC-103)
         self._act_dose = QtGui.QAction("Мощность дозы (RadiaCode)", self)
@@ -414,28 +392,33 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act_dose.toggled.connect(self._on_dose_toggled)
         m.addAction(self._act_dose)
         m.addSeparator()
-        # Задача #110: поиск фотопиков (Mariscotti + Currie) на 3D-спектрограмме
-        # (перенесено с #108, где маркеры рисовались на спектре среза).
+        # #MENU-3: группа «Пики» — подменю. #MENU-4: Ctrl+F / Ctrl+T.
+        peaks_menu = m.addMenu("Пики")
+        self._peaks_menu = peaks_menu
+        self._register_i18n(peaks_menu.setTitle, "Пики")
+        # #110: поиск фотопиков (Mariscotti + Currie) на 3D-спектрограмме.
         self._act_peaks = QtGui.QAction("Поиск пиков", self)
+        self._act_peaks.setShortcut(QtGui.QKeySequence("Ctrl+F"))
         self._act_peaks.setCheckable(True)
         self._act_peaks.setChecked(False)
         self._register_i18n(self._act_peaks.setText, "Поиск пиков")
         self._register_i18n(self._act_peaks.setToolTip,
                             "Отметить найденные фотопики на 3D-спектрограмме")
         self._act_peaks.toggled.connect(self._on_peaks_toggled)
-        m.addAction(self._act_peaks)
-        m.addSeparator()
-        # Задача #131: авто-сегментация записи по времени + посегментная идентификация нуклидов.
-        # Слабые источники (урановое стекло, K-40) тонут в интегральном спектре, но всплывают
-        # в своём временном сегменте.
+        peaks_menu.addAction(self._act_peaks)
+        # #131: авто-сегментация по времени + посегментная идентификация.
         self._act_segments = QtGui.QAction("Сегментация по времени…", self)
+        self._act_segments.setShortcut(QtGui.QKeySequence("Ctrl+T"))
         self._register_i18n(self._act_segments.setText, "Сегментация по времени…")
         self._register_i18n(self._act_segments.setToolTip,
                             "Разбить запись по времени и идентифицировать нуклиды в каждом сегменте")
         self._act_segments.triggered.connect(self._on_segments_action)
-        m.addAction(self._act_segments)
+        peaks_menu.addAction(self._act_segments)
         m.addSeparator()
-        # Задача #156: нормализация по эффективности регистрации ε(E).
+        # #MENU-3: группа «Эффективность» — подменю. #156: ε(E)-нормализация.
+        eff_menu = m.addMenu("Эффективность")
+        self._eff_menu = eff_menu
+        self._register_i18n(eff_menu.setTitle, "Эффективность")
         self._act_eff_norm = QtGui.QAction("Нормализация по эффективности", self)
         self._act_eff_norm.setCheckable(True)
         self._act_eff_norm.setChecked(False)
@@ -444,15 +427,12 @@ class MainWindow(QtWidgets.QMainWindow):
                             "Умножить отсчёты каналов на ε_ref/ε(E) — компенсация падения "
                             "эффективности фотопика с энергией")
         self._act_eff_norm.toggled.connect(self._on_eff_norm_toggled)
-        m.addAction(self._act_eff_norm)
+        eff_menu.addAction(self._act_eff_norm)
         act_eff_load = QtGui.QAction("Загрузить кривую эффективности…", self)
         self._register_i18n(act_eff_load.setText, "Загрузить кривую эффективности…")
         act_eff_load.triggered.connect(self._on_eff_load)
-        m.addAction(act_eff_load)
-        # информационный пункт: имя текущей кривой (текст динамический, без i18n-реестра)
-        self._act_eff_info = QtGui.QAction("", self)
-        self._act_eff_info.setEnabled(False)
-        m.addAction(self._act_eff_info)
+        eff_menu.addAction(act_eff_load)
+        # #MENU-5: имя текущей кривой ε(E) переехало из меню в статусбар (QLabel).
         self._update_eff_info()
 
     def _build_service_menu(self, m) -> None:
@@ -472,11 +452,10 @@ class MainWindow(QtWidgets.QMainWindow):
             group.addAction(act)
             lang_menu.addAction(act)
 
-    def _build_tools_menu(self, m) -> None:
-        """Задача #115: меню «Инструменты» — перечень всех окон-доков приложения. Каждый
-        пункт — toggleViewAction соответствующего дока: клик открывает/прячет окно, галочка
-        отражает его видимость (по образцу #79 для окна нуклидов). Окно нуклидов уже есть в
-        меню «Изотопы» — переиспользуется тот же QAction (один action в двух меню)."""
+    def _build_view_menu(self, m) -> None:
+        """#MENU-2 (было _build_tools_menu, #115): меню «Вид» — все окна-доки.
+        toggleViewAction на каждый док. Нуклидные доки #173 добавлены сюда единожды
+        (дубли из бывшего меню «Изотопы» устранены)."""
         for dock, label in (
             (self._peaks_dock, "Найденные пики"),
             (self._segments_dock, "Сегментация по времени"),   # Задача #131
@@ -487,9 +466,32 @@ class MainWindow(QtWidgets.QMainWindow):
             act = dock.toggleViewAction()
             self._register_i18n(act.setText, label)
             m.addAction(act)
-        # Задача #173: два дока нуклидов
-        m.addAction(self._nlib_dock.toggleViewAction())
-        m.addAction(self._nident_dock.toggleViewAction())
+        m.addSeparator()
+        # #173: два дока нуклидов (переехали из бывшего меню «Изотопы»)
+        act_nlib = self._nlib_dock.toggleViewAction()
+        self._register_i18n(act_nlib.setText, "Библиотека нуклидов")
+        m.addAction(act_nlib)
+        act_nident = self._nident_dock.toggleViewAction()
+        self._register_i18n(act_nident.setText, "Идентификация по найденным пикам")
+        m.addAction(act_nident)
+
+    def _build_help_menu(self, m) -> None:
+        """#MENU-2: «Справка» — было «Помощь» + смёржено «О программе»
+        (Windows-конвенция: About + Updates в Help)."""
+        act_help = QtGui.QAction("Справка…", self)
+        act_help.setShortcut(QtGui.QKeySequence("F1"))
+        act_help.triggered.connect(lambda: show_help(self))
+        self._register_i18n(act_help.setText, "Справка…")
+        m.addAction(act_help)
+        m.addSeparator()
+        act_upd = QtGui.QAction("Проверить обновления", self)
+        act_upd.triggered.connect(lambda: check_for_updates(self))
+        self._register_i18n(act_upd.setText, "Проверить обновления")
+        m.addAction(act_upd)
+        act_about = QtGui.QAction("О программе…", self)
+        act_about.triggered.connect(lambda: show_about(self))
+        self._register_i18n(act_about.setText, "О программе…")
+        m.addAction(act_about)
 
     def _build_toolbar(self) -> None:
         tb = self.addToolBar("Вид")
@@ -792,8 +794,14 @@ class MainWindow(QtWidgets.QMainWindow):
             self._redistribute()
 
     def _update_eff_info(self) -> None:
-        """Задача #156: инфо-пункт меню — имя текущей кривой эффективности."""
-        self._act_eff_info.setText(tr("Кривая:") + f" {self._eff_curve.name}")
+        """#156 + #MENU-5: имя текущей кривой ε(E) — постоянный QLabel в статусбаре
+        (было disabled-пункт в меню «Анализ»)."""
+        lbl = getattr(self, "_eff_info_label", None)
+        if lbl is None:
+            lbl = QtWidgets.QLabel(self)
+            self.statusBar().addPermanentWidget(lbl)
+            self._eff_info_label = lbl
+        lbl.setText(tr("Кривая:") + f" {self._eff_curve.name}")
 
     @QtCore.Slot(bool)
     def _on_dose_toggled(self, on: bool) -> None:
