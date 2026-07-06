@@ -21,6 +21,8 @@ from awf.ui.palette_dialog import PaletteDialog
 from awf.ui.nuclide_panel import NuclidePanel
 from awf.ui.peaks_panel import PeaksPanel   # Задача #111: панель «Найденные пики»
 from awf.ui.segments_panel import SegmentsPanel   # Задача #131: панель «Сегментация по времени»
+from awf.ui.calibration_dialog import CalibrationDialog   # Задача #215: интерактивная калибровка
+from awf.model.spectrogram import Calibration   # Задача #215: заменить калибровку после фита
 from awf.analysis.segment import segment_by_time, identify_segments   # Задача #131
 from awf.analysis.efficiency import (default_gamma1s, load_efficiency_curve,
                                      apply_efficiency)   # Задача #156
@@ -30,7 +32,6 @@ from awf.ui.style import APP_QSS
 from awf.ui import i18n          # Задача #106: переключение языка интерфейса RU↔EN
 from awf.ui.help_dialogs import show_help, show_about, check_for_updates   # Задача #182/#202
 from awf.ui.i18n import tr       # короткий доступ к переводу: tr("Файл") -> "File" / "Файл"
-
 # Задача #40: организация/приложение для QSettings (запоминание расположения окон между
 # запусками). На Windows пишется в реестр HKCU\Software\<ORG>\<APP>.
 SETTINGS_ORG = "VibeEngineering-LLC"
@@ -298,6 +299,17 @@ class MainWindow(QtWidgets.QMainWindow):
         act_open.triggered.connect(self._open_dialog)
         self._register_i18n(act_open.setText, "Открыть…")
         menu.addAction(act_open)
+        # Задача #216: сохранение в .aswf с текущей калибровкой
+        act_save_as = QtGui.QAction("Сохранить как…", self)
+        act_save_as.setShortcut(QtGui.QKeySequence("Ctrl+Shift+S"))
+        act_save_as.triggered.connect(self._save_as_aswf)
+        self._register_i18n(act_save_as.setText, "Сохранить как…")
+        menu.addAction(act_save_as)
+        # Задача #217: экспорт агрегированного спектра в BecqMoni/LSRM/InterSpec
+        act_export = QtGui.QAction("Экспорт спектра…", self)
+        act_export.triggered.connect(self._export_spectrum)
+        self._register_i18n(act_export.setText, "Экспорт спектра…")
+        menu.addAction(act_export)
         menu.addSeparator()
         act_quit = QtGui.QAction("Выход", self)
         act_quit.setShortcut(QtGui.QKeySequence.Quit)
@@ -315,6 +327,7 @@ class MainWindow(QtWidgets.QMainWindow):
         spec = [
             ("isotopes", "Изотопы"),
             ("analysis", "Анализ"),
+            ("calibration", "Калибровка"),   # Задача #215: перекалибровка спектрограммы
             ("tools", "Инструменты"),   # Задача #115: список окон-доков
             ("service", "Сервис"),
             ("help", "Помощь"),
@@ -333,6 +346,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 m.addAction(act2)
             elif key == "analysis":
                 self._build_analysis_menu(m)   # Задача #96: фон и вычитание
+            elif key == "calibration":
+                self._build_calibration_menu(m)   # Задача #215
             elif key == "tools":
                 self._build_tools_menu(m)      # Задача #115: окна-доки
             elif key == "service":
@@ -360,6 +375,13 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._register_i18n(stub.setText, "— наполняется позже —")
                 m.addAction(stub)
             self._menus[key] = m
+
+    def _build_calibration_menu(self, m) -> None:
+        """Задача #215: пункты меню «Калибровка»."""
+        act_fit = QtGui.QAction("Калибровка по пикам…", self)
+        act_fit.triggered.connect(self._open_calibration_dialog)
+        self._register_i18n(act_fit.setText, "Калибровка по пикам…")
+        m.addAction(act_fit)
 
     def _build_analysis_menu(self, m) -> None:
         """Задача #96: пункты «Анализ» — фон и вычитание. «Выбор фона» задаёт поканальный фон
@@ -625,8 +647,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
     @QtCore.Slot(bool)
     def _on_floor_toggled(self, on: bool) -> None:
-        """Задача #76: показать/скрыть подложку (плоское дно рельефа, фиолетовый прямоугольник)."""
+        """Задача #76/#222: показать/скрыть подложку (3D: дно рельефа; 2D: нижний диапазон LUT)."""
         self._view3d.set_floor_visible(on)
+        self._heatmap.set_floor_visible(on)
 
     @QtCore.Slot(bool)
     def _on_surface_toggled(self, on: bool) -> None:
@@ -810,6 +833,114 @@ class MainWindow(QtWidgets.QMainWindow):
             self._peaks_panel.set_window_info(int(sg.n_slices), total)
         else:
             self._peaks_panel.set_window_info(None, None)
+
+    def _open_calibration_dialog(self) -> None:
+        """Задача #215: диалог перекалибровки, пресеты + импорт найденных пиков."""
+        if self._sg is None:
+            QtWidgets.QMessageBox.information(self, tr("Калибровка по пикам"),
+                                              tr("Сначала откройте файл спектрограммы."))
+            return
+        coeffs = list(self._sg.calibration.coeffs)
+        n_ch = int(self._sg.counts.shape[1])
+        found = self._view3d._found_peaks() or []
+        dlg = CalibrationDialog(current_coeffs=coeffs, n_channels=n_ch,
+                                found_peaks=list(found), parent=self)
+        dlg.calibrationApplied.connect(self._apply_new_calibration)
+        dlg.exec()
+
+    def _apply_new_calibration(self, new_coeffs) -> None:
+        """Задача #215: заменить Calibration и пере-отрисовать всё окно."""
+        if self._sg is None:
+            return
+        self._sg.calibration = Calibration(
+            coeffs=np.asarray(list(new_coeffs), dtype=np.float64))
+        self._redistribute(reset=False)
+        self._refresh_peaks_panel()
+
+    def _save_as_aswf(self) -> None:
+        """Задача #216: сохранить спектрограмму в один .aswf с текущей калибровкой."""
+        if self._sg is None:
+            QtWidgets.QMessageBox.information(self, tr("Сохранить как"),
+                                              tr("Сначала откройте файл спектрограммы."))
+            return
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self, tr("Сохранить как"), "", "AtomSpectra waterfall (*.aswf)")
+        if not path:
+            return
+        self._do_save_as_aswf(path)
+
+    def _do_save_as_aswf(self, path: str) -> None:
+        """Задача #216: физическая запись .aswf + статус-бар."""
+        if not path.lower().endswith(".aswf"):
+            path += ".aswf"
+        from awf.io.aswf_single_writer import write_aswf
+        try:
+            write_aswf(path, self._sg)
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, tr("Сохранить как"),
+                                           tr("Ошибка сохранения: ") + str(e))
+            return
+        self.statusBar().showMessage(tr("Сохранено: ") + path, 5000)
+
+    def _export_spectrum(self) -> None:
+        """Задача #217: диалог выбора формата экспорта агрегированного спектра."""
+        if self._sg is None:
+            QtWidgets.QMessageBox.information(self, tr("Экспорт спектра"),
+                                              tr("Сначала откройте файл спектрограммы."))
+            return
+        flt = "BecqMoni (*.tka);;LSRM/IAEA (*.spe);;InterSpec/ANSI N42 (*.n42)"
+        path, sel = QtWidgets.QFileDialog.getSaveFileName(
+            self, tr("Экспорт спектра"), "", flt)
+        if not path:
+            return
+        fmt = self._detect_export_fmt(path, sel)
+        if not path.lower().endswith("." + fmt):
+            path += "." + fmt
+        self._do_export_spectrum(path, fmt)
+
+    @staticmethod
+    def _detect_export_fmt(path: str, sel: str) -> str:
+        low = path.lower()
+        if low.endswith(".tka"):
+            return "tka"
+        if low.endswith(".spe"):
+            return "spe"
+        if low.endswith(".n42"):
+            return "n42"
+        if "tka" in sel:
+            return "tka"
+        if "spe" in sel:
+            return "spe"
+        return "n42"
+
+    def _do_export_spectrum(self, path: str, fmt: str) -> None:
+        """Задача #217: агрегировать спектрограмму → 1D-спектр, вызвать writer."""
+        sg = self._sg
+        assert sg is not None
+        spec = np.asarray(sg.total_spectrum()).astype(np.int64)
+        lt = float(np.asarray(sg.live_time_s, dtype=np.float64).sum())
+        rt = float(np.asarray(sg.real_time_s, dtype=np.float64).sum()) if sg.real_time_s is not None else lt
+        cal = list(sg.calibration.coeffs) if sg.calibration is not None else None
+        try:
+            self._write_spectrum(path, fmt, spec, lt, rt, cal)
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, tr("Экспорт спектра"),
+                                           tr("Ошибка экспорта: ") + str(e))
+            return
+        self.statusBar().showMessage(tr("Экспорт: ") + path, 5000)
+
+    @staticmethod
+    def _write_spectrum(path, fmt, spec, lt, rt, cal):
+        """Задача #217: диспетчер записи в tka/spe/n42."""
+        if fmt == "tka":
+            from awf.io.tka_writer import write_tka
+            write_tka(path, spec, live_time_s=lt, real_time_s=rt)
+        elif fmt == "spe":
+            from awf.io.spe_writer import write_spe
+            write_spe(path, spec, live_time_s=lt, real_time_s=rt, calibration=cal)
+        else:
+            from awf.io.n42_writer import write_n42
+            write_n42(path, spec, live_time_s=lt, real_time_s=rt, calibration=cal)
 
     @QtCore.Slot(float)
     def _on_segment_recompute(self, pen_factor: float = 2.0) -> None:

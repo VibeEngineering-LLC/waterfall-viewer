@@ -613,9 +613,9 @@ def test_top_menus_skeleton_present(app):
     i18n.reset_for_tests()
     w = MainWindow()
     titles = [m.title() for m in w.menuBar().findChildren(QtWidgets.QMenu)]
-    for expected in ("Изотопы", "Анализ", "Инструменты", "Сервис", "Помощь", "О программе"):
+    for expected in ("Изотопы", "Анализ", "Калибровка", "Инструменты", "Сервис", "Помощь", "О программе"):
         assert expected in titles
-    assert set(w._menus) == {"isotopes", "analysis", "tools", "service", "help", "about"}
+    assert set(w._menus) == {"isotopes", "analysis", "calibration", "tools", "service", "help", "about"}
     # #79 «Изотопы», #96 «Анализ», #106 «Сервис/Язык», #115 «Инструменты», #182 «Помощь»/«О программе»
     # — все меню наполнены. Меню «Анализ» и «Инструменты» имеют пункты, disabled до выбора фона
     # или до старта поиска пиков — это норма, проверяем только что stub «— наполняется позже —» ушёл.
