@@ -16,6 +16,7 @@ dependencies = [
     "PySide6>=6.6",
     "pyqtgraph>=0.13.3",
     "PyOpenGL>=3.1.7",
+    "pyserial>=3.5",
 ]
 
 [project.optional-dependencies]
@@ -25,7 +26,7 @@ dev = ["pytest>=8.0"]
 atomspectra = "awf.ui.main_window:main"
 
 [tool.setuptools]
-packages = ["awf", "awf.model", "awf.io", "awf.ui", "awf.analysis"]
+packages = ["awf", "awf.model", "awf.io", "awf.ui", "awf.analysis", "awf.usb"]
 # По умолчанию setuptools' include-package-data=True: при сборке pip из НЕ-git временной
 # копии .gitignore не читается и в дистрибутив сметается ВСЁ содержимое пакетов (в т.ч.
 # регенерируемый data/iaea_cache/*.csv). Выключаем — включаем строго по package-data ниже.

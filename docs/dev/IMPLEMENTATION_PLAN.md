@@ -276,6 +276,99 @@
 
 ---
 
+## 6a. Фаза 6 — Live-USB collector (замечание #PC-1, 2026-07-05)
+
+**Цель:** превратить вьюер в самостоятельный PC-сборщик спектрограммы с прибора AtomSpectra через
+USB-serial, без зависимости от прошивочного веб-стрима. Плюс серии записей разной длительности и
+недостающие импорты форматов.
+
+### 6a.1 Источник и протокол
+
+- Прибор — плата AtomSpectra (ESP32-S3) как spectrum-source: cmd `0x01` = `SPECTRUM` snapshot
+  (uint32×8192 cumulative). USB CDC, baud **600000**.
+- Транспорт — `shproto` (byte-stuffed, CRC-16/IBM, `SHPROTO_START=0xFE`/`SHPROTO_FINISH=0xA5`/
+  `SHPROTO_ESC=0xFD`). Порт из `firmware/atomspectra-waterfall/components/shproto/{shproto.c,shproto.h}`
+  (144 строк C → Python-модуль).
+- Логика waterfall — порт `main/spectrogram.c` `wf_task()`: cumulative snap → дельта `d = bins[i] -
+  s_prev[i]` (clamped 0..65535) → одна строка на interval. Reset детект: `total_counts < s_prev_total`
+  → пересборка baseline (`spectrogram_restore()` семантика).
+
+### 6a.2 Раскладка новых модулей
+
+| Модуль | Роль | Qt-free? | Тесты |
+|---|---|---|---|
+| `awf/usb/__init__.py` | пакет | да | — |
+| `awf/usb/shproto.py` | `ShprotoDecoder`/`ShprotoEncoder` — encode/decode кадров + CRC | ✅ | `tests/test_shproto.py` — roundtrip, escape edges, CRC-error, реальный SPECTRUM-snap |
+| `awf/usb/device.py` | pyserial reader-поток (или `asyncio` через `pyserial-asyncio`) | ✅ (I/O), тест через loopback `serial_for_url("loop://")` | `tests/test_usb_device.py` |
+| `awf/usb/collector.py` | cumulative → delta → row + baseline snapshot + reset детект | ✅ | `tests/test_collector.py` — оракул на синтетическом snap-потоке |
+| `awf/io/aswf_writer.py` | сегментный writer ASWF v3 (magic + JSON + baseline + rows + fsync batch + rollover по WF_SEG_MAX_ROWS/MAX_AGE) | ✅ | `tests/test_aswf_writer.py` — writer → loader roundtrip |
+| `awf/io/spe_loader.py` | ORTEC/Aptec ASCII `.spe` | ✅ | `tests/test_spe_loader.py` — фиксура + parse |
+| `awf/io/csv_loader.py` | гибкий CSV (channel, counts / energy, counts) | ✅ | `tests/test_csv_loader.py` |
+| `awf/io/becqmoni_loader.py` | BecqMoni XML | ✅ | `tests/test_becqmoni_loader.py` |
+| `awf/model/series.py` | `RecordingSeries` — план серии (список durations, cur idx, gap-policy) | ✅ | `tests/test_series.py` |
+| `awf/ui/tab_live.py` | вкладка «Live-USB»: выбор порта, Старт/Стоп, live-предпросмотр | Qt | offscreen smoke |
+| `awf/ui/tab_series.py` | вкладка «Серии»: план N×длительность, старт/стоп, прогресс | Qt | offscreen smoke |
+
+### 6a.3 Новые зависимости
+
+- **`pyserial>=3.5`** — hard prod dep (без него нельзя открыть порт). Уровень риска — низкий (MIT,
+  широко используется). Добавляется в `requirements.txt` и `pyproject.toml`.
+- Обновить `[tool.setuptools] packages` — добавить `"awf.usb"`.
+- Ничего опционального.
+
+### 6a.4 Правила и границы
+
+- Все `.py`-модули ≥25 строк — через `scripts/ollama/_spec_<NNN>_<name>.md` → `gen_code.py`.
+- `shproto.py` и `collector.py` — **чистая логика без Qt и без I/O**; тестируются юнитами на
+  синтетических потоках байт / snap-массивах.
+- `device.py` — тонкий обёртчик над `serial.Serial`, с чётким интерфейсом `open()/close()/
+  read_frame()->bytes | None`; поток на `threading.Thread` (не `QThread`) с ссылочно-совместимым
+  callback → в `tab_live.py` пробрасывается через `QMetaObject.invokeMethod`.
+- `aswf_writer.py` — симметричен `aswf_loader.py`; magic + `WF_HDR_RESERVE=4096` + baseline
+  (`WF_BASELINE_BYTES=32768`) + rows @ `WF_ROW_STRIDE=16402` (v3 layout из firmware). Ролловер по
+  `WF_SEG_MAX_ROWS=64` / `WF_SEG_MAX_AGE_SEC=600`. Каждый сегмент — валидный автономный `.aswf`.
+- Серии (`RecordingSeries`): список dur-секунд, авто-переход при исчерпании, сохранение файла на
+  переходе, опция «пауза K сек между записями». Ошибка серии = стоп, не переход.
+- Live-предпросмотр — не рушить существующий 3D-водопад: рисуется в отдельной вкладке; по
+  завершении записи файл открывается штатно (`load_aswf`).
+
+### 6a.5 Порядок и нумерация замечаний
+
+Работа регистрируется как замечание оператора **#PC-1**. Подшаги — сквозные `#207..#217`
+(следующий свободный номер в TASKS.md был `#207`, зафиксировано 2026-07-05):
+
+| # | Что делаем | §16-путь |
+|---|---|---|
+| **#207** | Каркас `awf/usb/` + правки `pyproject.toml`/`requirements.txt` (add `pyserial`, `awf.usb`) | напрямую (<25 строк) |
+| **#208** | Порт `shproto.py` — encoder/decoder + CRC-16/IBM | спека → Ollama → pytest |
+| **#209** | `usb/device.py` — pyserial reader (loop://-тест) | спека → Ollama → pytest |
+| **#210** | `usb/collector.py` — cumulative→delta→row (порт `wf_task()`) | спека → Ollama → pytest |
+| **#211** | `io/aswf_writer.py` — сегментный writer v3 | спека → Ollama → roundtrip-тест |
+| **#212** | `ui/tab_live.py` — вкладка Live-USB | спека → Ollama → offscreen smoke |
+| **#213** | `model/series.py` — план серии | напрямую (~40 строк, но легче гнать через Ollama) |
+| **#214** | `ui/tab_series.py` — вкладка Серии | спека → Ollama → offscreen smoke |
+| **#215** | `io/spe_loader.py` — ORTEC/Aptec ASCII | спека → Ollama → pytest |
+| **#216** | `io/csv_loader.py` — гибкий CSV | спека → Ollama → pytest |
+| **#217** | `io/becqmoni_loader.py` — BecqMoni XML | спека → Ollama → pytest |
+
+Порядок в 6a.5 = порядок работы. Каждый закрытый номер → строка в `CLAUDE_NOTES.md` + запись в
+`TASKS.md` + `**#NNN — суть**`. Тест-счётчик обновляется. Коммит конкретными путями. Push — по
+команде оператора.
+
+### 6a.6 Тест-план Фазы 6
+
+- Юниты: shproto encode/decode roundtrip, реальный SPECTRUM-frame → 8192×uint32 корректно; collector
+  на синтетическом cumulative-потоке даёт правильные строки delta и корректно детектит reset; writer
+  → loader roundtrip; loaders спе/csv/becqmoni на минимальных фикстурах.
+- Offscreen smoke: tab_live/tab_series открываются, кнопки Старт/Стоп работают без падения.
+- E2E (ручной): реальная плата на COM-порту → 2-минутная запись → файл открывается штатно в 3D
+  водопаде; серия 3×30 с даёт 3 корректных файла подряд.
+
+**Отсутствующие фичи:** GPS-трек с прибора (нет источника), dose_rate по кривой (не критично для
+MVP — пишем NaN, соответствует `aswf_loader` контракту).
+
+---
+
 ## 7. Реестр портируемых методов SpectraVibe (с провенансом)
 
 | Метод | Источник (`scripts/gamma/...`) | Зависимости | Портируемость | Фаза |

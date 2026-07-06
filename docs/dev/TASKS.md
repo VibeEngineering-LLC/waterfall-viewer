@@ -1870,6 +1870,75 @@ Currie, σ=√(bg·lt)); при самовычете гаснет ~весь во
 (иное число каналов → None). **Полный pytest — 551 passed** (549 + 2). Ждёт визуального
 подтверждения оператора.
 
+**#214 — утилита перекалибровки ASWF: `scripts/recalibrate_aswf.py`**
+(`scripts/recalibrate_aswf.py`): запрос оператора — файл `spectrogram.aswf` с неверной калибровкой (UI показывал Sb-122, реальное содержимое — Th-232 decay chain). Функция `recalibrate(src, dst, new_cal)` читает бинарный .aswf (magic `ASWF` + 4-байт `header_len` + JSON padded нулями), заменяет `hdr["calibration"]`, записывает dst. Вспомогательная `fit_calibration(current_cal, peak_pairs, deg=4)`: инвертирует текущий полином `brentq` → находит каналы 11 гамма-линий Th-232 (Pb-212 238.6, Tl-208 277.4/510.8/583.2/860.6/2614.5, Ac-228 338.3/911.2/969.0/1588.2, Bi-212 727.3, K-40 1460.8 кэВ) → `numpy.polyfit(chs, true_Es, 4)`. Новые коэффициенты: `[-11.342, 0.38277, 3.325e-05, -2.287e-09, 4.379e-13]`, RMSE 2.35 кэВ, max|Δ| 5.05 кэВ (Ac-228 911.2). Выход: `spectrogram_th232recal.aswf` (8 664 324 байт). Тесты: нет (standalone-скрипт). **Полный pytest — 667 passed.**
+
+**#213 — 2D-карта: Y-ось реального времени с/мин/ч**
+(`awf/ui/panels.py` — `_TimeAxisItem(pg.AxisItem)` + `HeatmapPanel.set_time_unit(unit)` + update в `set_spectrogram`; `awf/ui/main_window.py` — `_on_time_unit_changed` вызывает `_heatmap.set_time_unit(unit)`; `awf/ui/i18n.py` — `"Время, мин"→"Time, min"`, `"Время, ч"→"Time, h"`). Y-ось 2D-карты до задачи показывала индексы строк 0..N. `_TimeAxisItem` переопределяет `tickStrings`: маппинг display-индекса → `time_offsets_s[round(v * t_scale)] / div`. `set_time_unit(unit)` обновляет метку и `_time_axis.set_data(...)`. Тесты: нет. **Полный pytest — 667 passed.**
+
+**#211 — `awf/io/aswf_writer.py`: сегментный писатель ASWF v3**
+(`awf/io/aswf_writer.py`): `AswfSegmentedWriter` — запись live-USB водопада в каталог сегментов. Конструктор: `out_dir`, `started_at`, `interval_sec`, `baseline` (uint32×8192), `calibration`, `serial`, `note`, `max_rows=64`, `max_age_sec=600`, `fsync_batch=4`. `write_row(row)`: пишет spectrum uint16×8192 + duration uint16 (= 16386 байт); fsync каждые 4 строки; ротирует сегмент при ≥64 строк или ≥600 с. `tick(now)` — age-ротация без записи. `close()` — финализирует, пустой сегмент удаляется. Формат ASWF v3: magic + header_len=4096 + JSON + baseline 32 КБ + строки данных. Порт из `firmware/atomspectra-waterfall/main/spectrogram.h`. Тесты: 12 юнит-тестов (`tests/test_aswf_writer.py`). Часть Фазы 6 (#PC-1). **Полный pytest — 679 passed** (667 + 12 writer).
+
+**#210 — `awf/usb/collector.py`: cumulative→delta преобразователь**
+(`awf/usb/collector.py`, `tests/test_collector.py`, `scripts/ollama/_spec_210_collector.md`,
+`scripts/ollama/_spec_210_test_collector.md`): порт `wf_task()` из
+`firmware/atomspectra-waterfall/main/spectrogram.c` (строки 667–723). Класс `DeltaCollector`
+хранит `_prev_bins` (uint32×8192), `_prev_total`, `_prev_time`, `_has_prev`. `feed(snapshot)`
+детектирует reset (`not has_prev` ИЛИ `snap.total_counts < prev_total`), считает векторную
+дельту через numpy `int64` + `np.clip(delta, 0, 65535, out=…)`, приводит в `uint16`. Дельта
+времени: `dt = reset ? cur_time : (cur_time >= prev_time ? cur_time - prev_time : 0)`; клип
+65535. Update state — `_prev_bins = snap.bins.copy()` (копия, чтобы вызывающий мог мутировать
+свой массив без порчи prev-state). Тип `SpectrumSnapshot(bins, total_counts, total_time_sec)`
+и `WaterfallRow(counts, dur_sec)` — `@dataclass(frozen=True)`. `reset()` возвращает в
+состояние «первый feed». Read-only свойства: `prev_total`, `prev_time`, `has_prev`. Генерация
+через Ollama qwen3-coder:30b (§16); правка Ollama-огреха inline: (1) trailing fence-строка
+`` ``` `` в конце файла (SyntaxError) — удалена через `sed -i '88d'`. Тесты: 12 юнит-тестов
+(первый feed = full bins, delta, reset при total drop, clip ceiling 65535 uint16, clip floor 0
+по одному каналу при росте total, time regress→dt=0, dur clip 65535, first dur=cur_time,
+reset method, input bins не мутируется, has_prev transitions, prev_total/prev_time updated).
+**Полный pytest — 667 passed** (655 + 12 collector).
+
+**#209 — `awf/usb/device.py`: pyserial reader-поток + shproto-декодер**
+(`awf/usb/device.py`, `tests/test_device.py`, `scripts/ollama/_spec_209_device.md`,
+`scripts/ollama/_spec_209_test_device.md`): Qt-free обёртка `SerialSpectraDevice` над
+`pyserial`. Конструктор `(port, baudrate=115200, *, on_frame=None, on_error=None,
+read_chunk_size=512, read_timeout_s=0.1)`. `open()` идемпотентен, через `serial.serial_for_url`
+(поддержка `"COM16"` и `"loop://"`). Reader daemon-поток `_reader_loop` читает чанки,
+скармливает `ShprotoDecoder`, кладёт готовые кадры в `queue.Queue` + вызывает `on_frame`
+внутри try/except (callback не валит поток). `send_frame(cmd, payload)` под `_write_lock`,
+требует `is_open`, иначе `RuntimeError("device not open")`. `read_frame(timeout)` /
+`drain_frames()` — синхронный API поверх очереди. `close()` идемпотентен: `_stop.set()`,
+`thread.join(2.0)`, `_ser.close()`. Тесты: 12 юнит-тестов через `loop://` echo-порт
+(is_open transitions, open/close/open reuse, send-before-open raise, roundtrip, timeout=None,
+FIFO-порядок, callback invoked, callback-exception не убивает reader, bytes_written,
+маркеры в payload, drain, close останавливает reader). **Полный pytest — 655 passed**
+(643 + 12 новых device).
+
+**#207 — Каркас `awf/usb/` + pyserial dep + `[tool.setuptools] packages`**
+(`awf/usb/__init__.py`, `pyproject.toml`, `requirements.txt`): создан пакет `awf.usb` (Qt-free
+логика: shproto, device, collector). Добавлен `pyserial>=3.5` в `pyproject.toml` (после
+`PyOpenGL>=3.1.7`) и в `requirements.txt` (комментарий «Live-USB collector (Фаза 6, #PC-1)»).
+`awf.usb` зарегистрирован в `[tool.setuptools] packages`. Часть замечания #PC-1 (Live-USB
+collector из firmware/atomspectra-waterfall). **Полный pytest — 643 passed** (631 baseline + 12
+новых shproto).
+
+**#208 — Порт shproto: encoder/decoder + CRC-16 табличный**
+(`awf/usb/shproto.py`, `tests/test_shproto.py`, `scripts/ollama/_spec_208_shproto.md`,
+`scripts/ollama/_spec_208_test_shproto.md`): чистый Python-порт из
+`firmware/atomspectra-waterfall/components/shproto/shproto.c` (144 строки C). Полная 256-entry
+CRC-16 таблица `_CRC16_TABLE` verbatim из C. `ShprotoDecoder` (state-машина
+`byte_received/feed/take_frame/frames/reset` + счётчик `dropped`), `ShprotoEncoder`
+(статический `encode(cmd, payload)` + потоковый API `packet_start/packet_add_data/
+packet_complete`). Правила: SHPROTO_START=0xFE, SHPROTO_ESC=0xFD, SHPROTO_FINISH=0xA5,
+CRC_INIT=0xFFFF; escape маркер-байт → `ESC + (~byte & 0xFF)`. Валидность RX:
+`crc16_buf(cmd|payload|crc_le) == 0`. Генерация через Ollama qwen3-coder:30b (§16 IRON).
+Пост-правки inline: (1) в `ShprotoEncoder.packet_start` добавлено
+`self._crc = _crc16_byte(self._crc, cmd)` (Ollama пропустил обновление CRC от cmd —
+уронило `test_streaming_encoder_matches_static`); (2) в `test_second_start_resets_buffer`
+`second_valid[2:]` → `second_valid[1:]` (Ollama срезал SHPROTO_START, обесценив цель теста
+«второй START сбрасывает буфер»). 12/12 pytest тестов зелёные. **Полный pytest — 643 passed**
+(+12 shproto).
+
 **#160 — зона 1461–2614 всё ещё визуально пуста: оператор не видит найденных пиков (после #159)**
 (`awf/analysis/peaks.py` — новая `peak_presence_mask` + константы `_PPM_GAP`/`_PPM_SHOULDER_W`/
 `_PPM_CLOSE_LEN`; `awf/ui/view3d.py` — `_add_peak_ridge`: union строгой маски с presence-маской;
