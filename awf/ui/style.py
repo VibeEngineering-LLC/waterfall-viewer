@@ -66,7 +66,7 @@ QStatusBar {
 QStatusBar QLabel { font-size: 14px; }
 QStatusBar::item { border: 0px; }   /* без рамок-сепараторов между секциями */
 
-QDockWidget { color: #d8dade; titlebar-close-icon: none; }
+QDockWidget { color: #d8dade; }
 QDockWidget::title {
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                 stop:0 #45484d, stop:1 #303338);
@@ -80,7 +80,17 @@ QDockWidget::title {
    pyqtgraph — потомки панели, а не дока, поэтому комбинатор '>' их НЕ затрагивает и сцены
    сохраняют собственную тёмную отрисовку. */
 QDockWidget > QWidget { background-color: #2b2d31; }
+/* #227: кнопки тайтлбара дока видны на тёмном фоне */
+QDockWidget::close-button, QDockWidget::float-button {
+    background: transparent; border: none; padding: 2px;
+}
+QDockWidget::close-button:hover, QDockWidget::float-button:hover {
+    background: #55585d; border-radius: 3px;
+}
 
+/* #227: разделитель между dock-колонками и центральным виджетом — 5px, видим */
+QMainWindow::separator { width: 5px; height: 5px; background: #45484d; }
+QMainWindow::separator:hover { background: #6a8faf; }
 QLabel { color: #cfd2d6; background: transparent; }
 QCheckBox { color: #cfd2d6; spacing: 5px; }
 
