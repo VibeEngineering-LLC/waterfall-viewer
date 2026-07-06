@@ -645,9 +645,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
     @QtCore.Slot(int)
     def _on_time_unit_changed(self, _idx: int) -> None:
-        """Единицы оси времени 3D-сетки: с / мин / ч (Задача #64)."""
+        """Единицы оси времени 3D-сетки и 2D-карты: с / мин / ч (Задача #64/#207)."""
         unit = self._tunit_combo.currentData() or "с"
         self._view3d.set_time_unit(unit)
+        self._heatmap.set_time_unit(unit)
 
     @QtCore.Slot(int)
     def _on_unit_changed(self, _idx: int) -> None:
