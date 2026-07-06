@@ -112,6 +112,6 @@ def test_segments_separate_sources_k40_before_cs137(app):
 
 def test_segments_in_tools_menu(app):
     w = MainWindow()
-    menu = w._menus["tools"]
+    menu = w._menus["view"]  # #MENU-2: «Инструменты» → «Вид»
     labels = [a.text() for a in menu.actions()]
     assert i18n.tr("Сегментация по времени") in labels   # язык-независимо (RU/EN)

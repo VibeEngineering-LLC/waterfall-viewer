@@ -161,12 +161,12 @@ def test_mainwindow_eff_curve_survives_reload_and_info_updates(app, tmp_path):
     from awf.ui.main_window import MainWindow
     w = MainWindow()
     w._on_loaded(_sg(np.ones((3, 6))))
-    assert "Гамма-1С" in w._act_eff_info.text()        # дефолтная кривая в инфо-пункте
+    assert "Гамма-1С" in w._eff_info_label.text()        # дефолтная кривая в инфо-пункте
     p = tmp_path / "my_det.txt"
     p.write_text("100 2e-3\n1000 2e-4\n", encoding="utf-8")
     w._eff_curve = load_efficiency_curve(p)            # как _on_eff_load без диалога
     w._update_eff_info()
-    assert "my_det" in w._act_eff_info.text()
+    assert "my_det" in w._eff_info_label.text()
     w._on_loaded(_sg(np.ones((2, 6))))                 # новый файл
     assert w._eff_curve.name == "my_det"               # кривая — свойство детектора
     w.close()
