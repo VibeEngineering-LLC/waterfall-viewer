@@ -104,6 +104,7 @@ class HeatmapPanel(QtWidgets.QWidget):
         # маркеры секущих плоскостей 3D (Задача #39): Время -> горизонтальная линия (ось Y),
         # Энергия -> вертикальная (ось X); цвета совпадают с осями 3D (бирюза/пурпур)
         self._section_items = []
+        self._floor_visible = True   # Задача #222: подложка 2D (нижний диапазон LUT)
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self._glw = pg.GraphicsLayoutWidget()
@@ -122,6 +123,14 @@ class HeatmapPanel(QtWidgets.QWidget):
         self._plot.addItem(self._roi)
         self._roi.setVisible(False)
         self._roi.sigRegionChangeFinished.connect(self._on_roi_finished)
+        # Задача #220: crosshair + HUD оверлей
+        _ch_pen = pg.mkPen((255, 255, 255, 100), width=2)  # Задача #221: толще
+        self._v_line = pg.InfiniteLine(angle=90, movable=False, pen=_ch_pen)
+        self._h_line = pg.InfiniteLine(angle=0,  movable=False, pen=_ch_pen)
+        self._hud = pg.TextItem("", anchor=(1, 0), fill=pg.mkBrush(0, 0, 0, 160), color=(220, 220, 220))
+        for _it in (self._v_line, self._h_line, self._hud):
+            self._plot.addItem(_it); _it.setVisible(False)
+        self._plot.scene().sigMouseMoved.connect(self._on_mouse_moved)
 
     def retranslate(self) -> None:
         """Задача #169: подписи осей 2D-карты на текущем языке."""
@@ -245,7 +254,24 @@ class HeatmapPanel(QtWidgets.QWidget):
     def set_colormap(self, name: str) -> None:
         """Сменить палитру карты (Задача 17). LUT применяется к ImageItem, данные не трогаем."""
         self._cmap_name = name
-        self._img.setColorMap(get_colormap(name))
+        self._apply_cmap()
+
+    def _apply_cmap(self) -> None:
+        """Задача #222: применить палитру с учётом видимости подложки."""
+        cmap = get_colormap(self._cmap_name)
+        if not self._floor_visible:
+            lut = cmap.getLookupTable(0.0, 1.0, 256, alpha=True).copy()
+            lut[:13, 3] = 0   # нижние ~5% LUT прозрачны (аналог _FLOOR_FRAC 3D)
+            self._img.setLookupTable(lut)
+        else:
+            self._img.setColorMap(cmap)
+
+    def set_floor_visible(self, on: bool) -> None:
+        """Задача #222: показать/скрыть «подложку» 2D-карты (ячейки с нулевым счётом)."""
+        if self._floor_visible == on:
+            return
+        self._floor_visible = on
+        self._apply_cmap()
 
     def _scaled_image(self):
         """Дисплейная матрица -> усреднение по энергии (IV-R4) -> Z-шкала контраста."""
@@ -382,6 +408,33 @@ class HeatmapPanel(QtWidgets.QWidget):
             self._plot.addItem(ln)
             self._section_items.append(ln)
 
+    def _on_mouse_moved(self, pos) -> None:
+        """Задача #220: crosshair + HUD оверлей на 2D-карте."""
+        if self._sg is None or self._disp_counts is None:
+            return
+        vb = self._plot.getViewBox()
+        mp = vb.mapSceneToView(pos)
+        x, y = mp.x(), mp.y()
+        rows, cols = self._disp_counts.shape
+        inside = 0 <= x < cols and 0 <= y < rows
+        self._v_line.setVisible(inside)
+        self._h_line.setVisible(inside)
+        self._hud.setVisible(inside)
+        if not inside:
+            return
+        self._v_line.setPos(x)
+        self._h_line.setPos(y)
+        ch = min(int(x * self._ch_scale), self._sg.n_channels - 1)
+        t_row = min(int(y * self._t_scale), self._sg.n_slices - 1)
+        energies = self._sg.energies()
+        keV = float(energies[ch]) if energies is not None and len(energies) > ch else 0.0
+        cell = float(self._disp_counts[int(y), int(x)])
+        lt = float(self._sg.live_time_s[t_row])
+        row_cps = float(self._sg.counts[t_row, :].sum()) / lt if lt > 0.0 else 0.0
+        self._hud.setText(f"ch {ch} / {keV:.1f} кэВ : {cell:.3g}\nCPS строки: {row_cps:.1f}")
+        vr = vb.viewRange()
+        self._hud.setPos(vr[0][1], vr[1][0])
+
     def set_section_markers(self, t_vals, e_vals) -> None:
         """Позиции видимых секущих плоскостей 3D на 2D-карте (Задача #39): Время -> горизонталь
         (ось Y), Энергия -> вертикаль (ось X). Real (с/кэВ) -> дисплейные коорд. через
@@ -463,11 +516,13 @@ class SlicePanel(QtWidgets.QWidget):
         self._spectrum_plot.setLabel("bottom", tr("Энергия, кэВ"))
         self._spectrum_plot.setLabel("left", tr("Отсчёты"))
         self._spectrum_plot.showGrid(x=True, y=True, alpha=0.3)
+        self._spectrum_plot.getAxis("left").enableAutoSIPrefix(False)   # Задача #218
         layout.addWidget(self._spectrum_plot)
         self._series_plot = pg.PlotWidget(viewBox=_SeriesPanViewBox())  # Задача #199: LMB pan только X, wheel zoom
         self._series_plot.setLabel("bottom", tr("Время, с"))
         self._series_plot.setLabel("left", tr("Отсчёты в полосе"))
         self._series_plot.showGrid(x=True, y=True, alpha=0.3)
+        self._series_plot.getAxis("left").enableAutoSIPrefix(False)     # Задача #218
         layout.addWidget(self._series_plot)
         # Задача #41: кривая спектра среза — бирюза рамки плоскости Времени 3D (51,217,242)
         self._spectrum_curve = self._spectrum_plot.plot(
@@ -773,6 +828,7 @@ class SlicePanel(QtWidgets.QWidget):
         b = np.asarray(band_raw, dtype=np.float64)
         self._raw_series = (t, b)
         self._series_curve.setData(t, self._series_to_unit(b))
+        self._expand_series_y_if_needed()   # Задача #218: обновить Y при show_roi/set_spectrogram
 
     def _set_ewin(self, times, series_raw) -> None:
         """Кэшировать сырой ряд энергоокна и нарисовать в текущих единицах (Задача #44)."""
@@ -960,15 +1016,18 @@ class SlicePanel(QtWidgets.QWidget):
         if self._sg is None:
             return
         spec = np.asarray(self._sg.sum_spectrum(t_lo, t_hi), dtype=np.float64)
-        self._plot_spectrum(self._energies, spec, self._sg.live_time_total(t_lo, t_hi))
+        lt = self._sg.live_time_total(t_lo, t_hi)
+        self._plot_spectrum(self._energies, spec, lt)
         band = np.asarray(self._sg.band_time_series(ch_lo, ch_hi), dtype=np.float64)
         self._set_series(self._times, band)
         total = int(self._sg.roi_sum(t_lo, t_hi, ch_lo, ch_hi))
+        cps = total / lt if lt > 0.0 else 0.0   # Задача #218: суммарный CPS выборки
         e_lo = float(self._energies[ch_lo]) if self._energies is not None else 0.0
         e_hi = float(self._energies[min(ch_hi, self._sg.n_channels) - 1]) if self._energies is not None else 0.0
         self._header.setText(
             f"{tr('Выборка: срезы')} [{t_lo}:{t_hi}], {tr('каналы')} [{ch_lo}:{ch_hi}] "
-            f"({e_lo:.0f}–{e_hi:.0f} {tr('кэВ')}). {tr('Сумма отсчётов')} = {total}.")
+            f"({e_lo:.0f}–{e_hi:.0f} {tr('кэВ')}). {tr('Сумма отсчётов')} = {total}. "
+            f"{tr('Итого')} {cps:.1f} {tr('отсч/с')}.")
         self._view_mode = ("roi", t_lo, t_hi, ch_lo, ch_hi)   # Задача #161: для update_spectrogram
 
     def show_energy_window(self, e_lo, e_hi) -> None:

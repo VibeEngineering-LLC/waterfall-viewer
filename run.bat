@@ -17,7 +17,7 @@ if exist ".venv\Scripts\python.exe" (
 REM First-run self-heal: if a dependency is missing, install requirements into
 REM the user's own site-packages (no admin needed). Runs in the user's real
 REM environment, so packages land where this same Python will look for them.
-%AWF_PY% -c "import numpy, PySide6, pyqtgraph, OpenGL, lxml" 1>nul 2>nul
+%AWF_PY% -c "import numpy, PySide6, pyqtgraph, OpenGL, lxml, serial" 1>nul 2>nul
 if errorlevel 1 (
     echo Installing dependencies on first run, please wait...
     %AWF_PY% -m pip install %AWF_PIP_USER% -r requirements.txt

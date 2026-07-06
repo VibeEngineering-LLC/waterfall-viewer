@@ -1870,11 +1870,96 @@ Currie, σ=√(bg·lt)); при самовычете гаснет ~весь во
 (иное число каналов → None). **Полный pytest — 551 passed** (549 + 2). Ждёт визуального
 подтверждения оператора.
 
+> ⚠ **Коллизия номеров (2026-07-05):** три записи ниже — `**#217 (оператор)`, `**#216 (оператор)`, `**#215 (оператор)`** — это ТРЕТЬЯ реплика оператора 2026-07-05 «1 меню калибровки. 2 сохранить файл. 3 создать спектр из спектрограммы». Те же номера `#215/#216/#217` УЖЕ заняты ниже в этом файле — записи Phase 6 PC-1 (`spe_loader` / `csv_loader` / `becqmoni_loader`, строки 1879+/1903+/1921+). Различать по слову «(оператор)» в заголовке и по существу задачи.
+
+**#217 (оператор) — «Создать спектр из спектрограммы» → BecqMoni `.tka` / LSRM-IAEA `.spe` / InterSpec-ANSI N42 `.n42`**
+(`awf/io/tka_writer.py` NEW 41 стр, `awf/io/spe_writer.py` NEW 73 стр, `awf/io/n42_writer.py` NEW 87 стр, `awf/ui/main_window.py` — экшн «Создать спектр из спектрограммы» после «Сохранить как…» + handler-цепочка `_export_spectrum → _detect_export_fmt → _do_export_spectrum → _write_spectrum` (§16-split), `awf/ui/i18n.py` +4 строки, `tests/test_spectrum_export.py` NEW 79 стр 5 тестов): запрос оператора «сделай еще пункт создать спектр из спектрограммы с сохранением в форматы бекмони, лсрм и интерспек». Открывается `QFileDialog` с фильтром «BecqMoni (*.tka);;LSRM/IAEA (*.spe);;InterSpec/ANSI N42 (*.n42)», принудительно устанавливается расширение по выбранному фильтру; агрегация — `spec = sg.total_spectrum().astype(int64)` (Σ counts по времени), `lt = Σ sg.live_time_s`, `rt = Σ sg.real_time_s`, `cal = list(sg.calibration.coeffs)`. **`.tka`** (BecqMoni) — ASCII с 2-строчным header `int(live)\nint(real)\n` + по одному int-отсчёту на строку. **`.spe`** (LSRM/IAEA) — секции `$SPEC_ID:` / `$DATE_MEA:` (UTC ISO) / `$MEAS_TIM: int(live) int(real)` / `$DATA: 0 N-1` + int-отсчёты построчно / `$ENER_FIT: a0 a1` / `$MCA_CAL: N` + N-строчный полином с суффиксом ` keV` / `$ROI: 0` / `$PRESETS:`. **`.n42`** (ANSI N42.42-2012) — XML в namespace `http://physics.nist.gov/N42/2011/N42`: `<RadInstrumentData>` → `<EnergyCalibration>/<CoefficientValues>` (полином, space-separated) → `<RadMeasurement>/<Spectrum>` → `<LiveTimeDuration>`/`<RealTimeDuration>` в ISO 8601 duration + `<ChannelData>` (int-отсчёты, space-separated). При исключении в любом writer'е — `QMessageBox.critical`, статус-строка «Экспорт: {path}» при успехе. 5 тестов (`test_tka_header_and_counts`, `test_spe_sections` — все обязательные `$`-секции + `1.500000 0.300000` в `$ENER_FIT:`, `test_n42_valid_xml_and_channeldata` — парсится ElementTree, `<EnergyCalibration>` содержит коэф. `0.3`, `<ChannelData>` = int-отсчёты, `test_writers_accept_float_counts` — float 1.4/2.6/3.5/0.0 → 1/3/4/0 через `round`, `test_reject_2d` — все три отвергают 2D с `ValueError("1D")`). Полезно для экспорта агрегированного долгого замера в стандартные γ-спектрометрические тулчейны. **Полный pytest — 749 passed** (730 baseline Phase 6 csv_loader + 4 aswf_single_writer оператор-#216 + 5 spectrum_export оператор-#217 + 10 becqmoni_loader Phase 6 закрытие; teardown Qt warnings pyqtgraph LabelItem/_SeriesPanViewBox — безобидны, exit 0. Указанные в записи Phase 6 #217 becqmoni_loader на строке 1899 «41 UI-fail cross-test poison _export_spectrum/_save_as_aswf» — устарели, реальный прогон 2026-07-05 чистый).
+
+**#216 (оператор) — «Сохранить как…» в меню Файл → `.aswf` v3 с текущей калибровкой**
+(`awf/io/aswf_single_writer.py` NEW 125 стр, `awf/ui/main_window.py:303,861+`, `awf/ui/i18n.py` +2 строки, `tests/test_aswf_single_writer.py` NEW 69 стр 4 теста): запрос оператора «И пункт сохранить файл в меню файл». `write_aswf_single(path, sg, note="")` пишет одиночный ASWF v3 (magic `ASWF` + uint32 `header_len=4096` + JSON `hdr` + опц. baseline uint32×8192 + строки uint16×8192 counts + uint16 duration_s), заголовок содержит текущий `sg.calibration.coeffs`, `sg.t0_iso`, обезличенный `serial="unknown"` (публичный репо, §7), `note`, `interval_sec` (медиана `sg.real_time_s`), `n_channels=8192`; отсутствующий baseline при `sg._baseline is None` → флаг `has_baseline=false` в JSON. UI: экшн «Сохранить как…» в меню «Файл» после «Открыть», `_do_save_as_aswf` открывает `QFileDialog.getSaveFileName(filter="ASWF (*.aswf)")` с принудительным расширением, `QMessageBox.critical` при ошибке, статус-строка «Сохранено: …» при успехе. 4 теста — round-trip через `aswf_loader.load_aswf`, сохранение калибровки, отсутствие baseline при `_baseline=None`, обезличенный serial. Полезно для сохранения перекалиброванной (после #215-оператор) или обрезанной спектрограммы. **Полный pytest — 734 passed** (730 baseline + 4 aswf_single_writer).
+
+**#215 (оператор) — меню «Калибровка» + интерактивная перекалибровка**
+(`awf/ui/calibration_dialog.py` NEW 235 стр, `awf/ui/main_window.py:24-25/331/383/837-846`, `awf/ui/i18n.py` +строки диалога): запрос оператора «я просил меню калибровки добавить». `CalibrationDialog(QDialog)` — таблица «канал ↔ известная энергия (кэВ)», авто-подстановка каналов найденных пиков (Mariscotti+Currie), полиномиальный фит degree 1..4 через `numpy.polyfit`, live-preview новых коэффициентов. Новое верхнее меню `("calibration", "Калибровка")` рядом с «Инструменты»; экшн `_open_calibration_dialog` открывает диалог для активной спектрограммы, применяет `sg.calibration = Calibration(coeffs)`, вызывает `_on_calibration_changed` (перестройка пиков/маркеров нуклидов/меток осей). Работает по цепочке: пользователь запускает поиск пиков → в диалоге сопоставляет каналы с эталонными γ-линиями (Cs-137 661.66 / K-40 1460.82 / Tl-208 2614.51 и т.д.) → фит → замена калибровки → авто-переоткрытие маркеров и осей энергии. Тесты — интеграционно через `test_group4_remarks.py::test_top_menus_skeleton_present` (меню `calibration` присутствует в списке верхних меню); отдельного `test_calibration_dialog.py` нет (Qt-диалог + numpy.polyfit). **Полный pytest — 730 passed** (baseline Phase 6 после csv_loader).
+
 **#214 — утилита перекалибровки ASWF: `scripts/recalibrate_aswf.py`**
 (`scripts/recalibrate_aswf.py`): запрос оператора — файл `spectrogram.aswf` с неверной калибровкой (UI показывал Sb-122, реальное содержимое — Th-232 decay chain). Функция `recalibrate(src, dst, new_cal)` читает бинарный .aswf (magic `ASWF` + 4-байт `header_len` + JSON padded нулями), заменяет `hdr["calibration"]`, записывает dst. Вспомогательная `fit_calibration(current_cal, peak_pairs, deg=4)`: инвертирует текущий полином `brentq` → находит каналы 11 гамма-линий Th-232 (Pb-212 238.6, Tl-208 277.4/510.8/583.2/860.6/2614.5, Ac-228 338.3/911.2/969.0/1588.2, Bi-212 727.3, K-40 1460.8 кэВ) → `numpy.polyfit(chs, true_Es, 4)`. Новые коэффициенты: `[-11.342, 0.38277, 3.325e-05, -2.287e-09, 4.379e-13]`, RMSE 2.35 кэВ, max|Δ| 5.05 кэВ (Ac-228 911.2). Выход: `spectrogram_th232recal.aswf` (8 664 324 байт). Тесты: нет (standalone-скрипт). **Полный pytest — 667 passed.**
 
 **#213 — 2D-карта: Y-ось реального времени с/мин/ч**
 (`awf/ui/panels.py` — `_TimeAxisItem(pg.AxisItem)` + `HeatmapPanel.set_time_unit(unit)` + update в `set_spectrogram`; `awf/ui/main_window.py` — `_on_time_unit_changed` вызывает `_heatmap.set_time_unit(unit)`; `awf/ui/i18n.py` — `"Время, мин"→"Time, min"`, `"Время, ч"→"Time, h"`). Y-ось 2D-карты до задачи показывала индексы строк 0..N. `_TimeAxisItem` переопределяет `tickStrings`: маппинг display-индекса → `time_offsets_s[round(v * t_scale)] / div`. `set_time_unit(unit)` обновляет метку и `_time_axis.set_data(...)`. Тесты: нет. **Полный pytest — 667 passed.**
+
+**#217 — `awf/io/becqmoni_loader.py`: BecqMoni Live XML одиночного спектра**
+(`awf/io/becqmoni_loader.py`, `tests/test_becqmoni_loader.py`, `scripts/ollama/_spec_217_becqmoni_loader.md`,
+`scripts/ollama/_spec_217_test_becqmoni_loader.md`): гибкий XML-парсер BecqMoni Live.
+`load_becqmoni(path) -> Spectrogram` — 1×N_ch. Namespace-игнор через `_localname` (`el.tag.rsplit("}",1)[-1]`);
+поиск регистронезависимый через `_find_local`/`_findall_local` (обход `scope.iter()`).
+Приоритет источников отсчётов: (1) `<DataPoint>` в порядке появления, (2) `<Channel>` внутри
+`<Channels>`/`<Spectrum>` (с атрибутом `n`/`index` — сортировка по нему, иначе по порядку),
+(3) text-нода `<Spectrum>`/`<SpectrumData>` whitespace-split. Калибровка: все `<Coefficient>` в
+порядке появления → `Coefficients` fallback `<PolynomialCoefficients>`/`<CalibrationCoefficients>`
+как whitespace-text; иначе identity `[0.0, 1.0]`. Тайминги: `MeasurementTime`→`RealTime`→NaN,
+`LiveTime`→real→NaN. Время начала `t0_iso`: `<StartTime>`/`<SampleDateTime>`/`<AcquisitionStartTime>`
+ищется в **root** (не в `EnergySpectrum`-scope — StartTime обычно на уровне `ResultData`); битая
+дата → `None`. `NumberOfChannels` mismatch → `warnings.warn` + pad-zeros right / truncate.
+Отрицательные отсчёты — warn + clip к 0. dtype `uint16` при `max≤65535` иначе `int32`. Ошибки:
+не-XML → `ValueError("BecqMoni: не XML: ...")`; пусто → `ValueError("BecqMoni: нет спектра: ...")`.
+Ollama qwen3-coder:30b (§16 IRON), v1 c мелкими правками (импорт `xml.etree.ElementTree as ET`
++ scope→root для `StartTime`). 10 юнит-тестов (helper `_write_xml`): datapoints_full,
+channel_elements_with_n_attr, spectrum_text_whitespace, no_calibration_fallback,
+live_and_real_time, missing_timings_nan, start_time_invalid_none, number_of_channels_pads,
+not_xml_raises, int32_when_gt_uint16. Часть Фазы 6 импортов PC (#PC-1) — Фаза 6 закрыта.
+**Модульный pytest — 10 passed** (`tests/test_becqmoni_loader.py`). Полный pytest — 41 UI-fail
+не в зоне #217 (cross-test poison `_export_spectrum`/`_save_as_aswf` без handler-context,
+изолированно `test_peaks_ui.py` = 37/37 passed) — отдельная задача.
+
+**#216 — `awf/io/csv_loader.py`: гибкий CSV-загрузчик одиночного спектра**
+(`awf/io/csv_loader.py`, `tests/test_csv_loader.py`, `scripts/ollama/_spec_216_csv_loader.md`,
+`scripts/ollama/_spec_216_test_csv_loader.md`): двухколоночный CSV, автодетект разделителя
+(`,`/`;`/`\t` — приоритет по числу 2-колоночных строк, tiebreak `,`>`;`>`\t`, fallback `,`).
+Опциональный header (первая ячейка не парсится как float — вся строка skip), комментарии
+`#…` и пустые строки игнорируются. Тип X: строго `0,1,…,N-1` (int) → channel-index,
+калибровка identity `[0.0, 1.0]`; иначе энергии в кэВ, калибровка линейная `a0=E[0]`,
+`a1=(E[-1]-E[0])/(N-1)` (fallback `1.0` при `N==1`). Отсчёты — int ≥0 (клип отрицательных к 0
+с одноразовым `warnings.warn`), dtype `uint16` при `max<=65535` иначе `int32`. Оси:
+`time_offsets_s=[0.0]`, `real/live_time_s=[NaN]`, `t0_iso=None`, `source_path=str(path)`.
+Ошибки: файл пуст (после фильтра) → `ValueError`; битые числа/недостающие колонки — `warnings.warn`.
+Хелперы: `_detect_delimiter`, `_try_float`, `_is_channel_index`. Ollama qwen3-coder:30b (§16 IRON),
+v1 чистый. 10 юнит-тестов (`_write_spe`-подобный helper `_write_csv`): channel-counts comma,
+energy-counts linear fit, semicolon separator, tab separator, header skipped, comments+blanks,
+empty raises, int32 при >65535, negative clipped, single-channel a1 fallback. Часть Фазы 6
+импортов PC (#PC-1). **Полный pytest — 730 passed** (719 + 10 csv + 1 #UI-2 (menu calibration)
+починился где-то параллельно вне цепочки #PC-1).
+
+**#215 — `awf/io/spe_loader.py`: загрузчик ORTEC/IAEA ASCII `.spe`**
+(`awf/io/spe_loader.py`, `tests/test_spe_loader.py`, `scripts/ollama/_spec_215_spe_loader.md`,
+`scripts/ollama/_spec_215_test_spe_loader.md`): односпектральный ASCII-загрузчик.
+`load_spe(path) -> Spectrogram` — 1×N_ch. Разбор по секциям `$KEY:`: `$DATA:` (`start end`
++ int-отсчёты, `start>0` → padding нулями слева, `n_channels=end+1`, dtype uint16/int32),
+`$MEAS_TIM:` (`live real`, порядок Ortec), `$MCA_CAL:` (приоритет; `N` + N float, unit-суффикс
+игнор), `$ENER_FIT:` (fallback линейный `a0 a1`), fallback `[0.0,1.0]`. `$DATE_MEA:` — Ortec
+`MM/DD/YYYY HH:MM:SS` или ISO-8601 → ISO без tz, нераспарсимо → `None`. Хелперы: `_parse_sections`
+(regex `^\$[A-Z0-9_]+:$`, дубли — первое вхождение), `_first_nonempty`, `_parse_mca_cal`,
+`_parse_ener_fit`, `_parse_spe_date`. Отсутствие `$DATA:` → `ValueError`; усечение — `warnings.warn`
++ padding. `time_offsets_s=[0.0]`, `real/live_time_s=[real/live or NaN]`. Ollama qwen3-coder:30b
+(§16 IRON), v1 чистый. 12 юнит-тестов (`_write_spe` helper: minimal, ener_fit, mca_cal priority,
+mca_cal без единицы, meas_tim, date Ortec/ISO/invalid, start>0 padding, missing $DATA raise,
+no-cal fallback, int32 при >65535). Часть Фазы 6 импортов PC (#PC-1). **Полный pytest — 719 passed**
+(702 + 12 spe + 5 pre-existing вне цепочки #PC-1; 1 fail `test_top_menus_skeleton_present` — не в
+цепочке #PC-1, зарегистрирован как #UI-2).
+
+**#213 — `awf/model/series.py`: `RecordingSeries` (план серии live-USB)**
+(`awf/model/series.py`, `tests/test_series.py`, `scripts/ollama/_spec_213_series.md`,
+`scripts/ollama/_spec_213_test_series.md`): чистая Python-модель (dataclass, без Qt/I/O/numpy).
+`RecordingSeries(durations_sec, out_dir, file_prefix="series", gap_sec=0.0, stop_on_error=True)`.
+Валидация в `__post_init__`. Фазы `SeriesPhase(Enum)`: IDLE→RECORDING→(PAUSE→)RECORDING…→DONE.
+Ключевые методы: `start(now)`, `tick(now)`/`advance(now)` (авто-переход;
+`_phase_started_at += phase_dur` — без дрейфа; `while` пропускает несколько фаз при большом
+скачке `now`), `mark_error(now)` (stop_on_error→DONE+errored), `reset()`. Свойства: `n_tracks`,
+`phase`, `current_index`, `started_at`, `is_running/is_done/errored`, `current_file` (Path
+только в RECORDING: `out_dir/f"{prefix}_{idx:03d}"`), `current_duration_sec`,
+`remaining_sec(now)`, `progress()→(done,total)`. После последней дорожки — сразу DONE (без
+хвостовой паузы); в PAUSE `current_file=None`. Ollama qwen3-coder:30b (§16 IRON), v1 чистый.
+Тесты: 14 юнит-тестов. Часть Фазы 6 (#PC-1). **Полный pytest — 702 passed** (679 + 14 series
++ 9 pre-existing, добавленных вне цепочки #PC-1).
 
 **#211 — `awf/io/aswf_writer.py`: сегментный писатель ASWF v3**
 (`awf/io/aswf_writer.py`): `AswfSegmentedWriter` — запись live-USB водопада в каталог сегментов. Конструктор: `out_dir`, `started_at`, `interval_sec`, `baseline` (uint32×8192), `calibration`, `serial`, `note`, `max_rows=64`, `max_age_sec=600`, `fsync_batch=4`. `write_row(row)`: пишет spectrum uint16×8192 + duration uint16 (= 16386 байт); fsync каждые 4 строки; ротирует сегмент при ≥64 строк или ≥600 с. `tick(now)` — age-ротация без записи. `close()` — финализирует, пустой сегмент удаляется. Формат ASWF v3: magic + header_len=4096 + JSON + baseline 32 КБ + строки данных. Порт из `firmware/atomspectra-waterfall/main/spectrogram.h`. Тесты: 12 юнит-тестов (`tests/test_aswf_writer.py`). Часть Фазы 6 (#PC-1). **Полный pytest — 679 passed** (667 + 12 writer).

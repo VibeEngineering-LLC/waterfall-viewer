@@ -1162,7 +1162,9 @@ class Waterfall3DView(gl.GLViewWidget):
             return []
         sg = self._sg_analysis if self._sg_analysis is not None else self._sg
         # #190/F11: кэш — пики не зависят от положения секущих плоскостей/регулировок вида.
-        _ck = (id(sg), self._peak_sigma)
+        # #225: id(sg.calibration) в ключе — при перекалибровке (#215) sg тот же объект,
+        # но energies() и энергии пиков меняются; без этого таблица пиков и ID не обновятся.
+        _ck = (id(sg), id(sg.calibration), self._peak_sigma)
         if getattr(self, '_peaks_cache_key', None) == _ck:
             return self._peaks_cache
         counts = np.asarray(sg.total_spectrum(), dtype=np.float64)
