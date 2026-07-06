@@ -44,6 +44,27 @@ class _SeriesPanViewBox(pg.ViewBox):
             ev.ignore()
 
 
+class _TimeAxisItem(pg.AxisItem):
+    """Y-ось 2D-карты: подписи реального времени вместо индексов строк (Задача #207)."""
+    def __init__(self):
+        super().__init__("left")
+        self._offsets = None; self._t_scale = 1.0; self._div = 1.0; self._unit = "с"
+
+    def set_data(self, offs, t_scale, unit):
+        self._offsets = np.asarray(offs, dtype=np.float64) if offs is not None else None
+        self._t_scale = float(t_scale); self._unit = unit
+        self._div = {"с": 1.0, "мин": 60.0, "ч": 3600.0}.get(unit, 1.0)
+        self.picture = None; self.update()
+
+    def tickStrings(self, values, scale, spacing):
+        if self._offsets is None or not self._offsets.size:
+            return [str(int(round(v))) for v in values]
+        n = int(self._offsets.size)
+        fmt = {"ч": "{:.2f}", "мин": "{:.1f}"}.get(self._unit, "{:.0f}")
+        return [fmt.format(self._offsets[max(0, min(n-1, int(round(float(v)*self._t_scale))))] / self._div)
+                for v in values]
+
+
 class HeatmapPanel(QtWidgets.QWidget):
     """2D-карта Время(ось Y)×Энергия/канал(ось X). Цвет = log(1+counts). Прямоугольная выборка
     (pg.RectROI) задаёт окно [t_lo:t_hi, ch_lo:ch_hi] в ПОЛНЫХ индексах исходной матрицы.
@@ -66,6 +87,7 @@ class HeatmapPanel(QtWidgets.QWidget):
         self._clip = DEFAULT_CLIP
         self._cmap_name = "insight"  # палитра карты (Задача 17)
         self._smooth = 0             # режим сглаживания спектра по энергии (Задача #163): 0/SMA/WMA
+        self._tunit = "с"        # единицы времени Y-оси 2D-карты (Задача #207): с/мин/ч
         self._t_scale = 1.0      # n_slices / disp_rows  (полный индекс = дисплейный * scale)
         self._ch_scale = 1.0     # n_channels / disp_cols
         self._disp_rows = 0
@@ -86,9 +108,10 @@ class HeatmapPanel(QtWidgets.QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         self._glw = pg.GraphicsLayoutWidget()
         layout.addWidget(self._glw)
-        self._plot = self._glw.addPlot()
+        self._time_axis = _TimeAxisItem()
+        self._plot = self._glw.addPlot(axisItems={"left": self._time_axis})
         self._plot.setLabel("bottom", tr("Канал (энергия)"))
-        self._plot.setLabel("left", tr("Время (срез)"))
+        self._plot.setLabel("left", tr("Время, с"))
         self._plot.invertY(True)                 # время сверху вниз
         self._img = pg.ImageItem()
         self._img.setColorMap(get_colormap(self._cmap_name))  # палитра Insight по умолчанию
@@ -103,7 +126,16 @@ class HeatmapPanel(QtWidgets.QWidget):
     def retranslate(self) -> None:
         """Задача #169: подписи осей 2D-карты на текущем языке."""
         self._plot.setLabel("bottom", tr("Канал (энергия)"))
-        self._plot.setLabel("left", tr("Время (срез)"))
+        _lbl = {"с": "Время, с", "мин": "Время, мин", "ч": "Время, ч"}.get(self._tunit, "Время, с")
+        self._plot.setLabel("left", tr(_lbl))
+
+    def set_time_unit(self, unit: str) -> None:
+        """Единицы Y-оси 2D-карты: с/мин/ч (Задача #207). Синхронизировать с 3D-кнопкой."""
+        self._tunit = unit
+        _lbl = {"с": "Время, с", "мин": "Время, мин", "ч": "Время, ч"}.get(unit, "Время, с")
+        self._plot.setLabel("left", tr(_lbl))
+        if self._sg is not None:
+            self._time_axis.set_data(self._sg.time_offsets_s, self._t_scale, unit)
 
     def set_spectrogram(self, sg) -> None:
         """Построить карту. Для огромных матриц (> DISPLAY_CELL_CAP ячеек) показываем
@@ -116,6 +148,7 @@ class HeatmapPanel(QtWidgets.QWidget):
         self._disp_rows, self._disp_cols = disp_counts.shape
         self._t_scale = ns / float(self._disp_rows)
         self._ch_scale = nc / float(self._disp_cols)
+        self._time_axis.set_data(sg.time_offsets_s, self._t_scale, self._tunit)  # Задача #207
         # Z-контраст по выбранной шкале (с усреднением спектра по энергии, IV-R4); row-major =>
         # ось0=строки=Время(Y), ось1=столбцы=Канал(X)
         self._img.setImage(self._scaled_image(), axisOrder="row-major", autoLevels=True)

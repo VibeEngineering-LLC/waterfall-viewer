@@ -227,6 +227,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Отсчёты": "Counts",
         "Отсчёты/с": "Counts/s",
         "Время, с": "Time, s",
+        "Время, мин": "Time, min",
+        "Время, ч": "Time, h",
         "Отсчёты в полосе": "Counts in band",
         "Скорость в полосе, отсч/с": "Band rate, cps",
         "полоса ROI": "ROI band",
