@@ -888,7 +888,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.information(self, tr("Экспорт спектра"),
                                               tr("Сначала откройте файл спектрограммы."))
             return
-        flt = "BecqMoni (*.tka);;LSRM/IAEA (*.spe);;InterSpec/ANSI N42 (*.n42)"
+        flt = "BecqMoni XML (*.xml);;LSRM (*.spe);;InterSpec/ANSI N42 (*.n42)"
         path, sel = QtWidgets.QFileDialog.getSaveFileName(
             self, tr("Экспорт спектра"), "", flt)
         if not path:
@@ -900,16 +900,17 @@ class MainWindow(QtWidgets.QMainWindow):
 
     @staticmethod
     def _detect_export_fmt(path: str, sel: str) -> str:
+        """Задача #226: BecqMoni XML + LSRM бинарный SPE + InterSpec N42."""
         low = path.lower()
-        if low.endswith(".tka"):
-            return "tka"
+        if low.endswith(".xml"):
+            return "xml"
         if low.endswith(".spe"):
             return "spe"
         if low.endswith(".n42"):
             return "n42"
-        if "tka" in sel:
-            return "tka"
-        if "spe" in sel:
+        if "xml" in sel.lower() or "becqmoni" in sel.lower():
+            return "xml"
+        if "spe" in sel.lower() or "lsrm" in sel.lower():
             return "spe"
         return "n42"
 
@@ -931,10 +932,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
     @staticmethod
     def _write_spectrum(path, fmt, spec, lt, rt, cal):
-        """Задача #217: диспетчер записи в tka/spe/n42."""
-        if fmt == "tka":
-            from awf.io.tka_writer import write_tka
-            write_tka(path, spec, live_time_s=lt, real_time_s=rt)
+        """Задача #226: диспетчер записи в xml (BecqMoni) / spe (LSRM бинарный) / n42."""
+        if fmt == "xml":
+            from awf.io.becqmoni_writer import write_becqmoni_xml
+            write_becqmoni_xml(path, spec, live_time_s=lt, real_time_s=rt, calibration=cal)
         elif fmt == "spe":
             from awf.io.spe_writer import write_spe
             write_spe(path, spec, live_time_s=lt, real_time_s=rt, calibration=cal)
