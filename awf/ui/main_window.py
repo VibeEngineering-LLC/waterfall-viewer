@@ -29,6 +29,7 @@ from awf.analysis.efficiency import (default_gamma1s, load_efficiency_curve,
 from awf.ui.knobs import AdjustPanel
 from awf.ui.cyclebutton import CycleButton   # Задача #74: переключатель-перебор вместо QComboBox
 from awf.ui.style import APP_QSS
+from awf.ui.edge_bar import EdgeBar   # #228: боковые флажки скрытых доков
 from awf.ui import i18n          # Задача #106: переключение языка интерфейса RU↔EN
 from awf.ui.help_dialogs import show_help, show_about, check_for_updates   # Задача #182/#202
 from awf.ui.i18n import tr       # короткий доступ к переводу: tr("Файл") -> "File" / "Файл"
@@ -108,9 +109,19 @@ class MainWindow(QtWidgets.QMainWindow):
         self._register_i18n(lambda s: self._tabs.setTabText(_idx_3d, s), "3D Waterfall")
         self._register_i18n(lambda s: self._tabs.setTabText(_idx_2d, s), "2D Карта (Время×Энергия)")
         self._register_i18n(lambda s: self._tabs.setTabText(_idx_an, s), "Аналитика")
-        self.setCentralWidget(self._tabs)
+        # #228: контейнер с боковыми EdgeBar-полосами
+        self._left_edge = EdgeBar("left")
+        self._right_edge = EdgeBar("right")
+        _cnt = QtWidgets.QWidget()
+        _lay = QtWidgets.QHBoxLayout(_cnt)
+        _lay.setContentsMargins(0, 0, 0, 0)
+        _lay.setSpacing(0)
+        _lay.addWidget(self._left_edge)
+        _lay.addWidget(self._tabs)
+        _lay.addWidget(self._right_edge)
+        self.setCentralWidget(_cnt)
 
-        # правый док: срезы/сечения/выборки
+        # правый dock: срезы/сечения/выборки
         self._slices = SlicePanel()
         dock = QtWidgets.QDockWidget(tr("Срезы / Сечения / Выборки"), self)
         dock.setObjectName("dock_slices")   # Задача #40: имя нужно saveState/restoreState
@@ -218,6 +229,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self._segments_panel.recomputeRequested.connect(self._on_segment_recompute)
         self._segments_panel.nuclideSelected.connect(self._nuclides._check_nuclide)
 
+        # #228: edge-bar — все доки
+        for _d, _side in [
+            (dock, "right"), (self._sdock, "right"),
+            (ndock, "left"), (nidock, "left"),
+            (adock, "left"), (pdock, "left"), (segdock, "left"),
+        ]:
+            _d.visibilityChanged.connect(
+                lambda vis, d=_d, s=_side: self._on_dock_visibility(d, vis, s)
+            )
+
         self._build_menu()
         self._build_toolbar()
         # Задача #62: строка статуса была скучена — задаём минимальную высоту и шрифт в коде
@@ -243,6 +264,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self._light_slider = self._adjust.rows["light"].knob
         self._adj_last = self._adjust.values()
         self._adjust.changed.connect(self._on_adjust_changed)
+
+    def _on_dock_visibility(self, dock, visible: bool, side: str) -> None:
+        """#228: показать/скрыть кнопку-флажок в EdgeBar при скрытии/показе дока."""
+        edge = self._left_edge if side == "left" else self._right_edge
+        if visible:
+            edge.remove_dock(dock)
+        else:
+            edge.add_dock(dock)
 
     def _restore_layout(self) -> None:
         """Применить сохранённые QSettings геометрию/состояние окна, если они есть."""
