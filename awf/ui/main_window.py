@@ -29,7 +29,7 @@ from awf.analysis.efficiency import (default_gamma1s, load_efficiency_curve,
 from awf.ui.knobs import AdjustPanel
 from awf.ui.cyclebutton import CycleButton   # Задача #74: переключатель-перебор вместо QComboBox
 from awf.ui.style import APP_QSS
-from awf.ui.side_page_bar import SidePageBar, SidePageContent   # #229: BecqMoni-style sidepage
+from awf.ui.edge_bar import EdgeBar   # #228: боковые флажки скрытых доков
 from awf.ui import i18n          # Задача #106: переключение языка интерфейса RU↔EN
 from awf.ui.help_dialogs import show_help, show_about, check_for_updates   # Задача #182/#202
 from awf.ui.i18n import tr       # короткий доступ к переводу: tr("Файл") -> "File" / "Файл"
@@ -109,68 +109,135 @@ class MainWindow(QtWidgets.QMainWindow):
         self._register_i18n(lambda s: self._tabs.setTabText(_idx_3d, s), "3D Waterfall")
         self._register_i18n(lambda s: self._tabs.setTabText(_idx_2d, s), "2D Карта (Время×Энергия)")
         self._register_i18n(lambda s: self._tabs.setTabText(_idx_an, s), "Аналитика")
-        # #229: SidePageBar — BecqMoni-style sidepage
-        self._left_sp_content = SidePageContent("left")
-        self._right_sp_content = SidePageContent("right")
-        self._left_sp_bar = SidePageBar("left", self._left_sp_content)
-        self._right_sp_bar = SidePageBar("right", self._right_sp_content)
+        # #228: контейнер с боковыми EdgeBar-полосами
+        self._left_edge = EdgeBar("left")
+        self._right_edge = EdgeBar("right")
         _cnt = QtWidgets.QWidget()
         _lay = QtWidgets.QHBoxLayout(_cnt)
         _lay.setContentsMargins(0, 0, 0, 0)
         _lay.setSpacing(0)
-        _lay.addWidget(self._left_sp_bar)
-        _lay.addWidget(self._left_sp_content)
+        _lay.addWidget(self._left_edge)
         _lay.addWidget(self._tabs)
-        _lay.addWidget(self._right_sp_content)
-        _lay.addWidget(self._right_sp_bar)
+        _lay.addWidget(self._right_edge)
         self.setCentralWidget(_cnt)
 
-        # правые sidepage-панели
+        # правый dock: срезы/сечения/выборки
         self._slices = SlicePanel()
-        self._slices.setAttribute(QtCore.Qt.WA_StyledBackground, True)
-        self._right_sp_bar.add_panel(tr("Срезы / Сечения / Выборки"), self._slices, 420)
-        self._slices_dock = None
+        dock = QtWidgets.QDockWidget(tr("Срезы / Сечения / Выборки"), self)
+        dock.setObjectName("dock_slices")   # Задача #40: имя нужно saveState/restoreState
+        self._register_i18n(dock.setWindowTitle, "Срезы / Сечения / Выборки")   # Задача #169
+        dock.setWidget(self._slices)
+        dock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
+        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, dock)
+        self._slices_dock = dock
+
+        # связь выборки на карте -> панель срезов
         self._heatmap.roiChanged.connect(self._slices.show_roi)
+        # клик по точке проекции в «Аналитике» -> показать соответствующий срез (Задача 26)
         self._analytics.sliceClicked.connect(self._on_analytics_slice)
 
+        # правый док: секущие плоскости 3D (Задача 13) — во вкладке поверх дока срезов
         self._sections = SectionControls()
-        self._sections.setAttribute(QtCore.Qt.WA_StyledBackground, True)
-        self._right_sp_bar.add_panel(tr("Сечения (3D)"), self._sections, 320)
-        self._sdock = None
+        self._sdock = QtWidgets.QDockWidget(tr("Сечения (3D)"), self)
+        self._sdock.setObjectName("dock_sections")   # Задача #40
+        self._register_i18n(self._sdock.setWindowTitle, "Сечения (3D)")   # Задача #169
+        self._sdock.setWidget(self._sections)
+        self._sdock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
+        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self._sdock)
+        self.tabifyDockWidget(dock, self._sdock)
+        dock.raise_()
         self._sections.planeChanged.connect(self._on_plane_changed)
 
-        # левые sidepage-панели
+        # левый док: библиотека нуклидов; выбор -> вертикальные маркеры энергий на спектре
         self._nuclides = NuclidePanel(default_library())
-        self._nuclides.setAttribute(QtCore.Qt.WA_StyledBackground, True)
-        self._nuclides.ident_widget.setAttribute(QtCore.Qt.WA_StyledBackground, True)
-        self._left_sp_bar.add_panel(tr("Библиотека нуклидов"), self._nuclides, 350)
-        self._nlib_dock = None
-        self._left_sp_bar.add_panel(tr("Идентификация по найденным пикам"), self._nuclides.ident_widget, 350)
-        self._nident_dock = None
+        ndock = QtWidgets.QDockWidget(tr("Библиотека нуклидов"), self)
+        ndock.setObjectName("dock_nuclide_lib")   # Задача #173
+        self._register_i18n(ndock.setWindowTitle, "Библиотека нуклидов")
+        ndock.setWidget(self._nuclides)
+        ndock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
+        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, ndock)
+        self._nlib_dock = ndock
+        nidock = QtWidgets.QDockWidget(tr("Идентификация по найденным пикам"), self)
+        nidock.setObjectName("dock_nuclide_ident")   # Задача #173
+        self._register_i18n(nidock.setWindowTitle, "Идентификация по найденным пикам")
+        nidock.setWidget(self._nuclides.ident_widget)
+        nidock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
+        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, nidock)
+        self.tabifyDockWidget(ndock, nidock)
+        self._nident_dock = nidock
+
+        # Задача #35: правило QSS «QDockWidget > QWidget» красит тело панелей только при
+        # WA_StyledBackground — кастомные QWidget-подклассы иначе игнорируют background из
+        # таблицы стилей, и откреплённый (floating) док показывает системный светлый фон.
+        # Сцены pyqtgraph внутри SlicePanel не затронуты — они потомки панели, не дока.
+        for _panel in (self._slices, self._sections, self._nuclides,
+                       self._nuclides.ident_widget):
+            _panel.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+
         self._nuclides.linesChanged.connect(self._slices.set_nuclide_lines)
+        # те же энергии нуклидов -> вертикальные лучи-маркеры в 3D (Задача 15)
         self._nuclides.linesChanged.connect(self._view3d.set_energy_lines)
+        # и -> подсветка столбцов на 2D-карте (Задача 18)
         self._nuclides.linesChanged.connect(self._heatmap.set_energy_lines)
 
+        # Задача #55: панель регулировок отображения (рукоятки) в отдельном доке.
+        # 6 ручек (усиление/гамма/отсечка/сглаживание/освещение + «Окно t» — ширина выборки по
+        # времени, #56) с индивидуальными вкл/выкл и сбросом + общий выключатель (bypass к
+        # дефолтам). Старые имена _*_slider оставлены алиасами на сами ручки (Knob имеет
+        # QSlider-совместимый API) — внешний код/тесты целы.
         self._adjust = AdjustPanel()
-        self._adjust.setAttribute(QtCore.Qt.WA_StyledBackground, True)
-        self._left_sp_bar.add_panel(tr("Регулировки отображения"), self._adjust, 280)
-        self._adock = None
+        adock = QtWidgets.QDockWidget(tr("Регулировки отображения"), self)
+        adock.setObjectName("dock_adjust")          # Задача #40: имя нужно saveState/restoreState
+        self._register_i18n(adock.setWindowTitle, "Регулировки отображения")   # Задача #169
+        adock.setWidget(self._adjust)
+        adock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
+        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, adock)
+        self._adock = adock   # Задача #115: ссылка для пункта меню «Инструменты»
         self._wire_adjust_panel()
 
+        # Задача #111: панель «Найденные пики» в левом доке.
         self._peaks_panel = PeaksPanel()
         self._peaks_panel.setAttribute(QtCore.Qt.WA_StyledBackground, True)
-        self._left_sp_bar.add_panel(tr("Найденные пики"), self._peaks_panel, 300)
-        self._peaks_dock = None
+        pdock = QtWidgets.QDockWidget("Найденные пики", self)
+        pdock.setObjectName("dock_peaks")    # Задача #40: имя нужно saveState/restoreState
+        pdock.setWidget(self._peaks_panel)
+        pdock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
+        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, pdock)
+        self.tabifyDockWidget(adock, pdock)
+        self._peaks_dock = pdock
+        self._register_i18n(pdock.setWindowTitle, "Найденные пики")
+        # Связь: sigma → view3d, view3d._found_peaks() → panel.set_peaks()
         self._peaks_panel.sigmaChanged.connect(self._on_peaks_sigma_changed)
+        # Задача #124: клик по строке пика → подсветка гребня на 3D;
+        # чекбокс «Показать» → видимость гребня этого пика на 3D-спектрограмме.
         self._peaks_panel.peakSelected.connect(self._view3d.set_peak_highlight)
         self._peaks_panel.peakVisibilityChanged.connect(self._view3d.set_peak_visible)
 
+        # Задача #131: панель «Сегментация по времени» — авто-сегменты записи + посегментная
+        # идентификация нуклидов. Док рядом с «Найденными пиками» (та же левая стопка вкладок).
         self._segments_panel = SegmentsPanel()
         self._segments_panel.setAttribute(QtCore.Qt.WA_StyledBackground, True)
-        self._left_sp_bar.add_panel(tr("Сегментация по времени"), self._segments_panel, 350)
-        self._segments_dock = None
+        segdock = QtWidgets.QDockWidget("Сегментация по времени", self)
+        segdock.setObjectName("dock_segments")    # Задача #40: имя нужно saveState/restoreState
+        segdock.setWidget(self._segments_panel)
+        segdock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
+        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, segdock)
+        self.tabifyDockWidget(pdock, segdock)
+        self._segments_dock = segdock
+        self._register_i18n(segdock.setWindowTitle, "Сегментация по времени")
+        # клик по нуклиду в дереве сегментов → отметить его в библиотеке (подсветка линий)
         self._segments_panel.recomputeRequested.connect(self._on_segment_recompute)
         self._segments_panel.nuclideSelected.connect(self._nuclides._check_nuclide)
+
+        # #228: edge-bar — все доки
+        for _d, _side in [
+            (dock, "right"), (self._sdock, "right"),
+            (ndock, "left"), (nidock, "left"),
+            (adock, "left"), (pdock, "left"), (segdock, "left"),
+        ]:
+            _d.visibilityChanged.connect(
+                lambda vis, d=_d, s=_side: self._on_dock_visibility(d, vis, s)
+            )
 
         self._build_menu()
         self._build_toolbar()
@@ -198,13 +265,22 @@ class MainWindow(QtWidgets.QMainWindow):
         self._adj_last = self._adjust.values()
         self._adjust.changed.connect(self._on_adjust_changed)
 
+    def _on_dock_visibility(self, dock, visible: bool, side: str) -> None:
+        """#228: показать/скрыть кнопку-флажок в EdgeBar при скрытии/показе дока."""
+        edge = self._left_edge if side == "left" else self._right_edge
+        if visible:
+            edge.remove_dock(dock)
+        else:
+            edge.add_dock(dock)
+
     def _restore_layout(self) -> None:
         """Применить сохранённые QSettings геометрию/состояние окна, если они есть."""
         geo = self._settings.value("geometry")
         state = self._settings.value("windowState")
         if geo is not None:
             self.restoreGeometry(geo)
-        # #229: restoreState убран — QDockWidget-доки заменены на SidePageBar
+        if state is not None:
+            self.restoreState(state)
 
     def closeEvent(self, event) -> None:
         """Задача #40: сохранить геометрию и раскладку доков/тулбара при закрытии окна."""
@@ -406,31 +482,27 @@ class MainWindow(QtWidgets.QMainWindow):
             lang_menu.addAction(act)
 
     def _build_view_menu(self, m) -> None:
-        """#229: «Вид» — панели через SidePageBar.toggle_panel (доки убраны)."""
-        for bar, title, label in (
-            (self._left_sp_bar, "Найденные пики", "Найденные пики"),
-            (self._left_sp_bar, "Сегментация по времени", "Сегментация по времени"),
-            (self._right_sp_bar, "Срезы / Сечения / Выборки", "Срезы / Сечения / Выборки"),
-            (self._right_sp_bar, "Сечения (3D)", "Сечения (3D)"),
-            (self._left_sp_bar, "Регулировки отображения", "Регулировки отображения"),
+        """#MENU-2 (было _build_tools_menu, #115): меню «Вид» — все окна-доки.
+        toggleViewAction на каждый док. Нуклидные доки #173 добавлены сюда единожды
+        (дубли из бывшего меню «Изотопы» устранены)."""
+        for dock, label in (
+            (self._peaks_dock, "Найденные пики"),
+            (self._segments_dock, "Сегментация по времени"),   # Задача #131
+            (self._slices_dock, "Срезы / Сечения / Выборки"),
+            (self._sdock, "Сечения (3D)"),
+            (self._adock, "Регулировки отображения"),
         ):
-            act = QtGui.QAction(label, self)
-            act.setCheckable(True)
-            act.setChecked(bar.is_panel_open(title))
-            act.triggered.connect(lambda _c, b=bar, t=title: b.toggle_panel(t))
+            act = dock.toggleViewAction()
             self._register_i18n(act.setText, label)
             m.addAction(act)
         m.addSeparator()
-        for title, label in (
-            ("Библиотека нуклидов", "Библиотека нуклидов"),
-            ("Идентификация по найденным пикам", "Идентификация по найденным пикам"),
-        ):
-            act = QtGui.QAction(label, self)
-            act.setCheckable(True)
-            act.setChecked(self._left_sp_bar.is_panel_open(title))
-            act.triggered.connect(lambda _c, t=title: self._left_sp_bar.toggle_panel(t))
-            self._register_i18n(act.setText, label)
-            m.addAction(act)
+        # #173: два дока нуклидов (переехали из бывшего меню «Изотопы»)
+        act_nlib = self._nlib_dock.toggleViewAction()
+        self._register_i18n(act_nlib.setText, "Библиотека нуклидов")
+        m.addAction(act_nlib)
+        act_nident = self._nident_dock.toggleViewAction()
+        self._register_i18n(act_nident.setText, "Идентификация по найденным пикам")
+        m.addAction(act_nident)
 
     def _build_help_menu(self, m) -> None:
         """#MENU-2: «Справка» — было «Помощь» + смёржено «О программе»
