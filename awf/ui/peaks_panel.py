@@ -8,7 +8,7 @@ PeaksPanel(QWidget) отображает результаты find_peaks из Wa
 Тёмная тема наследуется из APP_QSS (QDoubleSpinBox стрелки уже стилизованы в #97).
 """
 from __future__ import annotations
-from PySide6 import QtCore, QtGui, QtWidgets
+from PyQt5 import QtCore, QtGui, QtWidgets
 
 from awf.ui.i18n import tr
 
@@ -23,11 +23,11 @@ class PeaksPanel(QtWidgets.QWidget):
         set_peaks(peaks: list) — заполнить таблицу из объектов FoundPeak.
     """
 
-    sigmaChanged = QtCore.Signal(float)
+    sigmaChanged = QtCore.pyqtSignal(float)
     # Задача #124: клик по строке пика → подсветка гребня на 3D (энергия, кэВ);
     # переключение чекбокса → показать/скрыть гребень пика (энергия, видим?).
-    peakSelected = QtCore.Signal(float)
-    peakVisibilityChanged = QtCore.Signal(float, bool)
+    peakSelected = QtCore.pyqtSignal(float)
+    peakVisibilityChanged = QtCore.pyqtSignal(float, bool)
 
     # Русские заголовки колонок (ключи i18n). Задача #123: у Высоты/Площади указаны
     # единицы — отсчёты (нетто-счёт над континуумом в суммарном по времени спектре).

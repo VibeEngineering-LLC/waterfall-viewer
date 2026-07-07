@@ -1,8 +1,10 @@
 from __future__ import annotations
+import os
+os.environ.setdefault('PYQTGRAPH_QT_LIB', 'PyQt5')
 import sys
 from pathlib import Path
 import numpy as np
-from PySide6 import QtCore, QtGui, QtWidgets
+from PyQt5 import QtCore, QtGui, QtWidgets
 from awf.io.n42_loader import load_n42
 from awf.io.rcspg_loader import load_rcspg
 from awf.io.aswf_loader import load_aswf
@@ -31,6 +33,20 @@ from awf.ui.cyclebutton import CycleButton   # Задача #74: переклю�
 from awf.ui.style import APP_QSS
 from awf.ui.edge_bar import EdgeBar   # #228: боковые флажки скрытых доков
 from awf.ui import i18n          # Задача #106: переключение языка интерфейса RU↔EN
+# PyQtAds: на Windows PyQtAds.pyd требует что Qt5-DLL уже в PATH или добавлены через
+# os.add_dll_directory (Python 3.8+). Добавляем путь к Qt5/bin из пакета PyQt5 до импорта.
+try:
+    import importlib.util as _ilu
+    _pyqt5_spec = _ilu.find_spec("PyQt5")
+    if _pyqt5_spec and _pyqt5_spec.submodule_search_locations:
+        _qt5_bin = os.path.join(list(_pyqt5_spec.submodule_search_locations)[0], "Qt5", "bin")
+        if os.path.isdir(_qt5_bin):
+            os.add_dll_directory(_qt5_bin)
+    from PyQtAds import ads as _QtAds   # CDockManager, CDockWidget, *DockWidgetArea
+    _ADS_AVAILABLE = True
+except (ImportError, OSError, AttributeError):
+    _QtAds = None
+    _ADS_AVAILABLE = False
 from awf.ui.help_dialogs import show_help, show_about, check_for_updates   # Задача #182/#202
 from awf.ui.i18n import tr       # короткий доступ к переводу: tr("Файл") -> "File" / "Файл"
 # Задача #40: организация/приложение для QSettings (запоминание расположения окон между
@@ -49,8 +65,8 @@ def load_spectrogram(path: str, *, max_slices: int | None = None):
 
 class LoaderThread(QtCore.QThread):
     """Фоновая загрузка спектрограммы, чтобы не блокировать UI. Результат/ошибка — через сигналы."""
-    loaded = QtCore.Signal(object)   # несёт Spectrogram
-    failed = QtCore.Signal(str)      # текст ошибки
+    loaded = QtCore.pyqtSignal(object)   # несёт Spectrogram
+    failed = QtCore.pyqtSignal(str)      # текст ошибки
 
     def __init__(self, path: str, max_slices: int | None = None, parent=None):
         super().__init__(parent)
@@ -119,125 +135,116 @@ class MainWindow(QtWidgets.QMainWindow):
         _lay.addWidget(self._left_edge)
         _lay.addWidget(self._tabs)
         _lay.addWidget(self._right_edge)
-        self.setCentralWidget(_cnt)
 
-        # правый dock: срезы/сечения/выборки
+        if _ADS_AVAILABLE:
+            self._ads_manager = _QtAds.CDockManager(self)
+            self.setCentralWidget(self._ads_manager)
+            _center_dock = _QtAds.CDockWidget("__center__")
+            _center_dock.setWidget(_cnt)
+            _center_dock.setFeature(_QtAds.CDockWidget.NoTab, True)
+            self._ads_manager.addDockWidget(_QtAds.CenterDockWidgetArea, _center_dock)
+        else:
+            self._ads_manager = None
+            self.setCentralWidget(_cnt)
+
+        def _make_dock(title, widget, area, obj_name, tab_after=None):
+            if _ADS_AVAILABLE:
+                d = _QtAds.CDockWidget(tr(title))
+                d.setObjectName(obj_name)
+                d.setWidget(widget)
+                ads_area = (_QtAds.RightDockWidgetArea if area == "right"
+                            else _QtAds.LeftDockWidgetArea)
+                if tab_after is not None:
+                    existing_area = tab_after.dockAreaWidget()
+                    self._ads_manager.addDockWidget(
+                        _QtAds.CenterDockWidgetArea, d, existing_area)
+                else:
+                    self._ads_manager.addDockWidget(ads_area, d)
+                self._register_i18n(d.setWindowTitle, title)
+                return d
+            else:
+                d = QtWidgets.QDockWidget(tr(title), self)
+                d.setObjectName(obj_name)
+                d.setWidget(widget)
+                qt_area = (QtCore.Qt.RightDockWidgetArea if area == "right"
+                           else QtCore.Qt.LeftDockWidgetArea)
+                self.addDockWidget(qt_area, d)
+                if tab_after is not None:
+                    self.tabifyDockWidget(tab_after, d)
+                self._register_i18n(d.setWindowTitle, title)
+                return d
+
         self._slices = SlicePanel()
-        dock = QtWidgets.QDockWidget(tr("Срезы / Сечения / Выборки"), self)
-        dock.setObjectName("dock_slices")   # Задача #40: имя нужно saveState/restoreState
-        self._register_i18n(dock.setWindowTitle, "Срезы / Сечения / Выборки")   # Задача #169
-        dock.setWidget(self._slices)
-        dock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
-        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, dock)
+        dock = _make_dock("Срезы Ш Сечения / Выборки", self._slices, "right", "dock_slices")
         self._slices_dock = dock
-
-        # связь выборки на карте -> панель срезов
         self._heatmap.roiChanged.connect(self._slices.show_roi)
-        # клик по точке проекции в «Аналитике» -> показать соответствующий срез (Задача 26)
         self._analytics.sliceClicked.connect(self._on_analytics_slice)
 
-        # правый док: секущие плоскости 3D (Задача 13) — во вкладке поверх дока срезов
         self._sections = SectionControls()
-        self._sdock = QtWidgets.QDockWidget(tr("Сечения (3D)"), self)
-        self._sdock.setObjectName("dock_sections")   # Задача #40
-        self._register_i18n(self._sdock.setWindowTitle, "Сечения (3D)")   # Задача #169
-        self._sdock.setWidget(self._sections)
-        self._sdock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
-        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self._sdock)
-        self.tabifyDockWidget(dock, self._sdock)
-        dock.raise_()
+        self._sdock = _make_dock("Сечения (3D)", self._sections, "right", "dock_sections",
+                                 tab_after=dock)
+        if _ADS_AVAILABLE:
+            dock.setAsCurrentTab()
+        else:
+            dock.raise_()
         self._sections.planeChanged.connect(self._on_plane_changed)
 
-        # левый док: библиотека нуклидов; выбор -> вертикальные маркеры энергий на спектре
         self._nuclides = NuclidePanel(default_library())
-        ndock = QtWidgets.QDockWidget(tr("Библиотека нуклидов"), self)
-        ndock.setObjectName("dock_nuclide_lib")   # Задача #173
-        self._register_i18n(ndock.setWindowTitle, "Библиотека нуклидов")
-        ndock.setWidget(self._nuclides)
-        ndock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
-        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, ndock)
+        ndock = _make_dock("Библиотека нуклидов", self._nuclides, "left", "dock_nuclide_lib")
         self._nlib_dock = ndock
-        nidock = QtWidgets.QDockWidget(tr("Идентификация по найденным пикам"), self)
-        nidock.setObjectName("dock_nuclide_ident")   # Задача #173
-        self._register_i18n(nidock.setWindowTitle, "Идентификация по найденным пикам")
-        nidock.setWidget(self._nuclides.ident_widget)
-        nidock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
-        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, nidock)
-        self.tabifyDockWidget(ndock, nidock)
+        nidock = _make_dock("Идентификация по найденным пикам",
+                            self._nuclides.ident_widget, "left", "dock_nuclide_ident",
+                            tab_after=ndock)
         self._nident_dock = nidock
 
-        # Задача #35: правило QSS «QDockWidget > QWidget» красит тело панелей только при
-        # WA_StyledBackground — кастомные QWidget-подклассы иначе игнорируют background из
-        # таблицы стилей, и откреплённый (floating) док показывает системный светлый фон.
-        # Сцены pyqtgraph внутри SlicePanel не затронуты — они потомки панели, не дока.
         for _panel in (self._slices, self._sections, self._nuclides,
                        self._nuclides.ident_widget):
             _panel.setAttribute(QtCore.Qt.WA_StyledBackground, True)
 
         self._nuclides.linesChanged.connect(self._slices.set_nuclide_lines)
-        # те же энергии нуклидов -> вертикальные лучи-маркеры в 3D (Задача 15)
         self._nuclides.linesChanged.connect(self._view3d.set_energy_lines)
-        # и -> подсветка столбцов на 2D-карте (Задача 18)
         self._nuclides.linesChanged.connect(self._heatmap.set_energy_lines)
 
-        # Задача #55: панель регулировок отображения (рукоятки) в отдельном доке.
-        # 6 ручек (усиление/гамма/отсечка/сглаживание/освещение + «Окно t» — ширина выборки по
-        # времени, #56) с индивидуальными вкл/выкл и сбросом + общий выключатель (bypass к
-        # дефолтам). Старые имена _*_slider оставлены алиасами на сами ручки (Knob имеет
-        # QSlider-совместимый API) — внешний код/тесты целы.
         self._adjust = AdjustPanel()
-        adock = QtWidgets.QDockWidget(tr("Регулировки отображения"), self)
-        adock.setObjectName("dock_adjust")          # Задача #40: имя нужно saveState/restoreState
-        self._register_i18n(adock.setWindowTitle, "Регулировки отображения")   # Задача #169
-        adock.setWidget(self._adjust)
-        adock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
-        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, adock)
-        self._adock = adock   # Задача #115: ссылка для пункта меню «Инструменты»
+        adock = _make_dock("Регулировки отображения", self._adjust, "left", "dock_adjust")
+        self._adock = adock
         self._wire_adjust_panel()
 
-        # Задача #111: панель «Найденные пики» в левом доке.
         self._peaks_panel = PeaksPanel()
         self._peaks_panel.setAttribute(QtCore.Qt.WA_StyledBackground, True)
-        pdock = QtWidgets.QDockWidget("Найденные пики", self)
-        pdock.setObjectName("dock_peaks")    # Задача #40: имя нужно saveState/restoreState
-        pdock.setWidget(self._peaks_panel)
-        pdock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
-        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, pdock)
-        self.tabifyDockWidget(adock, pdock)
+        pdock = _make_dock("Найденные пики", self._peaks_panel, "left", "dock_peaks",
+                   tab_after=adock)
         self._peaks_dock = pdock
-        self._register_i18n(pdock.setWindowTitle, "Найденные пики")
-        # Связь: sigma → view3d, view3d._found_peaks() → panel.set_peaks()
         self._peaks_panel.sigmaChanged.connect(self._on_peaks_sigma_changed)
-        # Задача #124: клик по строке пика → подсветка гребня на 3D;
-        # чекбокс «Показать» → видимость гребня этого пика на 3D-спектрограмме.
         self._peaks_panel.peakSelected.connect(self._view3d.set_peak_highlight)
         self._peaks_panel.peakVisibilityChanged.connect(self._view3d.set_peak_visible)
 
-        # Задача #131: панель «Сегментация по времени» — авто-сегменты записи + посегментная
-        # идентификация нуклидов. Док рядом с «Найденными пиками» (та же левая стопка вкладок).
         self._segments_panel = SegmentsPanel()
         self._segments_panel.setAttribute(QtCore.Qt.WA_StyledBackground, True)
-        segdock = QtWidgets.QDockWidget("Сегментация по времени", self)
-        segdock.setObjectName("dock_segments")    # Задача #40: имя нужно saveState/restoreState
-        segdock.setWidget(self._segments_panel)
-        segdock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
-        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, segdock)
-        self.tabifyDockWidget(pdock, segdock)
+        segdock = _make_dock("Сегментация по времени", self._segments_panel, "left",
+                     "dock_segments", tab_after=pdock)
         self._segments_dock = segdock
-        self._register_i18n(segdock.setWindowTitle, "Сегментация по времени")
-        # клик по нуклиду в дереве сегментов → отметить его в библиотеке (подсветка линий)
         self._segments_panel.recomputeRequested.connect(self._on_segment_recompute)
         self._segments_panel.nuclideSelected.connect(self._nuclides._check_nuclide)
 
-        # #228: edge-bar — все доки
-        for _d, _side in [
-            (dock, "right"), (self._sdock, "right"),
-            (ndock, "left"), (nidock, "left"),
-            (adock, "left"), (pdock, "left"), (segdock, "left"),
-        ]:
-            _d.visibilityChanged.connect(
-                lambda vis, d=_d, s=_side: self._on_dock_visibility(d, vis, s)
-            )
+        if _ADS_AVAILABLE:
+            for _d, _side in [
+                (dock, "right"), (self._sdock, "right"),
+                (ndock, "left"), (nidock, "left"),
+                (adock, "left"), (pdock, "left"), (segdock, "left"),
+            ]:
+                _d.viewToggled.connect(
+                    lambda vis, d=_d, s=_side: self._on_dock_visibility(d, vis, s)
+                )
+        else:
+            for _d, _side in [
+                (dock, "right"), (self._sdock, "right"),
+                (ndock, "left"), (nidock, "left"),
+                (adock, "left"), (pdock, "left"), (segdock, "left"),
+            ]:
+                _d.visibilityChanged.connect(
+                    lambda vis, d=_d, s=_side: self._on_dock_visibility(d, vis, s)
+                )
 
         self._build_menu()
         self._build_toolbar()
@@ -281,11 +288,19 @@ class MainWindow(QtWidgets.QMainWindow):
             self.restoreGeometry(geo)
         if state is not None:
             self.restoreState(state)
+        # Задача #230: восстановить состояние PyQtAds CDockManager
+        if self._ads_manager is not None:
+            ads_state = self._settings.value("adsState")
+            if ads_state is not None:
+                self._ads_manager.restoreState(ads_state)
 
     def closeEvent(self, event) -> None:
         """Задача #40: сохранить геометрию и раскладку доков/тулбара при закрытии окна."""
         self._settings.setValue("geometry", self.saveGeometry())
         self._settings.setValue("windowState", self.saveState())
+        # Задача #230: сохранить состояние PyQtAds CDockManager
+        if self._ads_manager is not None:
+            self._settings.setValue("adsState", self._ads_manager.saveState())
         super().closeEvent(event)
 
     def _register_i18n(self, setter, ru_key: str) -> None:
@@ -323,25 +338,25 @@ class MainWindow(QtWidgets.QMainWindow):
     def _build_menu(self) -> None:
         menu = self.menuBar().addMenu("Файл")
         self._register_i18n(menu.setTitle, "Файл")   # Задача #106
-        act_open = QtGui.QAction("Открыть…", self)
+        act_open = QtWidgets.QAction("Открыть…", self)
         act_open.setShortcut(QtGui.QKeySequence.Open)
         act_open.triggered.connect(self._open_dialog)
         self._register_i18n(act_open.setText, "Открыть…")
         menu.addAction(act_open)
         # Задача #216: сохранение в .aswf с текущей калибровкой
-        act_save_as = QtGui.QAction("Сохранить как…", self)
+        act_save_as = QtWidgets.QAction("Сохранить как…", self)
         act_save_as.setShortcut(QtGui.QKeySequence("Ctrl+Shift+S"))
         act_save_as.triggered.connect(self._save_as_aswf)
         self._register_i18n(act_save_as.setText, "Сохранить как…")
         menu.addAction(act_save_as)
         # Задача #217: экспорт агрегированного спектра в BecqMoni/LSRM/InterSpec
-        act_export = QtGui.QAction("Экспорт спектра…", self)
+        act_export = QtWidgets.QAction("Экспорт спектра…", self)
         act_export.setShortcut(QtGui.QKeySequence("Ctrl+E"))  # #MENU-4
         act_export.triggered.connect(self._export_spectrum)
         self._register_i18n(act_export.setText, "Экспорт спектра…")
         menu.addAction(act_export)
         menu.addSeparator()
-        act_quit = QtGui.QAction("Выход", self)
+        act_quit = QtWidgets.QAction("Выход", self)
         act_quit.setShortcut(QtGui.QKeySequence.Quit)
         act_quit.triggered.connect(self.close)
         self._register_i18n(act_quit.setText, "Выход")
@@ -378,7 +393,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _build_calibration_menu(self, m) -> None:
         """Задача #215: пункты меню «Калибровка»."""
-        act_fit = QtGui.QAction("Калибровка по пикам…", self)
+        act_fit = QtWidgets.QAction("Калибровка по пикам…", self)
         act_fit.setShortcut(QtGui.QKeySequence("Ctrl+K"))  # #MENU-4
         act_fit.triggered.connect(self._open_calibration_dialog)
         self._register_i18n(act_fit.setText, "Калибровка по пикам…")
@@ -392,18 +407,18 @@ class MainWindow(QtWidgets.QMainWindow):
         bg_menu = m.addMenu("Фон")
         self._bg_menu = bg_menu  # держим Python-ref: PySide6 иначе может GC-нуть wrapper подменю
         self._register_i18n(bg_menu.setTitle, "Фон")
-        act_sel = QtGui.QAction("Выбор фона…", self)
+        act_sel = QtWidgets.QAction("Выбор фона…", self)
         act_sel.setShortcut(QtGui.QKeySequence("Ctrl+B"))
         act_sel.triggered.connect(self._on_bg_select)
         self._register_i18n(act_sel.setText, "Выбор фона…")
         bg_menu.addAction(act_sel)
-        self._act_bg_overlay = QtGui.QAction("Наложение фона", self)
+        self._act_bg_overlay = QtWidgets.QAction("Наложение фона", self)
         self._act_bg_overlay.setCheckable(True)
         self._act_bg_overlay.setEnabled(False)
         self._act_bg_overlay.toggled.connect(self._on_bg_overlay_toggled)
         self._register_i18n(self._act_bg_overlay.setText, "Наложение фона")
         bg_menu.addAction(self._act_bg_overlay)
-        self._act_bg_subtract = QtGui.QAction("Вычет фона", self)
+        self._act_bg_subtract = QtWidgets.QAction("Вычет фона", self)
         self._act_bg_subtract.setShortcut(QtGui.QKeySequence("Ctrl+Shift+B"))
         self._act_bg_subtract.setCheckable(True)
         self._act_bg_subtract.setEnabled(False)
@@ -412,7 +427,7 @@ class MainWindow(QtWidgets.QMainWindow):
         bg_menu.addAction(self._act_bg_subtract)
         m.addSeparator()
         # Задача #104: оверлей мощности дозы (только RadiaCode .rcspg, калибровка RC-103)
-        self._act_dose = QtGui.QAction("Мощность дозы (RadiaCode)", self)
+        self._act_dose = QtWidgets.QAction("Мощность дозы (RadiaCode)", self)
         self._act_dose.setCheckable(True)
         self._act_dose.setChecked(False)
         self._act_dose.setEnabled(False)
@@ -426,7 +441,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._peaks_menu = peaks_menu
         self._register_i18n(peaks_menu.setTitle, "Пики")
         # #110: поиск фотопиков (Mariscotti + Currie) на 3D-спектрограмме.
-        self._act_peaks = QtGui.QAction("Поиск пиков", self)
+        self._act_peaks = QtWidgets.QAction("Поиск пиков", self)
         self._act_peaks.setShortcut(QtGui.QKeySequence("Ctrl+F"))
         self._act_peaks.setCheckable(True)
         self._act_peaks.setChecked(False)
@@ -436,7 +451,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._act_peaks.toggled.connect(self._on_peaks_toggled)
         peaks_menu.addAction(self._act_peaks)
         # #131: авто-сегментация по времени + посегментная идентификация.
-        self._act_segments = QtGui.QAction("Сегментация по времени…", self)
+        self._act_segments = QtWidgets.QAction("Сегментация по времени…", self)
         self._act_segments.setShortcut(QtGui.QKeySequence("Ctrl+T"))
         self._register_i18n(self._act_segments.setText, "Сегментация по времени…")
         self._register_i18n(self._act_segments.setToolTip,
@@ -448,7 +463,7 @@ class MainWindow(QtWidgets.QMainWindow):
         eff_menu = m.addMenu("Эффективность")
         self._eff_menu = eff_menu
         self._register_i18n(eff_menu.setTitle, "Эффективность")
-        self._act_eff_norm = QtGui.QAction("Нормализация по эффективности", self)
+        self._act_eff_norm = QtWidgets.QAction("Нормализация по эффективности", self)
         self._act_eff_norm.setCheckable(True)
         self._act_eff_norm.setChecked(False)
         self._register_i18n(self._act_eff_norm.setText, "Нормализация по эффективности")
@@ -457,7 +472,7 @@ class MainWindow(QtWidgets.QMainWindow):
                             "эффективности фотопика с энергией")
         self._act_eff_norm.toggled.connect(self._on_eff_norm_toggled)
         eff_menu.addAction(self._act_eff_norm)
-        act_eff_load = QtGui.QAction("Загрузить кривую эффективности…", self)
+        act_eff_load = QtWidgets.QAction("Загрузить кривую эффективности…", self)
         self._register_i18n(act_eff_load.setText, "Загрузить кривую эффективности…")
         act_eff_load.triggered.connect(self._on_eff_load)
         eff_menu.addAction(act_eff_load)
@@ -469,11 +484,11 @@ class MainWindow(QtWidgets.QMainWindow):
         эксклюзивный выбор, отмеченный текущий язык). Смена пункта — i18n.set_language(code)."""
         lang_menu = m.addMenu("Язык")
         self._register_i18n(lang_menu.setTitle, "Язык")
-        group = QtGui.QActionGroup(self)
+        group = QtWidgets.QActionGroup(self)
         group.setExclusive(True)
         cur = i18n.current_language()
         for code, ru_label in ((i18n.LANG_RU, "Русский"), (i18n.LANG_EN, "English")):
-            act = QtGui.QAction(ru_label, self)
+            act = QtWidgets.QAction(ru_label, self)
             act.setCheckable(True)
             act.setChecked(code == cur)
             act.triggered.connect(lambda _checked, c=code: i18n.set_language(c))
@@ -507,17 +522,17 @@ class MainWindow(QtWidgets.QMainWindow):
     def _build_help_menu(self, m) -> None:
         """#MENU-2: «Справка» — было «Помощь» + смёржено «О программе»
         (Windows-конвенция: About + Updates в Help)."""
-        act_help = QtGui.QAction("Справка…", self)
+        act_help = QtWidgets.QAction("Справка…", self)
         act_help.setShortcut(QtGui.QKeySequence("F1"))
         act_help.triggered.connect(lambda: show_help(self))
         self._register_i18n(act_help.setText, "Справка…")
         m.addAction(act_help)
         m.addSeparator()
-        act_upd = QtGui.QAction("Проверить обновления", self)
+        act_upd = QtWidgets.QAction("Проверить обновления", self)
         act_upd.triggered.connect(lambda: check_for_updates(self))
         self._register_i18n(act_upd.setText, "Проверить обновления")
         m.addAction(act_upd)
-        act_about = QtGui.QAction("О программе…", self)
+        act_about = QtWidgets.QAction("О программе…", self)
         act_about.triggered.connect(lambda: show_about(self))
         self._register_i18n(act_about.setText, "О программе…")
         m.addAction(act_about)
@@ -650,7 +665,7 @@ class MainWindow(QtWidgets.QMainWindow):
         tb.addWidget(self._reset_btn)
         self._apply_colormap("jet")            # #178-fix2: применить палитру Jet к view3d/heatmap при старте
 
-    @QtCore.Slot()
+    @QtCore.pyqtSlot()
     def _on_reset_display(self) -> None:
         """Задача #51: сброс настроек отображения к умолчанию. Каждый контрол ставится в своё
         дефолтное значение; Qt шлёт valueChanged/currentIndexChanged/toggled только при реальном
@@ -671,40 +686,40 @@ class MainWindow(QtWidgets.QMainWindow):
         # панели-рукоятках; сброс к дефолтам + включение всех рядов/общего — одним вызовом.
         self._adjust.reset_all()
 
-    @QtCore.Slot(bool)
+    @QtCore.pyqtSlot(bool)
     def _on_axes_toggled(self, on: bool) -> None:
         """Переключатель подписей делений осей 3D (Задача 14)."""
         self._view3d.set_axis_labels_visible(on)
 
-    @QtCore.Slot(bool)
+    @QtCore.pyqtSlot(bool)
     def _on_floor_toggled(self, on: bool) -> None:
         """Задача #76/#222: показать/скрыть подложку (3D: дно рельефа; 2D: нижний диапазон LUT)."""
         self._view3d.set_floor_visible(on)
         self._heatmap.set_floor_visible(on)
 
-    @QtCore.Slot(bool)
+    @QtCore.pyqtSlot(bool)
     def _on_surface_toggled(self, on: bool) -> None:
         """Задача #143: показать/скрыть простыню образца (основной 3D-рельеф)."""
         self._view3d.set_surface_visible(on)
 
-    @QtCore.Slot(int)
+    @QtCore.pyqtSlot(int)
     def _on_surface_style_changed(self, _idx: int) -> None:
         """Задача #145: стиль простыни образца (палитра/однотонный/каркас)."""
         self._view3d.set_surface_style(self._smp_style_combo.currentData() or "palette")
 
-    @QtCore.Slot(int)
+    @QtCore.pyqtSlot(int)
     def _on_bg_style_changed(self, _idx: int) -> None:
         """Задача #145: стиль простыни фона (палитра/однотонный/каркас)."""
         self._view3d.set_bg_sheet_style(self._bg_style_combo.currentData() or "palette")
 
-    @QtCore.Slot(int)
+    @QtCore.pyqtSlot(int)
     def _on_time_unit_changed(self, _idx: int) -> None:
         """Единицы оси времени 3D-сетки и 2D-карты: с / мин / ч (Задача #64/#207)."""
         unit = self._tunit_combo.currentData() or "с"
         self._view3d.set_time_unit(unit)
         self._heatmap.set_time_unit(unit)
 
-    @QtCore.Slot(int)
+    @QtCore.pyqtSlot(int)
     def _on_unit_changed(self, _idx: int) -> None:
         """Глобальные единицы графиков: отсчёты / отсч-в-секунду (Задача #44). Веером на все
         панели; 3D/2D пересчитываются от исходника, поэтому переразмещаем плоскости сечений."""
@@ -714,14 +729,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self._slices.set_unit_mode(mode)
         self._sections.emit_all()  # 3D-поверхность пересоздана — переразместить плоскости
 
-    @QtCore.Slot(int)
+    @QtCore.pyqtSlot(int)
     def _on_analytics_slice(self, i: int) -> None:
         """Клик по точке проекции (Задача 26) -> показать срез в панели срезов и поднять её док."""
         self._slices.show_time_slice(int(i))
         self._slices_dock.raise_()
         self._slices_dock.show()
 
-    @QtCore.Slot()
+    @QtCore.pyqtSlot()
     def _on_bg_select(self) -> None:
         """Задача #96: открыть диалог выбора фона; вычислить поканальный фон (cps) и применить."""
         if self._sg is None:
@@ -774,7 +789,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return background_from_spectrogram(bg_sg, self._sg)
         raise ValueError("неизвестный источник фона")
 
-    @QtCore.Slot(bool)
+    @QtCore.pyqtSlot(bool)
     def _on_bg_overlay_toggled(self, on: bool) -> None:
         """Задача #96: наложение фона на спектр среза (панель срезов) и «простыню» на 3D (#98).
         Задача #142: тумблеры тулбара активны только в режиме наложения."""
@@ -791,13 +806,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self._view3d.set_background_sheet_visible(
             self._bg_overlay and self._bg_sheet_check.isChecked())   # Задача #98
 
-    @QtCore.Slot(bool)
+    @QtCore.pyqtSlot(bool)
     def _on_bg_subtract_toggled(self, on: bool) -> None:
         """Задача #96: вычет фона из всего водопада (3D/2D/срез); отрицательное -> 0."""
         self._bg_subtract = bool(on)
         self._redistribute()
 
-    @QtCore.Slot(bool)
+    @QtCore.pyqtSlot(bool)
     def _on_eff_norm_toggled(self, on: bool) -> None:
         """Задача #156: вкл/выкл нормализации водопада по эффективности регистрации ε(E)."""
         self._eff_normalize = bool(on)
@@ -832,19 +847,19 @@ class MainWindow(QtWidgets.QMainWindow):
             self._eff_info_label = lbl
         lbl.setText(tr("Кривая:") + f" {self._eff_curve.name}")
 
-    @QtCore.Slot(bool)
+    @QtCore.pyqtSlot(bool)
     def _on_dose_toggled(self, on: bool) -> None:
         """Задача #104: переключатель оверлея мощности дозы (RadiaCode .rcspg)."""
         self._slices.set_dose_overlay(on)
 
-    @QtCore.Slot(bool)
+    @QtCore.pyqtSlot(bool)
     def _on_peaks_toggled(self, on: bool) -> None:
         """Задача #110/#111: переключатель поиска фотопиков на 3D-водопаде.
         При включении также заполняет панель «Найденные пики» (#111)."""
         self._view3d.set_peak_search(on)
         self._refresh_peaks_panel()
 
-    @QtCore.Slot(float)
+    @QtCore.pyqtSlot(float)
     def _on_peaks_sigma_changed(self, sigma: float) -> None:
         """Задача #111/#114: изменение σ из PeaksPanel → пересчитать view3d + обновить панель."""
         self._view3d.set_peak_sigma(sigma)
@@ -980,7 +995,7 @@ class MainWindow(QtWidgets.QMainWindow):
             from awf.io.n42_writer import write_n42
             write_n42(path, spec, live_time_s=lt, real_time_s=rt, calibration=cal)
 
-    @QtCore.Slot(float)
+    @QtCore.pyqtSlot(float)
     def _on_segment_recompute(self, pen_factor: float = 2.0) -> None:
         """Задача #131: пересчитать сегментацию записи по времени + посегментную ID нуклидов.
         Модель FWHM(E) строится раз по суммарному спектру (разрешение от времени не зависит)
@@ -1081,17 +1096,17 @@ class MainWindow(QtWidgets.QMainWindow):
             chk.setEnabled(False)
             chk.blockSignals(False)
 
-    @QtCore.Slot(bool)
+    @QtCore.pyqtSlot(bool)
     def _on_contours_toggled(self, on: bool) -> None:
         """Переключатель изолиний на 2D-карте (Задача 20)."""
         self._heatmap.set_contours_enabled(on)
 
-    @QtCore.Slot(int)
+    @QtCore.pyqtSlot(int)
     def _on_contour_levels_changed(self, n: int) -> None:
         """Число уровней изолиний на 2D-карте (Задача 20)."""
         self._heatmap.set_contour_levels(int(n))
 
-    @QtCore.Slot(bool)
+    @QtCore.pyqtSlot(bool)
     def _on_highlight_toggled(self, on: bool) -> None:
         """Переключатель режима подсветки выбранных пиков (Задача 18): база глушится в 3D и 2D,
         столбцы выбранных энергий нуклидов выделяются."""
@@ -1099,7 +1114,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._heatmap.set_highlight_enabled(on)
         self._sections.emit_all()  # 3D-поверхность пересоздана — переразместить плоскости
 
-    @QtCore.Slot()
+    @QtCore.pyqtSlot()
     def _open_palette_dialog(self) -> None:
         """Задача #102: окно «Цветовая палитра» с превью-градиентами; выбор применяется живьём."""
         dlg = PaletteDialog(self._cmap_name, self)
@@ -1115,7 +1130,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._heatmap.set_colormap(name)
         self._sections.emit_all()  # 3D-поверхность пересоздана — переразместить плоскости
 
-    @QtCore.Slot()
+    @QtCore.pyqtSlot()
     def _on_adjust_changed(self) -> None:
         """Задача #55: единый обработчик панели регулировок. Берёт эффективные значения
         (с учётом per-row и общего bypass) и применяет только изменившиеся группы — стоимость
@@ -1154,7 +1169,7 @@ class MainWindow(QtWidgets.QMainWindow):
         w = max(1, int(value)) / 100.0
         return max(16, min(1600, int(round(400.0 / w))))
 
-    @QtCore.Slot()
+    @QtCore.pyqtSlot()
     def _on_z_scale_changed(self) -> None:
         mode = self._z_combo.currentData()
         self._view3d.set_z_scale(mode)
@@ -1162,7 +1177,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # после перестроения поверхности — обновить позиции/подписи секущих плоскостей
         self._sections.emit_all()
 
-    @QtCore.Slot(str, int, float, bool)
+    @QtCore.pyqtSlot(str, int, float, bool)
     def _on_plane_changed(self, axis: str, slot: int, frac: float, visible: bool) -> None:
         """Слайдер/чекбокс дока «Сечения» -> позиция секущей плоскости в 3D + подпись реального
         значения + синхронизация дока срезов (#38) и 2D-карты (#39) с выбранными сечениями."""
@@ -1173,7 +1188,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._slices.sync_sections(state["time"], state["energy"])
         self._heatmap.set_section_markers(state["time"], state["energy"])
 
-    @QtCore.Slot()
+    @QtCore.pyqtSlot()
     def _open_dialog(self) -> None:
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self, tr("Открыть спектрограмму"), "",
@@ -1190,7 +1205,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._loader.failed.connect(self._on_failed)
         self._loader.start()
 
-    @QtCore.Slot(object)
+    @QtCore.pyqtSlot(object)
     def _on_loaded(self, sg) -> None:
         # Замечание IV-R5: последний канал АЦП — мусор (переполнение); отбрасываем его единым
         # местом, чтобы все виды (2D/3D/срезы/ROI/идентификация) были консистентны.
@@ -1224,7 +1239,7 @@ class MainWindow(QtWidgets.QMainWindow):
             f"{src} — {tr('срезов')} {sg.n_slices} × {tr('каналов')} {sg.n_channels}; "
             f"t0={t0}; {tr('всего отсчётов')}={total}")
 
-    @QtCore.Slot(str)
+    @QtCore.pyqtSlot(str)
     def _on_failed(self, message: str) -> None:
         self.statusBar().showMessage(f"{tr('Ошибка загрузки')}: {message}")
         QtWidgets.QMessageBox.critical(self, tr("Ошибка загрузки"), message)

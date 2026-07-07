@@ -1,9 +1,9 @@
-"""Tests for Task #106: i18n core (translation dict + signals)."""
+﻿"""Tests for Task #106: i18n core (translation dict + signals)."""
 import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6 import QtWidgets
+from PyQt5 import QtWidgets
 
 from awf.ui import i18n
 from awf.ui.i18n import tr

@@ -1,4 +1,4 @@
-"""UI-тесты Задача #131: проводка панели «Сегментация по времени» в MainWindow.
+﻿"""UI-тесты Задача #131: проводка панели «Сегментация по времени» в MainWindow.
 
 Проверяется, что MainWindow создаёт _segments_panel / _segments_dock / _act_segments,
 что действие меню запускает сегментацию реальной записи, дерево заполняется ≥2 сегментами,
@@ -10,7 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
-from PySide6 import QtWidgets
+from PyQt5 import QtWidgets
 
 from awf.model.spectrogram import Calibration, Spectrogram
 from awf.ui.main_window import MainWindow
