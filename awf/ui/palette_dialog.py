@@ -2,7 +2,7 @@
 выбор кликом, подсветка текущей. Сигнал selected(key) — для живого применения палитры к 2D/3D."""
 from __future__ import annotations
 import numpy as np
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from awf.ui.colormaps import COLORMAPS, get_colormap
 from awf.ui.i18n import tr
@@ -38,7 +38,7 @@ def _gradient_pixmap(name: str, w: int = 160, h: int = 22, radius: int = 5) -> Q
 
 class _PaletteRow(QtWidgets.QFrame):
     """Строка окна: превью-градиент + название + описание; клик выбирает палитру."""
-    clicked = QtCore.pyqtSignal(str)
+    clicked = QtCore.Signal(str)
 
     def __init__(self, key: str, label: str, desc: str, parent=None) -> None:
         super().__init__(parent)
@@ -73,7 +73,7 @@ class _PaletteRow(QtWidgets.QFrame):
 
 class PaletteDialog(QtWidgets.QDialog):
     """Окно выбора палитры (#102). current — ключ текущей палитры (подсвечивается)."""
-    selected = QtCore.pyqtSignal(str)
+    selected = QtCore.Signal(str)
 
     def __init__(self, current: str, parent=None) -> None:
         super().__init__(parent)
@@ -104,7 +104,7 @@ class PaletteDialog(QtWidgets.QDialog):
         scroll.setWidget(host)
         return scroll
 
-    @QtCore.pyqtSlot(str)
+    @QtCore.Slot(str)
     def _on_pick(self, key: str) -> None:
         self._mark(key)
         self.selected.emit(key)

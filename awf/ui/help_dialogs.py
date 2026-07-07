@@ -12,7 +12,7 @@ import json
 import sys
 import urllib.request
 
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from awf import __version__ as _APP_VERSION
 from awf.ui import i18n
@@ -28,7 +28,7 @@ def _stack_line() -> str:
     зависимость — tr('н/д')."""
     na = tr("н/д")
     try:
-        import PyQt5
+        import PySide6
         qt_ver = PySide6.__version__
     except Exception:
         qt_ver = na

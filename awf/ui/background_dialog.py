@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import numpy as np
-from PyQt5 import QtWidgets
+from PySide6 import QtWidgets
 
 from awf.ui.i18n import tr
 

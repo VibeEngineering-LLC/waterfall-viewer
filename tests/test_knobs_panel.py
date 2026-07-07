@@ -1,11 +1,11 @@
-﻿"""Тесты панели регулировок-«рукояток» (Задача #55): QSlider-совместимый API Knob,
+"""Тесты панели регулировок-«рукояток» (Задача #55): QSlider-совместимый API Knob,
 bypass-семантика KnobRow/AdjustPanel и проводка в MainWindow (выкл → стандартный вид)."""
 import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
-from PyQt5 import QtWidgets
+from PySide6 import QtWidgets
 
 from awf.model.spectrogram import Calibration, Spectrogram
 from awf.ui.knobs import Knob, KnobRow, AdjustPanel

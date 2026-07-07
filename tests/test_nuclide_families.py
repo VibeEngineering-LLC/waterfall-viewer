@@ -1,4 +1,4 @@
-﻿"""Задача #154: свёртка распадных семейств в родителей (Th-232, Ra-226).
+"""Задача #154: свёртка распадных семейств в родителей (Th-232, Ra-226).
 
 Дочки скрываются из списка панели; их равновесные линии УЖЕ в родительских
 записях nuclides.json (закреплено инвариантами данных ниже). Дочка без
@@ -80,13 +80,13 @@ def test_th232_tl208_branching_applied_in_parent():
 
 @pytest.fixture(scope="module")
 def app():
-    from PyQt5 import QtWidgets
+    from PySide6 import QtWidgets
     a = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     yield a
 
 
 def _tree_names(tree):
-    from PyQt5 import QtWidgets, QtCore
+    from PySide6 import QtWidgets, QtCore
     names, it = set(), QtWidgets.QTreeWidgetItemIterator(tree)
     while it.value():
         nm = it.value().data(0, QtCore.Qt.UserRole)
