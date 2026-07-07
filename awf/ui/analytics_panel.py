@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6 import QtCore, QtWidgets
+from PyQt5 import QtCore, QtWidgets
 
 from awf.analysis.decomposition import feature_matrix, project, METHODS as PROJ_METHODS
 from awf.analysis.cluster import cluster, METHODS as CLUSTER_METHODS
@@ -30,7 +30,7 @@ def _color_for(label: int):
 class AnalyticsPanel(QtWidgets.QWidget):
     """Проекция срезов в 2D + кластерная раскраска. sliceClicked(i) — индекс среза по клику."""
 
-    sliceClicked = QtCore.Signal(int)
+    sliceClicked = QtCore.pyqtSignal(int)
 
     # выше этого числа срезов авто-пересчёт на загрузке не делаем (ждём кнопку)
     AUTORUN_SLICE_CAP = 2000
@@ -98,7 +98,7 @@ class AnalyticsPanel(QtWidgets.QWidget):
         if self._legend is not None:
             self._legend.clear()
 
-    @QtCore.Slot()
+    @QtCore.pyqtSlot()
     def _recompute(self) -> None:
         """Построить матрицу признаков (спектры срезов), спроецировать в 2D и кластеризовать.
         Недоступные опциональные методы (t-SNE/UMAP/DBSCAN/HDBSCAN) перехватываются с понятным

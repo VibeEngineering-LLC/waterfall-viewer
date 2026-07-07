@@ -4,7 +4,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 import numpy as np
-from PySide6 import QtCore, QtWidgets
+from PyQt5 import QtCore, QtWidgets
 import serial.tools.list_ports
 
 from awf.usb.assembler import HistogramAssembler, SweepResult, CHANNELS
@@ -30,8 +30,8 @@ class LiveUsbTab(QtWidgets.QWidget):
         statusChanged(str): строка статуса для main_window (CPS, время прибора, drops).
     """
 
-    snapshotReady = QtCore.Signal(object)   # объект Spectrogram
-    statusChanged = QtCore.Signal(str)
+    snapshotReady = QtCore.pyqtSignal(object)   # объект Spectrogram
+    statusChanged = QtCore.pyqtSignal(str)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from PySide6 import QtCore, QtGui, QtWidgets
+from PyQt5 import QtCore, QtGui, QtWidgets
 
 from awf.io.nuclide_categories import (
     CATEGORIES, LIFETIMES, enrich_nuclide,
@@ -55,8 +55,8 @@ LIFETIME_LABELS = {
 class IaeaFetchThread(QtCore.QThread):
     """Фоновая загрузка γ-линий нуклида из IAEA LiveChart (или офлайн-кэша) — не блокирует UI.
     Импорты iaea_fetcher выполняются внутри run(), чтобы конструирование панели не тянуло сеть."""
-    fetched = QtCore.Signal(object)   # Nuclide
-    failed = QtCore.Signal(str)
+    fetched = QtCore.pyqtSignal(object)   # Nuclide
+    failed = QtCore.pyqtSignal(str)
 
     def __init__(self, name: str, parent=None):
         super().__init__(parent)
@@ -92,7 +92,7 @@ class NuclidePanel(QtWidgets.QWidget):
     Публичный контракт прежней панели сохранён: сигнал linesChanged(list),
     методы set_library(), selected_lines(), clear_selection()."""
 
-    linesChanged = QtCore.Signal(object)  # list[(energy_keV: float, color: str, label: str)]
+    linesChanged = QtCore.pyqtSignal(object)  # list[(energy_keV: float, color: str, label: str)]
 
     def __init__(self, nuclides=None, parent=None):
         super().__init__(parent)
@@ -406,7 +406,7 @@ class NuclidePanel(QtWidgets.QWidget):
         self._fetch_thread.failed.connect(self._on_iaea_failed)
         self._fetch_thread.start()
 
-    @QtCore.Slot(object)
+    @QtCore.pyqtSlot(object)
     def _on_iaea_fetched(self, nuclide) -> None:
         self.add_nuclide(nuclide)
         self._btn_iaea.setEnabled(True)
@@ -414,7 +414,7 @@ class NuclidePanel(QtWidgets.QWidget):
             f"{tr('IAEA: добавлен')} {nuclide.name} "
             f"({len(nuclide.lines)} {tr('линий')})")
 
-    @QtCore.Slot(str)
+    @QtCore.pyqtSlot(str)
     def _on_iaea_failed(self, message: str) -> None:
         self._btn_iaea.setEnabled(True)
         self._status.setText(f"{tr('IAEA: ошибка —')} {message}")

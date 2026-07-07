@@ -1,9 +1,9 @@
-"""Тесты #215 — интеграция CalibrationDialog: пресеты, фит, сигнал."""
+﻿"""Тесты #215 — интеграция CalibrationDialog: пресеты, фит, сигнал."""
 from __future__ import annotations
 
 import pytest
 
-from PySide6 import QtWidgets
+from PyQt5 import QtWidgets
 
 from awf.ui.calibration_dialog import CalibrationDialog
 

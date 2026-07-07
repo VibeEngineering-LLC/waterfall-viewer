@@ -1,8 +1,8 @@
 from __future__ import annotations
-from PySide6 import QtCore, QtGui, QtWidgets
-from PySide6.QtWidgets import QWidget, QPushButton, QVBoxLayout, QSizePolicy
-from PySide6.QtGui import QPainter, QColor, QFontMetrics
-from PySide6.QtCore import Qt, QRect
+from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5.QtWidgets import QWidget, QPushButton, QVBoxLayout, QSizePolicy
+from PyQt5.QtGui import QPainter, QColor, QFontMetrics
+from PyQt5.QtCore import Qt, QRect
 
 
 class VerticalTabButton(QPushButton):

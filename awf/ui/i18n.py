@@ -10,11 +10,11 @@ API:
   tr(ru)                  -> str           — перевод (или ru если нет)
   set_language(code)      -> None          — меняет язык и эмитит сигнал
   current_language()      -> "ru" | "en"
-  signals.changed         -> QtCore.Signal(str)  — глобальный сигнал
+  signals.changed         -> QtCore.pyqtSignal(str)  — глобальный сигнал
   TRANSLATIONS[en][ru]    -> en перевод
 """
 from __future__ import annotations
-from PySide6 import QtCore
+from PyQt5 import QtCore
 
 LANG_RU = "ru"
 LANG_EN = "en"
@@ -24,7 +24,7 @@ DEFAULT = LANG_RU
 
 class _Signals(QtCore.QObject):
     """Глобальный эмиттер: signals.changed.emit('ru'|'en')."""
-    changed = QtCore.Signal(str)
+    changed = QtCore.pyqtSignal(str)
 
 
 signals = _Signals()
@@ -398,4 +398,11 @@ def set_language(code: str) -> None:
 
 def reset_for_tests() -> None:
     """Тест-хелпер: сбросить состояние к дефолту (RU). Не для прод-кода."""
+    global signals
     _state["lang"] = DEFAULT
+    # PyQt5: QObject без родителя уничтожается вместе с QApplication.
+    # При переиспользовании QApplication между тест-модулями пересоздаём signals.
+    try:
+        signals.changed  # проверяем что объект жив
+    except RuntimeError:
+        signals = _Signals()

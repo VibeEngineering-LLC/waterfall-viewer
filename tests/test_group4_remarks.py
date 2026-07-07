@@ -1,11 +1,11 @@
-"""Тесты доработок Группы IV по замечаниям оператора IV-R1..IV-R5."""
+﻿"""Тесты доработок Группы IV по замечаниям оператора IV-R1..IV-R5."""
 import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
 import pyqtgraph.opengl as gl
-from PySide6 import QtCore, QtWidgets
+from PyQt5 import QtCore, QtWidgets
 
 from awf.model.spectrogram import Calibration, Spectrogram
 from awf.ui.zscale import (smooth_counts, DEFAULT_SMOOTH, weighted_moving_average,
@@ -329,7 +329,7 @@ def test_app_level_qss_for_pyqtgraph_popups(app):
     """Задача #117: контекстные меню pyqtgraph (ViewBoxMenu) — popup БЕЗ QWidget-родителя,
     поэтому stylesheet окна до них не каскадирует (рисовались системной светлой темой).
     MainWindow ставит APP_QSS на уровень QApplication — тема достаёт parentless-попапы."""
-    from PySide6 import QtWidgets
+    from PyQt5 import QtWidgets
     from awf.ui.main_window import MainWindow
     from awf.ui.style import APP_QSS
     w = MainWindow()
@@ -342,7 +342,7 @@ def test_peaks_table_viewport_base_dark(app):
     """Задача #116 (остаток): QSS красит ячейки/заголовок, но ПУСТУЮ область viewport ниже
     строк и угловую кнопку Qt заливает из палитры (роль Base) — оставались белыми поверх
     тёмной темы. Панель форсит тёмную Base; проверяем, что палитра таблицы тёмная."""
-    from PySide6 import QtGui
+    from PyQt5 import QtGui
     from awf.ui.peaks_panel import PeaksPanel
     p = PeaksPanel()
     base = p._table.palette().color(QtGui.QPalette.Base)
@@ -367,7 +367,7 @@ def test_toolbar_and_statusbar_sized_up():
 def test_toolbar_combo_taller_than_default(app):
     """Задача #62: min-height из QSS реально увеличивает высоту контролов тулбара
     (комбобокс Z-шкалы становится выше неоформленного дефолта)."""
-    from PySide6 import QtWidgets
+    from PyQt5 import QtWidgets
     from awf.ui.style import APP_QSS
     from awf.ui.main_window import MainWindow
     QtWidgets.QApplication.instance().setStyleSheet(APP_QSS)
@@ -494,7 +494,7 @@ def test_cyclebutton_click_cycles(app):
 
 def test_cyclebutton_wheel_scrolls(app):
     """Задача #74: колесо мыши листает вперёд (вверх) и назад (вниз, по кругу)."""
-    from PySide6 import QtCore
+    from PyQt5 import QtCore
     from awf.ui.cyclebutton import CycleButton
 
     class _Wheel:                       # лёгкая замена QWheelEvent (без версионной возни)
