@@ -117,11 +117,7 @@ def test_adjustpanel_reset_all(app):
 
 def test_mainwindow_adjust_dock_exists(app):
     w = MainWindow()
-    # CDockWidget (PyQtAds) не является QDockWidget — ищем через ads_manager или QDockWidget
-    if w._ads_manager is not None:
-        names = set(w._ads_manager.dockWidgetsMap().keys())
-    else:
-        names = {d.objectName() for d in w.findChildren(QtWidgets.QDockWidget)}
+    names = {d.objectName() for d in w.findChildren(QtWidgets.QDockWidget)}
     assert "dock_adjust" in names
     assert isinstance(w._adjust, AdjustPanel)
     w.close()
