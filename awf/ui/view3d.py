@@ -3,7 +3,7 @@ import numpy as np
 import pyqtgraph as pg
 import pyqtgraph.opengl as gl
 from OpenGL.GL import GL_DEPTH_TEST, GL_BLEND, GL_ALPHA_TEST, GL_CULL_FACE
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 from awf.ui.zscale import (apply_z_scale, DEFAULT_GAIN, DEFAULT_GAMMA,
                            DEFAULT_CLIP, desaturate_rgba, smooth_by_mode,
                            SMOOTH_MODE_SMA, SMOOTH_MODE_WMA)
@@ -1507,7 +1507,7 @@ class SectionControls(QtWidgets.QWidget):
     По умолчанию все слоты выключены (движки погашены, плоскости не рисуются)."""
 
     # axis: str, slot: int, frac: float, visible: bool
-    planeChanged = QtCore.pyqtSignal(str, int, float, bool)
+    planeChanged = QtCore.Signal(str, int, float, bool)
 
     _SLIDER_MAX = 1000
 

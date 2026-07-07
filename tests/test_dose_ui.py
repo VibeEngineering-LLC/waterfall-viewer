@@ -1,10 +1,10 @@
-﻿"""UI-tests for Task #104: dose-rate overlay on SlicePanel time-series plot (RadiaCode .rcspg only)."""
+"""UI-tests for Task #104: dose-rate overlay on SlicePanel time-series plot (RadiaCode .rcspg only)."""
 import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
-from PyQt5 import QtWidgets
+from PySide6 import QtWidgets
 
 from awf.model.spectrogram import Calibration, Spectrogram
 from awf.ui.panels import SlicePanel

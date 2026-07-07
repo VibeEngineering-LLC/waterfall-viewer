@@ -14,13 +14,13 @@
 viewport не белела поверх тёмной темы.
 """
 from __future__ import annotations
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 from awf.ui.i18n import tr
 
 
 class SegmentsPanel(QtWidgets.QWidget):
-    recomputeRequested = QtCore.pyqtSignal(float)
-    nuclideSelected = QtCore.pyqtSignal(str)
+    recomputeRequested = QtCore.Signal(float)
+    nuclideSelected = QtCore.Signal(str)
 
     _COL_HEADERS_RU = [
         "Сегмент / Нуклид",

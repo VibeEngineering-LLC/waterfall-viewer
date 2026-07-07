@@ -1,8 +1,8 @@
-﻿import os
+import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PyQt5 import QtWidgets, QtCore
+from PySide6 import QtWidgets, QtCore
 
 from awf.ui.nuclide_panel import NuclidePanel
 from awf.io.nuclide_lib import default_library, Nuclide, GammaLine
@@ -253,7 +253,7 @@ def test_threshold_change_rerenders_and_filters(app):
 # ---------- Задача #155: палитра читаема на тёмном фоне ----------
 
 def test_155_all_colors_readable_on_dark():
-    from PyQt5 import QtGui
+    from PySide6 import QtGui
     from awf.ui.nuclide_panel import COLORS, _MIN_LUMA, _luma
     assert len(COLORS) == len(set(COLORS)) == 18  # различимость сохранена
     for c in COLORS:

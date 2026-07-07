@@ -1,4 +1,4 @@
-﻿# Задача #156: нормализация по эффективности регистрации ε(E)
+# Задача #156: нормализация по эффективности регистрации ε(E)
 import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -135,7 +135,7 @@ def test_load_less_than_two_points_raises(tmp_path):
 
 @pytest.fixture(scope="module")
 def app():
-    from PyQt5 import QtWidgets
+    from PySide6 import QtWidgets
     a = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     yield a
 

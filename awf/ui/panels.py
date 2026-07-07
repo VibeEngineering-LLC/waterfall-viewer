@@ -1,7 +1,7 @@
 from __future__ import annotations
 import numpy as np
 import pyqtgraph as pg
-from PyQt5 import QtCore, QtWidgets
+from PySide6 import QtCore, QtWidgets
 from awf.ui.zscale import (apply_z_scale, DEFAULT_GAIN, DEFAULT_GAMMA, DEFAULT_CLIP,
                            smooth_by_mode)
 from awf.ui.colormaps import get_colormap
@@ -71,7 +71,7 @@ class HeatmapPanel(QtWidgets.QWidget):
     При завершении перемещения/изменения ROI испускается roiChanged(t_lo,t_hi,ch_lo,ch_hi)."""
 
     # сигнал несёт ПОЛНЫЕ индексы (не дисплейные): t_lo, t_hi, ch_lo, ch_hi
-    roiChanged = QtCore.pyqtSignal(int, int, int, int)
+    roiChanged = QtCore.Signal(int, int, int, int)
 
     # выше этого числа ячеек карту прорежаем для отображения (защита суточных записей)
     DISPLAY_CELL_CAP = 4_000_000
@@ -998,7 +998,7 @@ class SlicePanel(QtWidgets.QWidget):
             self._spectrum_plot.addItem(ln)
             self._nuclide_lines.append(ln)
 
-    @QtCore.pyqtSlot(int)
+    @QtCore.Slot(int)
     def show_time_slice(self, i: int) -> None:
         if self._sg is None:
             return
@@ -1009,7 +1009,7 @@ class SlicePanel(QtWidgets.QWidget):
         self._header.setText(f"{tr('Срез времени')} #{i} (t = {t:.1f} {tr('с')})")
         self._view_mode = ("slice", i)   # Задача #161: запомнить вид для update_spectrogram
 
-    @QtCore.pyqtSlot(int, int, int, int)
+    @QtCore.Slot(int, int, int, int)
     def show_roi(self, t_lo: int, t_hi: int, ch_lo: int, ch_hi: int) -> None:
         """Спектр = сумма по окну времени [t_lo:t_hi]; временной ряд = полоса каналов [ch_lo:ch_hi];
         заголовок = сумма отсчётов в прямоугольной выборке."""
@@ -1075,7 +1075,7 @@ class SlicePanel(QtWidgets.QWidget):
         elif len(t_active) == 1:
             self.show_time_slice(self._time_to_index(t_active[0]))
 
-    @QtCore.pyqtSlot(int)
+    @QtCore.Slot(int)
     def _on_ewin_preset(self, idx: int) -> None:
         """Задача #195: 0=откл, 1=вручную, 2+=пресет нуклида."""
         if idx < 0: return
@@ -1094,7 +1094,7 @@ class SlicePanel(QtWidgets.QWidget):
             sb.blockSignals(True); sb.setValue(v); sb.blockSignals(False)
         self.show_energy_window(lo, hi)
 
-    @QtCore.pyqtSlot()
+    @QtCore.Slot()
     def _on_ewin_spin(self) -> None:
         """Ручная правка спинбоксов → переключить комбо в «вручную» (#195) и перерисовать."""
         if self._sg is None:

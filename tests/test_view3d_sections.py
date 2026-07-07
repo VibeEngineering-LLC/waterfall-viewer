@@ -1,9 +1,9 @@
-﻿import os
+import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
-from PyQt5 import QtWidgets
+from PySide6 import QtWidgets
 
 from awf.model.spectrogram import Calibration, Spectrogram
 from awf.ui.view3d import Waterfall3DView, SectionControls, PLANE_AXES

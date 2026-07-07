@@ -1,4 +1,4 @@
-﻿"""Задача #113: транзиентные (время-локализованные) пики на спектрограмме.
+"""Задача #113: транзиентные (время-локализованные) пики на спектрограмме.
 
 Проверяем find_transient_peaks() — скользящие перекрывающиеся окна по времени,
 суммирующие СЫРЫЕ counts, с порогом значимости выше интегрального. Сценарии:
@@ -162,7 +162,7 @@ def test_degenerate_inputs_return_empty():
 def app():
     import os
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PyQt5 import QtWidgets
+    from PySide6 import QtWidgets
     a = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     yield a
 

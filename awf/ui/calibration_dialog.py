@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import Optional
 
 import numpy as np
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from awf.analysis.calibration_fit import (
     PRESETS,
@@ -29,7 +29,7 @@ from awf.ui.i18n import tr
 class CalibrationDialog(QtWidgets.QDialog):
     """Диалог перекалибровки. Возвращает список коэффициентов через сигнал."""
 
-    calibrationApplied = QtCore.pyqtSignal(list)
+    calibrationApplied = QtCore.Signal(list)
 
     _COL_ENABLED = 0   # Задача #223: чекбокс вкл/откл строки
     _COL_CHANNEL = 1

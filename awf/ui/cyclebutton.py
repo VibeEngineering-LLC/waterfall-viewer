@@ -6,11 +6,11 @@ currentIndex(), setCurrentIndex(i), сигнал currentIndexChanged(int) (эм�
 реальном изменении индекса — как у QComboBox, чтобы не ломать reset-логику тулбара)."""
 from __future__ import annotations
 
-from PyQt5 import QtCore, QtWidgets
+from PySide6 import QtCore, QtWidgets
 
 
 class CycleButton(QtWidgets.QPushButton):
-    currentIndexChanged = QtCore.pyqtSignal(int)
+    currentIndexChanged = QtCore.Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)

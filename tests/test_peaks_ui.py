@@ -1,4 +1,4 @@
-﻿"""UI-тесты Задача #110/#111/#112/#114: поиск пиков на 3D-водопаде + PeaksPanel.
+"""UI-тесты Задача #110/#111/#112/#114: поиск пиков на 3D-водопаде + PeaksPanel.
 
 #110: find_peaks на 3D-водопаде, зелёные гребни по гребню рельефа.
 #114: FWHM(E)-модель (default_fwhm_model, R=7%@662 кэВ) вместо константы 8.0; σ-сеттер.
@@ -10,7 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
-from PyQt5 import QtCore, QtWidgets
+from PySide6 import QtCore, QtWidgets
 
 from awf.model.spectrogram import Calibration, Spectrogram
 from awf.ui.view3d import Waterfall3DView, PEAK_FWHM_CHANNELS

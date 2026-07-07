@@ -1,8 +1,8 @@
-﻿"""Задача #169: изоляция тестов от выбора языка в QSettings (реестре машины) —
+"""Задача #169: изоляция тестов от выбора языка в QSettings (реестре машины) —
 операторский 'en' утекал в глобальный язык процесса и валил RU-ассерты соседей.
 Каждый тест стартует с чистого ключа и RU; выбор оператора возвращается в конце."""
 import pytest
-from PyQt5 import QtCore
+from PySide6 import QtCore
 
 from awf.ui import i18n
 from awf.ui.main_window import SETTINGS_ORG, SETTINGS_APP
