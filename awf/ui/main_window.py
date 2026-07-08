@@ -133,8 +133,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self._sdock.setWidget(self._sections)
         self._sdock.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self._sdock)
-        self.tabifyDockWidget(dock, self._sdock)
-        dock.raise_()
         self._sections.planeChanged.connect(self._on_plane_changed)
 
         # левый док: библиотека нуклидов; выбор -> вертикальные маркеры энергий на спектре
@@ -252,6 +250,20 @@ class MainWindow(QtWidgets.QMainWindow):
             self.restoreGeometry(geo)
         if state is not None:
             self.restoreState(state)
+        else:
+            self._apply_default_layout()
+
+    def _apply_default_layout(self) -> None:
+        """Дефолтный layout первого запуска: левые доки скрыты, правые (Срезы + Сечения) видны."""
+        for d in (self._nlib_dock, self._nident_dock, self._adock,
+                  self._peaks_dock, self._segments_dock):
+            d.hide()
+
+    def _reset_layout(self) -> None:
+        """Сброс layout к заводскому (Сервис → Сбросить layout окон)."""
+        self._settings.remove("geometry")
+        self._settings.remove("windowState")
+        self._apply_default_layout()
 
     def closeEvent(self, event) -> None:
         """Задача #40: сохранить геометрию и раскладку доков/тулбара при закрытии окна."""
@@ -451,6 +463,11 @@ class MainWindow(QtWidgets.QMainWindow):
             self._register_i18n(act.setText, ru_label)
             group.addAction(act)
             lang_menu.addAction(act)
+        m.addSeparator()
+        act_reset_layout = QtGui.QAction("Сбросить layout окон", self)
+        self._register_i18n(act_reset_layout.setText, "Сбросить layout окон")
+        act_reset_layout.triggered.connect(self._reset_layout)
+        m.addAction(act_reset_layout)
 
     def _build_view_menu(self, m) -> None:
         """#MENU-2 (было _build_tools_menu, #115): меню «Вид» — все окна-доки.
