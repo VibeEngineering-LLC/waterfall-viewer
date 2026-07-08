@@ -1,25 +1,27 @@
-# PyInstaller spec — Задача #184. Сборка onedir Windows-exe.
+# PyInstaller spec — waterfall-viewer, PySide6 (стек после отката #228..#230)
 # Запуск: py -3.14 -m PyInstaller waterfall-viewer.spec --noconfirm
 import os
-import PySide6
+
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
+import PySide6
 
 hiddenimports = (
     collect_submodules("pyqtgraph")
     + collect_submodules("pyqtgraph.opengl")
     + collect_submodules("OpenGL")
-    + ["awf.ui.main_window"]
+    + ["awf.ui.main_window",
+       "PySide6", "PySide6.QtCore", "PySide6.QtWidgets", "PySide6.QtGui",
+       "PySide6.QtOpenGL", "PySide6.QtOpenGLWidgets"]
 )
 
-# Задача #185 F7: iaea_cache регенерируемый и в дистрибутив не входит (pyproject.toml),
-# ядро идентификации — nuclides.json.
+# Данные awf (nuclides.json и т.п.)
 datas = collect_data_files("awf", includes=["data/*.json"])
 
+# Плагины PySide6 (платформы, стили, иконки)
 _pyside_root = os.path.dirname(PySide6.__file__)
-# Задача #185 F4: imageformats исключён — awf не читает файлы изображений
-# (QPixmap/QImage только in-memory из numpy, Format_RGB888).
+_qt6_plugins = os.path.join(_pyside_root, "plugins")
 for _sub in ("platforms", "styles", "iconengines"):
-    _src = os.path.join(_pyside_root, "plugins", _sub)
+    _src = os.path.join(_qt6_plugins, _sub)
     if os.path.isdir(_src):
         datas.append((_src, os.path.join("PySide6", "plugins", _sub)))
 
@@ -33,7 +35,7 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=["tkinter", "unittest", "matplotlib", "PIL", "pandas",
-              "PySide6.QtTest", "PySide6.QtNetwork"],
+              "PyQt5", "PyQt5.QtCore", "PySide2", "PyQtAds"],
     noarchive=False,
 )
 pyz = PYZ(a.pure)
@@ -58,9 +60,3 @@ coll = COLLECT(
     exe, a.binaries, a.datas,
     strip=False, upx=False, upx_exclude=[], name="waterfall-viewer",
 )
-
-# Задача #185 F1: удалить software-fallback OpenGL (20.6 МБ) — hardware GL уже требование awf/ui/view3d.py.
-_opengl_sw = os.path.join(DISTPATH, "waterfall-viewer", "_internal", "PySide6", "opengl32sw.dll")
-if os.path.exists(_opengl_sw):
-    os.remove(_opengl_sw)
-    print(f"[spec] Задача #185 F1: removed {_opengl_sw}")

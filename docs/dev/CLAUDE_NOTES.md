@@ -276,6 +276,12 @@
 
 `#REL-7` (2026-07-07) — **релиз v0.1.7** (`awf/__version__="0.1.7"`; коммиты `527f9bb`+`458bca9`; PyInstaller onedir → `dist/waterfall-viewer-0.1.7-windows-x64.zip` ~99 МБ zip / 241 МБ распакованный; `gh release create v0.1.7`). **Полный pytest — 761 passed.**
 
+`#228..#230` (2026-07-07, откачены) — **попытка управления окнами EdgeBar + PyQtAds — ОТКАТ**. Хронология: `#228` EdgeBar (боковые флажки для скрытых доков), `#229` SidePageBar (BecqMoni-style), `#230` миграция PySide6→PyQt5 + PyQtAds CDockManager — всё откачено по требованию оператора (exe не запускался, боковые панели не нужны). HEAD после откатов: `549b428` (Revert "#228"). Pip: только PySide6 6.11.1 (PyQt5/PyQtAds удалены). Код: PySide6, без EdgeBar, без ADS. **Полный pytest — 761 passed (exit 0).** dist/ содержит v0.1.7 exe — требует пересборки без EdgeBar (в релизном exe #228 ещё присутствовал).
+
+`#231` (2026-07-08) — **дефолтный layout окон = скриншот оператора, зафиксирован как первый запуск** (`main_window.py`): убран `tabifyDockWidget` правых доков — «Срезы/Сечения/Выборки» и «Сечения (3D)» теперь раздельными блоками друг под другом (не в одной вкладке). `_restore_layout()`: при отсутствии сохранённого `QSettings` state → `_apply_default_layout()` прячет все левые доки (Нуклиды×2/Регулировки/Найденные пики/Сегментация). Новый пункт «Сервис → Сбросить layout окон» (`_reset_layout()`) — удаляет `geometry`/`windowState` из `QSettings` и переприменяет дефолт, без правки реестра вручную. i18n: +«Сбросить layout окон»/«Language»/«Русский». Оператор подтвердил «работает». **Полный pytest — 761 passed.**
+
+`#232` (2026-07-08) — **пересборка exe v0.1.7 после #231; попутно найден и исправлен мёртвый spec-файл**. Root cause (систематическая отладка): `waterfall-viewer.spec` со времён отката #230 остался с `import PyQtAds`/PyQt5-хуками — сборка падала `ModuleNotFoundError: No module named 'PyQtAds'` (пакет удалён при откате). Спек переписан под текущий стек PySide6 (hiddenimports/datas/plugins PySide6 вместо PyQt5+PyQtAds, exclude PyQt5/PyQtAds/PySide2). PyInstaller onedir собран, smoke-launch exe (6 c, не упал) → упакован `waterfall-viewer-0.1.7-windows-x64.zip` (~108 МБ). Путь: `D:\GoogleDrive\Рабочая папка ИИ\Програмист\waterfall-viewer\waterfall-viewer-0.1.7-windows-x64.zip`. Пуш/GitHub-релиз не запрошен оператором — не выполнялся.
+
 ## Ориентация по проекту
 
 Десктоп-вьюер waterfall-спектрограмм гамма-спектрометра. Оси спектрограммы: **время × энергия**

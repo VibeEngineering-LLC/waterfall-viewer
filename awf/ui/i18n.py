@@ -155,6 +155,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Категория / Δ": "Category / Δ",
         # Меню «Сервис → Язык»
         "Язык": "Language",
+        "Сбросить layout окон": "Reset window layout",
         "Русский": "Russian",
         "English": "English",
         # Тулбар «Вид»
