@@ -273,6 +273,11 @@ class Waterfall3DView(gl.GLViewWidget):
         self._nt = 0
         self._nc = 0
         self._height_scale = 1.0
+        # Задача #UI-233: множитель мировых X-юнитов на индекс времени. При nt≪nc лента вытянута
+        # по энергии, время сплющено; x_scale=nc/nt «квадратит» лист под окно (авто-fit при is_new).
+        self._x_scale = 1.0
+        # Задача #UI-234: пользоват. множитель сжатия/растяжения оси t поверх авто-fit; 1.0 — нейтраль.
+        self._x_user = 1.0
         self._zmax_sample = 0.0       # zmax образца до floor-сдвига (Задача P-3, reuse в _add_bg_sheet)
         self._z_surface = None        # (nt, nc) высоты рельефа (дисплейные)
         self._z_counts = None         # (nt, nc) исходные counts бинов (max-LOD, для оси счёта/рельефа)
@@ -467,6 +472,9 @@ class Waterfall3DView(gl.GLViewWidget):
         # 5) запомнить полную геометрию и цвет; поверхность строит _rebuild_surface, при
         #    включённых обеих плоскостях оси показывая ТОЛЬКО объём между ними (IV-R3).
         self._nt, self._nc = nt, nc
+        # Задача #UI-233: авто-fit оси времени под окно — растянуть X до квадратного листа (nc/nt).
+        # Задача #UI-234: × пользоват. множитель «Окно t» (сжать/растянуть от квадрата, 0 в центре).
+        self._x_scale = (float(nc) / float(nt) if nt > 0 else 1.0) * self._x_user
         self._height_scale = height_scale
         self._z_surface = z_surface
         self._z_counts = z_counts
@@ -476,11 +484,12 @@ class Waterfall3DView(gl.GLViewWidget):
         self._rebuild_surface()
         # 6) координатная сетка на делениях шкал (Задача #63/#68); камера — отдалить под размер.
         # Задача #92: кадрируем камеру ТОЛЬКО при загрузке нового спектра. Ре-рендеры от рукояток
-        # Регулировок (set_contrast/set_smoothing/set_light_intensity/set_time_bins/set_z_scale/
+        # Регулировок (set_contrast/set_smoothing/set_light_intensity/set_x_stretch/set_z_scale/
         # set_colormap/set_unit_mode передают тот же self._sg) сохраняют зум/панораму пользователя.
         if is_new:
             self._seg_bounds_sec = []  # #178-fix1a: старые сегменты не переносить на новый файл
-            span = float(max(nt, nc, 10))
+            # Задача #UI-233: X растянут на x_scale — кадрировать по максимальной мировой стороне.
+            span = float(max(nt * self._x_scale, nc, 10))
             # Задача #205: azimuth=45 → камера в (+X,+Y) квадранте → (0,0) = дальний = наверху экрана
             self.setCameraPosition(
                 distance=span * 1.6,
@@ -582,6 +591,8 @@ class Waterfall3DView(gl.GLViewWidget):
                        or self._surface_style != "palette")
         surf.setGLOptions("translucent" if translucent else "opaque")
         surf.translate(-nt / 2.0, -nc / 2.0, 0.0)
+        # Задача #UI-233: масштаб X (local=False → S·T): world_X = x_scale·(index − nt/2), Y без изм.
+        surf.scale(self._x_scale, 1.0, 1.0, local=False)
         self.addItem(surf)
         self._surface = surf
 
@@ -735,6 +746,7 @@ class Waterfall3DView(gl.GLViewWidget):
                                      **self._sheet_style_kwargs(self._bg_style, _SHEET_RGB_BG))
         sheet.setGLOptions("translucent"); sheet.setDepthValue(5)
         sheet.translate(-self._nt / 2.0, -self._nc / 2.0, 0.0)
+        sheet.scale(self._x_scale, 1.0, 1.0, local=False)   # Задача #UI-233: X растянут под окно
         self.addItem(sheet); self._bg_sheet = sheet
 
     def set_smoothing(self, mode: int) -> None:
@@ -770,6 +782,14 @@ class Waterfall3DView(gl.GLViewWidget):
         Больше бинов (у́же выборка) — детальнее/«растянуто» по времени; меньше (шире выборка) —
         грубее/«сжато». Ре-рендер из той же sg; max_chan не трогаем."""
         self._max_time = max(1, int(max_time))
+        if self._sg is not None:
+            self.set_spectrogram(self._sg, self._max_time, self._max_chan)
+
+    def set_x_stretch(self, mult: float) -> None:
+        """Задача #UI-234: визуальное сжатие/растяжение оси времени поверх авто-fit (#UI-233).
+        mult=1.0 — нейтраль (квадратный лист), <1 — сжать, >1 — растянуть. Ре-рендер из той
+        же sg (LOD/число бинов не трогаем — ось меняется чисто визуально, зум не сбрасываем)."""
+        self._x_user = max(0.05, float(mult))
         if self._sg is not None:
             self.set_spectrogram(self._sg, self._max_time, self._max_chan)
 
@@ -878,7 +898,7 @@ class Waterfall3DView(gl.GLViewWidget):
             dv = sv / scale
         else:                       # короткая запись -> авто-деления в выбранной единице (#64)
             dv = self._nice_ticks(float(tc[0]) / scale, float(tc[-1]) / scale)
-        wx = np.interp(dv * scale, tc, idx) - self._nt / 2.0
+        wx = (np.interp(dv * scale, tc, idx) - self._nt / 2.0) * self._x_scale  # #UI-233
         return (dv, wx, self._time_unit)
 
     def _energy_ticks(self):
@@ -1059,7 +1079,7 @@ class Waterfall3DView(gl.GLViewWidget):
             if entry is None or not entry["visible"]:
                 continue
             i = self._frac_to_index(self._t_centers, entry["frac"])
-            px = float(i) - self._nt / 2.0
+            px = (float(i) - self._nt / 2.0) * self._x_scale   # #UI-233
             self._draw_plane_nuclide_lines(px, cc, idx, emin, emax, zmax, imax)
 
     def _max_line_intensity(self) -> float:
@@ -1273,7 +1293,7 @@ class Waterfall3DView(gl.GLViewWidget):
             # роли не играет).
             mask = peak_time_mask(zsrc, jc, noise_factor=6.0, min_peak_over_bg=0.0,
                                   abs_floor=True, poisson=poi, peak_hw=hw)
-        xs_all = np.arange(nt, dtype=np.float64) - nt / 2.0
+        xs_all = (np.arange(nt, dtype=np.float64) - nt / 2.0) * self._x_scale   # #UI-233
         y_val = float(jc) - nc / 2.0
         zs_raw = self._z_surface[:, jc].astype(np.float64)
         zs_all = zs_raw + lift
@@ -1342,7 +1362,8 @@ class Waterfall3DView(gl.GLViewWidget):
     def _axis_extent(self):
         """Габариты сцены в центрированных мировых координатах: (Xmin,Xmax,Ymin,Ymax,Zmax)."""
         nt, nc, H = self._nt, self._nc, self._height_scale
-        return (-nt / 2.0, nt / 2.0, -nc / 2.0, nc / 2.0, H)
+        xs = self._x_scale   # #UI-233: X-габариты растянуты множителем оси времени
+        return (-nt / 2.0 * xs, nt / 2.0 * xs, -nc / 2.0, nc / 2.0, H)
 
     def _frac_to_index(self, centers, frac):
         """Доля frac∈[0,1] реального диапазона -> ближайший дисплейный индекс бина (LOD-aware)."""
@@ -1475,7 +1496,7 @@ class Waterfall3DView(gl.GLViewWidget):
 
         if axis == "time":
             i = self._frac_to_index(self._t_centers, frac)
-            px = float(i) - nt / 2.0
+            px = (float(i) - nt / 2.0) * self._x_scale   # #UI-233
             verts = np.array([[px, ymin, 0.0], [px, ymax, 0.0],
                               [px, ymax, zmax], [px, ymin, zmax]], dtype=np.float32)
         elif axis == "energy":

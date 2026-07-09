@@ -368,3 +368,50 @@ def test_v3_rle_direct():
     spec, pos = _rle_decode_row(buf, 0, 4)
     assert list(spec) == [5, 0, 0, 7]
     assert pos == 6
+
+
+# ===== Задача #DATA-1: v4 — пер-строчная целостность CRC32 =====
+
+def _row_crc4(n, spectrum, duration, covers):
+    """CRC32 первых covers байт строки (spectrum..duration), zlib-совместим."""
+    import zlib
+    rb = bytearray(covers)
+    struct.pack_into(f"<{n}H", rb, 0, *spectrum)
+    struct.pack_into("<H", rb, n * 2, int(duration))
+    return zlib.crc32(bytes(rb)) & 0xFFFFFFFF
+
+
+def _header_v4(n=4):
+    return {
+        "format": "atomspectra-waterfall", "version": 4, "channels": n,
+        "interval_sec": 10, "calibration": [0.0, 1.0],
+        "started_at": 1700000000, "saved_rows": 3,
+        "row_stride": n * 2 + 2 + 4,
+        "row_fields": [
+            {"name": "spectrum", "dtype": "uint16", "offset": 0, "count": n},
+            {"name": "duration", "dtype": "uint16", "offset": n * 2},
+            {"name": "crc32", "dtype": "uint32", "offset": n * 2 + 2, "covers": n * 2 + 2},
+        ],
+    }
+
+
+def _v4_rows(n, cov):
+    specs = [[10, 20, 30, 40], [11, 21, 31, 41], [12, 22, 32, 42]]
+    return [{"spectrum": s, "duration": 60, "crc32": _row_crc4(n, s, 60, cov)} for s in specs]
+
+
+def test_v4_crc32_all_ok(tmp_path):
+    n = 4; cov = n * 2 + 2
+    path = _build_aswf_v3(tmp_path, _header_v4(n), _v4_rows(n, cov), fname="v4_ok.aswf")
+    rep = load_aswf(path).integrity_report
+    assert rep is not None and rep["status"] == "ok"
+    assert rep["checked"] == 3 and rep["bad"] == 0 and rep["version"] == 4
+
+
+def test_v4_crc32_detects_corruption(tmp_path):
+    n = 4; cov = n * 2 + 2
+    rows = _v4_rows(n, cov)
+    rows[1]["crc32"] = (rows[1]["crc32"] ^ 0xFFFF) & 0xFFFFFFFF   # испортить CRC строки 1
+    path = _build_aswf_v3(tmp_path, _header_v4(n), rows, fname="v4_bad.aswf")
+    rep = load_aswf(path).integrity_report
+    assert rep["status"] == "corrupt" and rep["bad"] == 1 and rep["bad_rows"] == [1]

@@ -466,6 +466,7 @@ class SlicePanel(QtWidgets.QWidget):
         self._raw_spec = None     # (energies, spec_raw, lt_total) последнего спектра (Задача #44)
         self._raw_series = None   # (times, band_raw) кривой полосы ROII (Задача #44)
         self._raw_ewin = None     # (times, series_raw) кривой энергоокна (Задача #44)
+        self._raw_total = None    # (times, total_raw) суммарного cps по всем каналам (Задача #UI-235)
         self._series_section_items = []  # маркеры сечений Времени на графике отсчётов (Задача #42)
         self._ewin_active = None  # (e_lo,e_hi) активного энергоокна временного профиля (Задача 19)
         self._bg_cps = None       # поканальный фон cps (Задача #96), длина = n_channels
@@ -536,6 +537,9 @@ class SlicePanel(QtWidgets.QWidget):
         # жёлтая кривая — временной профиль энергоокна (Задача 19.2), независим от ROI
         self._ewin_curve = self._series_plot.plot([], [], pen=pg.mkPen("y", width=1),
                                                   name=tr("энергоокно"))
+        # зелёная кривая — суммарный cps по ВСЕМ каналам (Задача #UI-235), независим от ROI/энергоокна
+        self._total_curve = self._series_plot.plot([], [], pen=pg.mkPen((80, 220, 100), width=1),
+                                                   name=tr("суммарный cps"))
         # Задача #104: вторая ось Y (правая) — мощность дозы RadiaCode
         self._dose_vb = pg.ViewBox()
         self._dose_vb.setMouseEnabled(x=False, y=False)  # Задача #198: не перехватывать события мыши
@@ -566,6 +570,7 @@ class SlicePanel(QtWidgets.QWidget):
         self._energies = np.asarray(sg.energies(), dtype=np.float64)
         self._times = np.asarray(sg.time_offsets_s, dtype=np.float64)
         self._live = np.asarray(sg.live_time_s, dtype=np.float64)   # делитель cps (Задача #44)
+        self._raw_total = None   # Задача #UI-235: новый файл (др. n_slices) -> старый суммарный кэш недействителен
         self._clear_series_sections()   # новые данные -> снять старые маркеры сечений (Задача #42)
         self._view_mode = ("integral",)  # Задача #161: новый файл -> вид сброшен на интеграл
         # начальный вид: полный интегральный спектр и полная полоса по времени
@@ -573,6 +578,7 @@ class SlicePanel(QtWidgets.QWidget):
         self._plot_spectrum(self._energies, spec, sg.live_time_total())
         band = np.asarray(sg.band_time_series(0, sg.n_channels), dtype=np.float64)
         self._set_series(self._times, band)
+        self._set_total(self._times, band)  # Задача #UI-235: суммарный cps = вся полоса каналов
         self._header.setText(
             f"{tr('Загружено: срезов')} {sg.n_slices}, {tr('каналов')} {sg.n_channels}. "
             f"{tr('Интегральный спектр и полная полоса.')}")
@@ -635,6 +641,9 @@ class SlicePanel(QtWidgets.QWidget):
             self._plot_spectrum(self._energies, spec, sg.live_time_total())
             band = np.asarray(sg.band_time_series(0, sg.n_channels), dtype=np.float64)
             self._set_series(self._times, band)
+        # Задача #UI-235: суммарный cps — всегда по всем каналам, независим от вида (roi/slice/integral)
+        total = np.asarray(sg.band_time_series(0, sg.n_channels), dtype=np.float64)
+        self._set_total(self._times, total)
         self._refresh_after_update(sg)
 
     def _refresh_after_update(self, sg) -> None:
@@ -705,7 +714,13 @@ class SlicePanel(QtWidgets.QWidget):
         arr = arr[np.isfinite(arr)]
         if not arr.size:
             return
-        y_top = float(arr.max()) * 1.05
+        peak = float(arr.max())
+        if self._raw_total is not None:   # Задача #UI-235: суммарный cps ≥ полосы ROI → он задаёт Y-верх
+            tot = np.asarray(self._series_to_unit(self._raw_total[1]), dtype=np.float64)
+            tot = tot[np.isfinite(tot)]
+            if tot.size:
+                peak = max(peak, float(tot.max()))
+        y_top = peak * 1.05
         vb.disableAutoRange()  # гарантированно отключить autoRange перед setYRange
         # Задача #204: setLimits ДО setYRange. Метод вызывается дважды за загрузку — сначала с
         # полной полосой (band 0..n_ch), затем singleShot с ROI-полосой (центр, меньше). Старый
@@ -837,6 +852,15 @@ class SlicePanel(QtWidgets.QWidget):
         self._raw_ewin = (t, s)
         self._ewin_curve.setData(t, self._series_to_unit(s))
 
+    def _set_total(self, times, total_raw) -> None:
+        """Задача #UI-235: кэшировать сырой суммарный ряд (все каналы) и нарисовать в текущих
+        единицах. Валовая скорость по всему спектру, независима от выбора ROI/энергоокна."""
+        t = np.asarray(times, dtype=np.float64)
+        s = np.asarray(total_raw, dtype=np.float64)
+        self._raw_total = (t, s)
+        self._total_curve.setData(t, self._series_to_unit(s))
+        self._expand_series_y_if_needed()   # суммарный ≥ полосы ROI → он задаёт Y-верх
+
     def _sync_dose_vb(self) -> None:
         """Задача #104: синхронизировать геометрию dose ViewBox с основным при ресайзе."""
         self._dose_vb.setGeometry(self._series_plot.getViewBox().sceneBoundingRect())
@@ -907,6 +931,7 @@ class SlicePanel(QtWidgets.QWidget):
         try:
             self._legend.getLabel(self._series_curve).setText(tr("полоса ROI"))
             self._legend.getLabel(self._ewin_curve).setText(tr("энергоокно"))
+            self._legend.getLabel(self._total_curve).setText(tr("суммарный cps"))
         except Exception:
             pass  # старый pyqtgraph без getLabel — легенда останется на прежнем языке
         self._set_dose_legend(False)
@@ -921,6 +946,8 @@ class SlicePanel(QtWidgets.QWidget):
             self._series_curve.setData(self._raw_series[0], self._series_to_unit(self._raw_series[1]))
         if self._raw_ewin is not None:
             self._ewin_curve.setData(self._raw_ewin[0], self._series_to_unit(self._raw_ewin[1]))
+        if self._raw_total is not None:   # Задача #UI-235: суммарный cps перерисовать из кэша
+            self._total_curve.setData(self._raw_total[0], self._series_to_unit(self._raw_total[1]))
 
     def set_background(self, bg_cps, raw=None) -> None:
         """Задача #96: задать поканальный фон (cps) для наложения; None — снять. Перерисовать.
