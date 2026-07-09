@@ -251,6 +251,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Скорость в полосе, отсч/с": "Band rate, cps",
         "полоса ROI": "ROI band",
         "энергоокно": "energy window",
+        "суммарный cps": "total cps",
         "доза": "dose",
         "Мощность дозы, ": "Dose rate, ",
         "мощность дозы, ": "dose rate, ",

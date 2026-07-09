@@ -107,8 +107,8 @@ def test_peak_ridge_runs_along_time_on_relief(app):
     pos = np.asarray(item.pos)
     nt, nc = v._nt, v._nc
     assert pos.shape == (nt, 3)                      # точка на каждый бин времени
-    # хребет идёт вдоль оси времени: X = индекс-времени − nt/2, Y постоянен (один канал энергии)
-    assert pos[:, 0] == pytest.approx(np.arange(nt) - nt / 2.0)
+    # хребет идёт вдоль оси времени: X = (индекс − nt/2)·x_scale (#UI-233), Y постоянен (канал)
+    assert pos[:, 0] == pytest.approx((np.arange(nt) - nt / 2.0) * v._x_scale)
     assert np.allclose(pos[:, 1], pos[0, 1])
     # Z следует за гребнем рельефа на канале пика (+анти-z-fighting подъём)
     jc = int(round(pos[0, 1] + nc / 2.0))
@@ -374,7 +374,7 @@ def test_peak_ridges_clipped_to_time_plane(app):
     nt = v._nt
     assert v._peak_ridge_items, "гребни не должны исчезнуть полностью"
     for item in v._peak_ridge_items:
-        xs_idx = np.asarray(item.pos)[:, 0] + nt / 2.0
+        xs_idx = np.asarray(item.pos)[:, 0] / v._x_scale + nt / 2.0   # #UI-233: снять x_scale
         assert xs_idx.min() >= i0 - 0.5     # ни одной точки левее нижней границы среза
 
 
@@ -552,6 +552,6 @@ def test_transient_ridge_not_extended_to_empty(app):
     nt = v._nt
     n_pts = pos.shape[0]
     assert 0 < n_pts < nt, f"гребень {n_pts} точек — НЕ вся ось {nt} (баг #126)"
-    xs_idx = pos[:, 0] + nt / 2.0
+    xs_idx = pos[:, 0] / v._x_scale + nt / 2.0   # #UI-233: снять x_scale перед сверкой индексов
     assert xs_idx.min() <= 2.0, "гребень начинается в зоне присутствия (начало оси)"
     assert xs_idx.max() <= nt * 0.7, "гребень НЕ дотягивается до пустого хвоста"

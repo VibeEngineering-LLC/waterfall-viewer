@@ -180,3 +180,20 @@ def test_update_spectrogram_keeps_integral_view(app):
     s.set_spectrogram(sg)
     s.update_spectrogram(sg)
     assert "Интегральный спектр" in s._header.text()
+
+
+def test_total_cps_curve_independent_of_roi(app):
+    # Задача #UI-235: зелёная кривая «суммарный cps» — валовая скорость по ВСЕМ каналам
+    # (Σ/live_time), не зависит от выбора ROI (в отличие от магенты «полоса ROI»).
+    sg = _make_sg()
+    s = SlicePanel()
+    s.set_spectrogram(sg)
+    s.set_unit_mode("cps")
+    expected = sg.band_time_series(0, sg.n_channels).astype(np.float64) / 2.0  # live_time=2.0
+    _, y_tot = s._total_curve.getData()
+    assert np.allclose(y_tot, expected)                      # интеграл: суммарный = вся полоса
+    s.show_roi(0, sg.n_slices, 600, 700)                     # узкий ROI вокруг Cs-137
+    _, y_roi = s._series_curve.getData()
+    _, y_tot2 = s._total_curve.getData()
+    assert np.allclose(y_tot2, expected)                     # суммарный НЕ изменился с ROI
+    assert not np.allclose(y_roi, y_tot2)                    # полоса ROI < суммарного

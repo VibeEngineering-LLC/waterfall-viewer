@@ -21,8 +21,9 @@ class Knob(QtWidgets.QWidget):
     и делили на 100 без изменений."""
     valueChanged = QtCore.Signal(int)
 
-    def __init__(self, minimum=0, maximum=100, value=0, parent=None):
+    def __init__(self, minimum=0, maximum=100, value=0, parent=None, bipolar=False):
         super().__init__(parent)
+        self._bipolar = bool(bipolar)   # Задача #UI-234: заливка/шкала от центра (0 в центре)
         self._min = int(minimum)
         self._max = int(maximum)
         self._val = max(self._min, min(self._max, int(value)))
@@ -112,18 +113,23 @@ class Knob(QtWidgets.QWidget):
         p.setBrush(QtGui.QBrush(gg))
         p.drawRoundedRect(QtCore.QRectF(x0, gy, track_w, 7.0), 3.0, 3.0)
 
-        if frac > 0.0:                         # зелёный «уровень» слева до каретки
+        # Задача #UI-234: биполярный фейдер заливает от центра к каретке (0 в центре); обычный — слева.
+        cx = x0 + 0.5 * track_w
+        lo_x, hi_x = (min(cx, hx), max(cx, hx)) if self._bipolar else (x0 + 1.0, hx)
+        if hi_x - lo_x > 0.5 and (self._bipolar or frac > 0.0):   # зелёный «уровень»
             fill = QtGui.QColor("#4a7d4a") if self.isEnabled() else QtGui.QColor("#55585e")
             p.setPen(QtCore.Qt.NoPen)
             p.setBrush(QtGui.QBrush(fill))
-            p.drawRoundedRect(QtCore.QRectF(x0 + 1.0, gy + 1.0, hx - x0, 5.0), 2.0, 2.0)
+            p.drawRoundedRect(QtCore.QRectF(lo_x, gy + 1.0, hi_x - lo_x, 5.0), 2.0, 2.0)
         p.setPen(QtGui.QPen(QtGui.QColor("#55585e"), 1.0))
         span = self._max - self._min
-        n_ticks = (span + 1) if 0 < span <= 10 else 5
+        # Задача #UI-234: биполярному — мельче деления (9 рисок) и высокая центральная (0).
+        n_ticks = 9 if self._bipolar else ((span + 1) if 0 < span <= 10 else 5)
         for k in range(n_ticks):
             tx = x0 + track_w * k / max(1, n_ticks - 1)
-            p.drawLine(QtCore.QPointF(tx, cy + 6.0), QtCore.QPointF(tx, cy + 9.0))
-            p.drawLine(QtCore.QPointF(tx, cy - 9.0), QtCore.QPointF(tx, cy - 6.0))
+            tall = 5.0 if (self._bipolar and 2 * k == n_ticks - 1) else 3.0
+            p.drawLine(QtCore.QPointF(tx, cy + 6.0), QtCore.QPointF(tx, cy + 6.0 + tall))
+            p.drawLine(QtCore.QPointF(tx, cy - 6.0 - tall), QtCore.QPointF(tx, cy - 6.0))
         self._draw_cap(p, cy, hx, h)
         p.end()
 
@@ -151,14 +157,14 @@ class KnobRow(QtWidgets.QWidget):
     дефолт (bypass). Позиция ручки при выключении сохраняется."""
     changed = QtCore.Signal()
 
-    def __init__(self, key, label, lo, hi, default, fmt=None, parent=None):
+    def __init__(self, key, label, lo, hi, default, fmt=None, parent=None, bipolar=False):
         super().__init__(parent)
         self.setAttribute(QtCore.Qt.WA_StyledBackground, True)   # #35: красить фон ряда
         self._key = str(key)
         self._label_ru = str(label)                     # Задача #169: ru-ключ для ретранслейта
         self._default = int(default)
         self._fmt = fmt or (lambda v: str(v))
-        self.knob = Knob(lo, hi, default, self)
+        self.knob = Knob(lo, hi, default, self, bipolar=bipolar)  # #UI-234: биполярный фейдер
         self.knob.valueChanged.connect(self._on_knob)
 
         self._title = QtWidgets.QLabel(tr(label), self)
@@ -244,17 +250,28 @@ class KnobRow(QtWidgets.QWidget):
         self._reset.setToolTip(tr("Сбросить к значению по умолчанию"))
 
 
+def _tbin_mult(v: int) -> float:
+    """Задача #UI-234: множитель растяжения оси времени, 0 в центре шкалы. 2^(v/50):
+    v=0 → 1.0 (нейтраль), v=+100 → 4.0 (растянуть 4×), v=−100 → 0.25 (сжать 4×)."""
+    return 2.0 ** (max(-100, min(100, int(v))) / 50.0)
+
+
+def _tbin_fmt(v: int) -> str:
+    """0 в центре (нейтраль, ×1.00); вне центра — фактический множитель оси t."""
+    return "0" if int(v) == 0 else f"{_tbin_mult(v):.2f}×"
+
+
 # Спецификации регулировок отображения (ключ, подпись, lo, hi, дефолт, форматтер).
 # Дефолты = «нейтральные» значения, при которых apply_z_scale/сглаживание/свет не меняют картину
 # (gain 1.0, gamma 1.0, отсечка 100%, сглаживание 0, свет 0) — это и есть bypass-состояние (#55).
-# Задача #56: «Окно t» — относит. ширина выборки по времени (v/100); дефолт 100 (×1.00) нейтрален
-# (стандартный max_time=400), главное окно переводит её в число временны́х бинов 3D-водопада.
+# Задача #UI-234: «Окно t» — биполярный фейдер визуального масштаба оси времени; 0 в центре
+# (−100..+100, дефолт 0 = нейтраль), лево сжимает, право растягивает (поверх авто-fit #UI-233).
 _SPECS = (
     ("gain",   "Усиление",    20, 500, 100, lambda v: f"{v / 100:.2f}×"),
     ("gamma",  "Гамма",       20, 300, 100, lambda v: f"{v / 100:.2f}"),
     ("clip",   "Отсечка",     80, 100, 100, lambda v: f"{v}%"),
     ("light",   "Освещение",    0, 100,   0, lambda v: f"{v}%"),
-    ("tbin",   "Окно t",      25, 400, 100, lambda v: f"{v / 100:.2f}×"),
+    ("tbin",   "Окно t",    -100, 100,   0, _tbin_fmt),
     ("smooth",  "Сглаживание E",  0,   2,   0, lambda v: {0: "0", 1: "SMA", 2: "WMA"}[v]),
     ("tsmooth", "Сглаж. по t",  0,   6,   0,
      lambda v: {0:"0",1:"SMA×1",2:"SMA×2",3:"SMA×4",4:"WMA×1",5:"WMA×2",6:"WMA×4"}.get(v,"?")),
@@ -276,7 +293,7 @@ class AdjustPanel(QtWidgets.QWidget):
         grid.setContentsMargins(2, 2, 2, 2)
         grid.setSpacing(4)
         for i, (key, label, lo, hi, dflt, fmt) in enumerate(_SPECS):
-            row = KnobRow(key, label, lo, hi, dflt, fmt, self)
+            row = KnobRow(key, label, lo, hi, dflt, fmt, self, bipolar=(key == "tbin"))
             row.changed.connect(self.changed)
             self.rows[key] = row
             grid.addWidget(row, i, 0)           # Задача #58: одна колонка (ряды друг под другом)

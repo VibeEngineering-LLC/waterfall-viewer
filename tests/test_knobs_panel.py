@@ -69,7 +69,7 @@ def test_knobrow_bypass_preserves_position(app):
 # ---------- AdjustPanel: глобальный bypass и сброс ----------
 
 _DEFAULTS = {"gain": 100, "gamma": 100, "clip": 100, "smooth": 0, "tsmooth": 0,
-             "light": 0, "tbin": 100, "tsmooth_by_seg": 1}  # Задача #174: по сегм. ВКЛ по умолчанию
+             "light": 0, "tbin": 0, "tsmooth_by_seg": 1}  # #UI-234: tbin 0 в центре; #174: по сегм. ВКЛ
 
 
 def test_panel_defaults_all_off(app):
@@ -155,31 +155,31 @@ def test_mainwindow_rows_off_revert_all(app):
     w.close()
 
 
-def test_mainwindow_tbin_changes_time_bins(app):
-    """Задача #56: ручка «Окно t» меняет число временны́х бинов (max_time) 3D-водопада;
-    bypass ряда → стандартная ширина (max_time=400), позиция ручки сохраняется."""
+def test_mainwindow_tbin_stretches_time_axis(app):
+    """Задача #UI-234: ручка «Окно t» (0 в центре) визуально сжимает/растягивает ось времени
+    3D-водопада (множитель поверх авто-fit #UI-233); bypass ряда → нейтраль ×1.0, позиция цела."""
     w = MainWindow()
-    w._view3d.set_spectrogram(_make_sg(ns=120, nc=30))   # ns>бинов — LOD реально режет
-    assert w._view3d._max_time == 400                    # дефолт — стандартная ширина
+    w._view3d.set_spectrogram(_make_sg(ns=120, nc=30))
+    assert w._view3d._x_user == pytest.approx(1.0)       # дефолт 0 → нейтраль (0 в центре)
     w._adjust.rows["tbin"].set_on(True)                  # #91: ряд включаем напрямую
-    w._adjust.rows["tbin"].setValue(200)                 # ширина ×2 → меньше бинов («сжатие»)
-    assert w._view3d._max_time == 200
-    w._adjust.rows["tbin"].setValue(50)                  # ширина ×0.5 → больше бинов («растяжение»)
-    assert w._view3d._max_time == 800
-    w._adjust.rows["tbin"].set_on(False)                 # bypass ряда → стандартный max_time
-    assert w._view3d._max_time == 400
-    assert w._adjust.rows["tbin"].value() == 50          # позиция ручки сохранена
+    w._adjust.rows["tbin"].setValue(100)                 # право до упора → растянуть 4×
+    assert w._view3d._x_user == pytest.approx(4.0)
+    w._adjust.rows["tbin"].setValue(-100)                # лево до упора → сжать 4×
+    assert w._view3d._x_user == pytest.approx(0.25)
+    w._adjust.rows["tbin"].set_on(False)                 # bypass ряда → нейтраль ×1.0
+    assert w._view3d._x_user == pytest.approx(1.0)
+    assert w._adjust.rows["tbin"].value() == -100        # позиция ручки сохранена
     w.close()
 
 
 def test_mainwindow_tbin_persists_across_load(app):
-    """Задача #56: ширина выборки переживает загрузку нового файла — аргументный
-    set_spectrogram(sg) не сбрасывает max_time (None-дефолт сохраняет текущее)."""
+    """Задача #UI-234: множитель масштаба оси t переживает загрузку нового файла —
+    set_x_stretch пишет только _x_user, set_spectrogram(sg) его не сбрасывает."""
     w = MainWindow()
     w._view3d.set_spectrogram(_make_sg(ns=120))
     w._adjust.rows["tbin"].set_on(True)                  # #91: ряд включаем напрямую
-    w._adjust.rows["tbin"].setValue(200)                 # max_time=200
-    assert w._view3d._max_time == 200
+    w._adjust.rows["tbin"].setValue(100)                 # растянуть 4×
+    assert w._view3d._x_user == pytest.approx(4.0)
     w._view3d.set_spectrogram(_make_sg(ns=140))          # новый файл, аргументный вызов как в _on_loaded
-    assert w._view3d._max_time == 200                    # ширина выборки сохранилась
+    assert w._view3d._x_user == pytest.approx(4.0)        # масштаб оси t сохранился
     w.close()

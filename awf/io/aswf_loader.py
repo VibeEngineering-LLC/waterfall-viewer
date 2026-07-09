@@ -4,6 +4,7 @@ from pathlib import Path
 import struct
 import json
 import warnings
+import zlib
 import numpy as np
 from awf.model.spectrogram import Calibration, Spectrogram
 
@@ -42,6 +43,20 @@ def _rle_decode_row(buf: bytes, pos: int, n_channels: int):
         else:
             raise ValueError("ASWF: RLE: зарезервированное значение 0xFFFF")
     return tuple(spec[:n_channels]), pos
+
+
+def _verify_row_crc32(raw_rows: np.ndarray, covers: int, stored_crc: np.ndarray) -> dict:
+    """Задача #DATA-1a: пер-строчная проверка CRC32 (ASWF v4). CRC покрывает первые `covers`
+    байт строки (spectrum..dose_rate), zlib-совместим (init/финал XOR 0xFFFFFFFF, poly EDB88320).
+    Возвращает отчёт: checked/ok/bad + индексы битых строк (до 64) + статус."""
+    n = int(raw_rows.shape[0])
+    bad: list[int] = []
+    for i in range(n):
+        calc = zlib.crc32(raw_rows[i, :covers].tobytes()) & 0xFFFFFFFF
+        if calc != int(stored_crc[i]):
+            bad.append(i)
+    return {"algo": "crc32", "checked": n, "ok": n - len(bad), "bad": len(bad),
+            "bad_rows": bad[:64], "status": "ok" if not bad else "corrupt"}
 
 
 def load_aswf(path, *, max_slices: int | None = None) -> Spectrogram:
@@ -127,6 +142,9 @@ def load_aswf(path, *, max_slices: int | None = None) -> Spectrogram:
         f.seek(data_off)
         payload = f.read()
 
+    # Задача #DATA-1: отчёт целостности (per-row CRC32 v4); None если контроля нет в файле.
+    integrity_report = None
+
     # ========================= UNCOMPRESSED =========================
     if not compressed:
         if not n_rows or n_rows < 1:
@@ -171,12 +189,24 @@ def load_aswf(path, *, max_slices: int | None = None) -> Spectrogram:
                     .view("<f4").ravel().astype(np.float64))
             gps_track = np.column_stack([lats, lons])
 
-        # dose_rate_usv_h (v3)
+        # dose_rate (v3: имя dose_rate_usv_h; v4: имя dose_rate — принимаем оба)
         dose_rate_usv_h = None
-        if use_fields and "dose_rate_usv_h" in all_fields:
-            fd = all_fields["dose_rate_usv_h"]; off = int(fd["offset"])
+        _dose_name = ("dose_rate_usv_h" if "dose_rate_usv_h" in all_fields
+                      else ("dose_rate" if "dose_rate" in all_fields else None))
+        if use_fields and _dose_name:
+            fd = all_fields[_dose_name]; off = int(fd["offset"])
             dose_rate_usv_h = (np.ascontiguousarray(raw_rows[:, off:off+4])
                                .view("<f4").ravel().astype(np.float64))
+
+        # Задача #DATA-1a: проверка целостности per-row CRC32 (только v4 — поле crc32 в шапке).
+        if use_fields and "crc32" in all_fields:
+            cfd = all_fields["crc32"]
+            covers = int(cfd.get("covers", cfd.get("offset", 0)))
+            coff = int(cfd["offset"])
+            if 0 < covers <= row_stride - 4 and coff + 4 <= row_stride:
+                stored_crc = np.ascontiguousarray(raw_rows[:, coff:coff+4]).view("<u4").ravel()
+                integrity_report = _verify_row_crc32(raw_rows, covers, stored_crc)
+                integrity_report["version"] = version
 
     # ========================== COMPRESSED ==========================
     else:
@@ -210,8 +240,14 @@ def load_aswf(path, *, max_slices: int | None = None) -> Spectrogram:
         gps_track = (np.column_stack([lat_list, lon_list])
                      if lat_list and lon_list else None)
 
-        dose_list = field_vals.get("dose_rate_usv_h")
+        dose_list = field_vals.get("dose_rate_usv_h") or field_vals.get("dose_rate")
         dose_rate_usv_h = np.array(dose_list, dtype=np.float64) if dose_list else None
+
+        # Задача #DATA-1a: CRC покрывает сырую (несжатую) раскладку строки; в RLE-режиме
+        # исходные байты не восстанавливаем — помечаем контроль как пропущенный.
+        if "crc32" in field_vals:
+            integrity_report = {"algo": "crc32", "checked": 0, "ok": 0, "bad": 0,
+                                "bad_rows": [], "status": "skipped_compressed", "version": version}
 
     # ========================= TIME AXIS ===========================
     real_time_s_adj = real_time_s.copy()
@@ -233,6 +269,14 @@ def load_aswf(path, *, max_slices: int | None = None) -> Spectrogram:
     live_time_s = real_time_s_adj.copy()
 
     # ====================== CALIBRATION / t0 =======================
+    # Задача #DATA-1b/1c: межсегментные контроли (seg_seq/total_at_open) в сшитом файле вьюера
+    # проверить нельзя (одна шапка) — прикладываем как информацию к отчёту, если есть.
+    if integrity_report is not None:
+        if hdr.get("seg_seq") is not None:
+            integrity_report["seg_seq"] = int(hdr["seg_seq"])
+        if hdr.get("total_at_open") is not None:
+            integrity_report["total_at_open"] = int(hdr["total_at_open"])
+
     cal = hdr.get("calibration")
     calibration = (Calibration(coeffs=np.asarray(cal, dtype=np.float64)) if cal
                    else Calibration(coeffs=np.array([0.0, 1.0], dtype=np.float64)))
@@ -249,4 +293,5 @@ def load_aswf(path, *, max_slices: int | None = None) -> Spectrogram:
         baseline=baseline_arr,
         dose_rate_usv_h=dose_rate_usv_h,
         gps_track=gps_track,
+        integrity_report=integrity_report,
     )
