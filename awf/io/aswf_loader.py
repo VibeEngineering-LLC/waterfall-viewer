@@ -87,7 +87,8 @@ def load_aswf(path, *, max_slices: int | None = None) -> Spectrogram:
         baseline_bytes = 0
         if version >= 3 and "baseline" in hdr:
             bi = hdr["baseline"]
-            bl_count = int(bi.get("count") or n_channels)
+            # #ASWF4-1: спека ASWF_V4_FORMAT.md — ключ "channels"; "count" — legacy (старые тесты)
+            bl_count = int(bi.get("channels", bi.get("count")) or n_channels)
             baseline_bytes = bl_count * 4
             bl_raw = f.read(baseline_bytes)
             if len(bl_raw) < baseline_bytes:
