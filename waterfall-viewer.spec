@@ -34,8 +34,21 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
+    # Вьюеру нужны только: PySide6, pyqtgraph, OpenGL, numpy, scipy, sklearn, lxml.
+    # ML/OCR-пакеты (torch, cv2, transformers, onnxruntime, pyarrow, pdfminer …)
+    # присутствуют в окружении py-3.14, но НЕ импортируются кодом awf — их тянет
+    # статический modulegraph через условные импорты в sklearn/scipy. Явно исключаем,
+    # иначе дистрибутив раздувается до ~1 ГБ (torch 366 МБ, cv2 112, pyarrow 80 …).
+    # Проверено: sklearn DBSCAN/HDBSCAN/TSNE/PCA работают без всех перечисленных.
     excludes=["tkinter", "unittest", "matplotlib", "PIL", "pandas",
-              "PyQt5", "PyQt5.QtCore", "PySide2", "PyQtAds"],
+              "PyQt5", "PyQt5.QtCore", "PySide2", "PyQtAds",
+              "torch", "torchvision", "torchaudio", "torchgen",
+              "sympy", "networkx", "cv2", "onnx", "onnxruntime",
+              "transformers", "tokenizers", "huggingface_hub", "hf_xet",
+              "safetensors", "accelerate", "pyarrow",
+              "pdfminer", "pypdfium2", "pypdfium2_raw",
+              "cryptography", "pydantic", "pydantic_core",
+              "numba", "llvmlite", "IPython", "notebook"],
     noarchive=False,
 )
 pyz = PYZ(a.pure)
