@@ -22,6 +22,8 @@ sample_data/*.aswf
 # Сборка PyInstaller
 build/
 dist/
+# #REL-9: старый билд-артефакт v0.1.7 (dist/ ловит только текущий каталог) — не в git
+dist_v017/
 *.spec
 # #186: рецепт сборки exe (#184/#185) версионируется — исключение из *.spec
 !waterfall-viewer.spec
@@ -62,3 +64,5 @@ scripts/_*
 scripts/diag_*
 scripts/diag/
 scripts/ollama/_*
+# #REL-9: одноразовый Ollama-генератор v4-теста (dev-only, как _spec) — не в публичный репо
+scripts/ollama/gen_test_aswf_v4.py
