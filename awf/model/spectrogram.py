@@ -73,6 +73,7 @@ class Spectrogram:
                  baseline: np.ndarray | None = None,
                  dose_rate_usv_h: np.ndarray | None = None,
                  gps_track: np.ndarray | None = None,
+                 temperature_c: np.ndarray | None = None,
                  integrity_report: dict | None = None):
         if counts.ndim != 2:
             raise ValueError("counts должен быть двумерным массивом")
@@ -102,6 +103,7 @@ class Spectrogram:
         self.baseline = baseline              # ASWF v3: кумулятивный спектр до сессии (uint32/int64)
         self.dose_rate_usv_h = dose_rate_usv_h  # ASWF v3: мощность дозы мкЗв/ч (float64, NaN=нет)
         self.gps_track = gps_track            # ASWF v3: (n_rows, 2) lat/lon float64 (NaN=нет)
+        self.temperature_c = temperature_c    # ASWF v5 (#DATA-2): температура детектора °C (float64, NaN=нет)
         self.integrity_report = integrity_report  # ASWF v4 (#DATA-1): отчёт CRC32/целостности или None
 
     @property
@@ -201,6 +203,7 @@ class Spectrogram:
             baseline=self.baseline,
             dose_rate_usv_h=self.dose_rate_usv_h,
             gps_track=self.gps_track,
+            temperature_c=self.temperature_c,
             integrity_report=self.integrity_report,
         )
 

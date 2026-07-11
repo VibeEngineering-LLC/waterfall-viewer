@@ -11,6 +11,8 @@ from awf.ui.view3d import Waterfall3DView, SectionControls
 from awf.ui.panels import HeatmapPanel, SlicePanel
 from awf.analysis.peaks import auto_calibrate_fwhm_model   # Задача #130: модель FWHM(E) для идентификации
 from awf.ui.analytics_panel import AnalyticsPanel
+from awf.ui.device_data_panel import DeviceDataPanel   # Задача #DATA-3: вкладка «Прибор»
+from awf.ui.integrity_dialog import IntegrityDialog    # Задача #UI-236: отчёт целостности
 from awf.ui.background_dialog import BackgroundDialog   # Задача #96
 from awf.model.background import (background_from_range, background_from_spectrogram,
                                   subtract_background,   # #138: прямой поканальный вычет сырых данных
@@ -105,9 +107,12 @@ class MainWindow(QtWidgets.QMainWindow):
         _idx_3d = self._tabs.addTab(self._view3d, "3D Waterfall")
         _idx_2d = self._tabs.addTab(self._heatmap, "2D Карта (Время×Энергия)")
         _idx_an = self._tabs.addTab(self._analytics, "Аналитика")
+        self._device_data = DeviceDataPanel()   # Задача #DATA-3: доза/температура/GPS + CSV
+        _idx_dd = self._tabs.addTab(self._device_data, "Прибор")
         self._register_i18n(lambda s: self._tabs.setTabText(_idx_3d, s), "3D Waterfall")
         self._register_i18n(lambda s: self._tabs.setTabText(_idx_2d, s), "2D Карта (Время×Энергия)")
         self._register_i18n(lambda s: self._tabs.setTabText(_idx_an, s), "Аналитика")
+        self._register_i18n(lambda s: self._tabs.setTabText(_idx_dd, s), "Прибор")
         self.setCentralWidget(self._tabs)
 
         # правый док: срезы/сечения/выборки
@@ -296,7 +301,7 @@ class MainWindow(QtWidgets.QMainWindow):
             pass
         # Задача #169: остальные панели/контролы с собственным retranslate()
         for name in ("_nuclides", "_analytics", "_heatmap", "_slices",
-                     "_sections", "_adjust"):
+                     "_sections", "_adjust", "_device_data"):
             panel = getattr(self, name, None)
             try:
                 panel.retranslate()
@@ -323,6 +328,11 @@ class MainWindow(QtWidgets.QMainWindow):
         act_export.triggered.connect(self._export_spectrum)
         self._register_i18n(act_export.setText, "Экспорт спектра…")
         menu.addAction(act_export)
+        # Задача #UI-236: повторный показ отчёта целостности текущего файла
+        act_integrity = QtGui.QAction("Отчёт целостности…", self)
+        act_integrity.triggered.connect(self._show_integrity_report)
+        self._register_i18n(act_integrity.setText, "Отчёт целостности…")
+        menu.addAction(act_integrity)
         menu.addSeparator()
         act_quit = QtGui.QAction("Выход", self)
         act_quit.setShortcut(QtGui.QKeySequence.Quit)
@@ -1188,6 +1198,7 @@ class MainWindow(QtWidgets.QMainWindow):
             act_dose.setChecked(is_rcspg)   # включаем по умолчанию для RadiaCode
             act_dose.blockSignals(False)
         self._analytics.set_spectrogram(sg)   # «Аналитика» (Задача 26) — всегда на исходных данных
+        self._device_data.set_spectrogram(sg)   # «Прибор» (Задача #DATA-3) — доза/температура/GPS
         # 3D/2D/срезы + секущие плоскости под новую геометрию (через активную спектрограмму)
         self._redistribute(reset=True)   # Задача #161: новый файл -> полный сброс окна срезов
         # Задача #104: после redistribute явно синхронизировать видимость дозы
@@ -1204,7 +1215,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.statusBar().showMessage(
             f"{src} — {tr('срезов')} {sg.n_slices} × {tr('каналов')} {sg.n_channels}; "
             f"t0={t0}; {tr('всего отсчётов')}={total}{integ}")
-        self._maybe_warn_integrity(getattr(sg, "integrity_report", None))
+        # Задача #UI-236: полный отчёт целостности при каждом открытии (с кнопкой сохранения)
+        IntegrityDialog.show_report(self, sg)
 
     @staticmethod
     def _integrity_suffix(rep: dict | None) -> str:
@@ -1220,17 +1232,14 @@ class MainWindow(QtWidgets.QMainWindow):
             return f"; {tr('CRC32 пропущен (сжатый)')}"
         return ""
 
-    def _maybe_warn_integrity(self, rep: dict | None) -> None:
-        """Предупредить диалогом при обнаружении порчи данных (Задача #DATA-1)."""
-        if not rep or rep.get("status") != "corrupt":
+    def _show_integrity_report(self) -> None:
+        """Задача #UI-236: показать отчёт целостности текущего файла (пункт меню «Файл»).
+        Заменяет прежний warning-мессаджбокс #DATA-1 — corrupt-случай виден в самом отчёте."""
+        sg = self._sg
+        if sg is None:
+            self.statusBar().showMessage(tr("Файл не загружен"))
             return
-        rows = ", ".join(str(i) for i in rep.get("bad_rows", [])[:32])
-        more = " …" if rep.get("bad", 0) > 32 else ""
-        QtWidgets.QMessageBox.warning(
-            self, tr("Проверка целостности"),
-            f"{tr('Обнаружено повреждённых строк (CRC32)')}: "
-            f"{rep.get('bad', 0)} / {rep.get('checked', 0)}.\n"
-            f"{tr('Номера строк')}: {rows}{more}")
+        IntegrityDialog.show_report(self, sg)
 
     @QtCore.Slot(str)
     def _on_failed(self, message: str) -> None:
