@@ -97,6 +97,29 @@ def test_t0_iso(tmp_path):
     assert _epoch_s_to_iso(1700000000) == "2023-11-14T22:13:20Z"
 
 
+def test_t0_iso_started_at_zero(tmp_path):
+    """Задача #DATA-4: started_at == 0 (NTP не синхронизирован) -> t0_iso is None, не 1970 год."""
+    path = _build_aswf(tmp_path, _header(started_at=0), _rows())
+    sg = load_aswf(path)
+    assert sg.t0_iso is None
+
+
+def test_bad_dtype_raises(tmp_path):
+    """Задача #DATA-4: dtype != uint16 -> честный ValueError, не молчаливая каша."""
+    path = _build_aswf(tmp_path, _header(dtype="uint32"), _rows())
+    with pytest.raises(ValueError, match="dtype"):
+        load_aswf(path)
+
+
+def test_baseline_without_channels_keys_skipped(tmp_path):
+    """Задача #DATA-4: baseline без channels/count -> B=0 по спеке, payload не сдвигается."""
+    header = _header(version=3, baseline={"dtype": "uint32"})
+    path = _build_aswf(tmp_path, header, _rows())
+    sg = load_aswf(path)
+    assert sg.baseline is None
+    np.testing.assert_array_equal(sg.counts[0], [0, 1, 2, 3])
+
+
 def test_max_slices(tmp_path):
     header = _header()
     rows = _rows()

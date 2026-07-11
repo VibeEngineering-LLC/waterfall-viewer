@@ -80,6 +80,11 @@ def load_aswf(path, *, max_slices: int | None = None) -> Spectrogram:
             raise ValueError(f"ASWF: неверное число каналов: {n_channels}")
         version  = int(hdr.get("version") or 1)
         interval = float(hdr.get("interval_sec") or 0.0)
+        # Задача #DATA-4: спека фиксирует dtype="uint16", byte_order="little"; иное значение
+        # молча дало бы кашу при разборе — честный отказ.
+        _dt = hdr.get("dtype"); _bo = hdr.get("byte_order")
+        if _dt not in (None, "uint16") or _bo not in (None, "little"):
+            raise ValueError(f"ASWF: неподдерживаемые dtype/byte_order: {_dt!r}/{_bo!r} ({path})")
         counts_bytes = n_channels * 2
 
         # --- Задача #197: baseline section (v3) ---
@@ -87,15 +92,17 @@ def load_aswf(path, *, max_slices: int | None = None) -> Spectrogram:
         baseline_bytes = 0
         if version >= 3 and "baseline" in hdr:
             bi = hdr["baseline"]
-            # #ASWF4-1: спека ASWF_V4_FORMAT.md — ключ "channels"; "count" — legacy (старые тесты)
-            bl_count = int(bi.get("channels", bi.get("count")) or n_channels)
+            # #ASWF4-1/#DATA-4: спека — B = (channels ?? count ?? 0) × 4; нет обоих ключей
+            # (или 0/null) → секции нет, payload сразу за шапкой.
+            bl_count = int(bi.get("channels") or bi.get("count") or 0)
             baseline_bytes = bl_count * 4
-            bl_raw = f.read(baseline_bytes)
-            if len(bl_raw) < baseline_bytes:
-                warnings.warn(f"ASWF: {path}: baseline section обрезан ({len(bl_raw)} < {baseline_bytes} байт)")
-                baseline_bytes = len(bl_raw)
-            else:
-                baseline_arr = np.frombuffer(bl_raw, dtype="<u4").astype(np.int64)
+            if baseline_bytes:
+                bl_raw = f.read(baseline_bytes)
+                if len(bl_raw) < baseline_bytes:
+                    warnings.warn(f"ASWF: {path}: baseline section обрезан ({len(bl_raw)} < {baseline_bytes} байт)")
+                    baseline_bytes = len(bl_raw)
+                else:
+                    baseline_arr = np.frombuffer(bl_raw, dtype="<u4").astype(np.int64)
 
         f.seek(0, 2)
         file_size = f.tell()
@@ -291,7 +298,10 @@ def load_aswf(path, *, max_slices: int | None = None) -> Spectrogram:
     cal = hdr.get("calibration")
     calibration = (Calibration(coeffs=np.asarray(cal, dtype=np.float64)) if cal
                    else Calibration(coeffs=np.array([0.0, 1.0], dtype=np.float64)))
-    t0_iso = _epoch_s_to_iso(hdr.get("started_at"))
+    # Задача #DATA-4: started_at == 0 = «NTP не синхронизирован» (спека) — t0 неизвестен,
+    # ось относительна; без гейта фиктивно показывался 1970-01-01.
+    _t0 = hdr.get("started_at")
+    t0_iso = _epoch_s_to_iso(_t0) if _t0 else None
 
     return Spectrogram(
         counts=counts,
