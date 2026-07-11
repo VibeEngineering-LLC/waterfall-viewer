@@ -273,6 +273,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Версия формата ASWF": "ASWF format version",
         "Сформирован": "Generated",
         "Сохранить отчёт…": "Save report…",
+        # Оверлей температуры на 2D-карте (Задача #UI-239)
+        "Темп. (2D)": "Temp. (2D)",
+        "Наложить кривую температуры детектора на 2D-карту":
+            "Overlay the detector temperature curve on the 2D map",
         # Вкладка «Прибор» (Задача #DATA-3)
         "Прибор": "Device",
         "Нет данных прибора.": "No device data.",

@@ -65,6 +65,27 @@ class _TimeAxisItem(pg.AxisItem):
                 for v in values]
 
 
+class _TempAxisItem(pg.AxisItem):
+    """Верхняя ось 2D-карты — шкала температуры °C для оверлея #UI-239: дисплейный X кривой
+    отображается обратно в градусы (кривая нормирована в полосу [pad..1-pad] ширины карты)."""
+    def __init__(self):
+        super().__init__("top")
+        self._t_min = 0.0; self._t_max = 1.0; self._cols = 1.0; self._pad = 0.05
+
+    def set_range(self, t_min, t_max, cols, pad):
+        self._t_min = float(t_min); self._t_max = float(t_max)
+        self._cols = max(1.0, float(cols)); self._pad = float(pad)
+        self.picture = None; self.update()
+
+    def tickStrings(self, values, scale, spacing):
+        span = self._t_max - self._t_min
+        out = []
+        for v in values:
+            frac = (float(v) / self._cols - self._pad) / max(1e-12, 1.0 - 2.0 * self._pad)
+            out.append("{:.1f}".format(self._t_min + max(0.0, min(1.0, frac)) * span))
+        return out
+
+
 class HeatmapPanel(QtWidgets.QWidget):
     """2D-карта Время(ось Y)×Энергия/канал(ось X). Цвет = log(1+counts). Прямоугольная выборка
     (pg.RectROI) задаёт окно [t_lo:t_hi, ch_lo:ch_hi] в ПОЛНЫХ индексах исходной матрицы.
@@ -110,7 +131,10 @@ class HeatmapPanel(QtWidgets.QWidget):
         self._glw = pg.GraphicsLayoutWidget()
         layout.addWidget(self._glw)
         self._time_axis = _TimeAxisItem()
-        self._plot = self._glw.addPlot(axisItems={"left": self._time_axis})
+        self._temp_axis = _TempAxisItem()   # Задача #UI-239: шкала °C оверлея (видна при вкл.)
+        self._plot = self._glw.addPlot(axisItems={"left": self._time_axis,
+                                                  "top": self._temp_axis})
+        self._plot.hideAxis("top")
         self._plot.setLabel("bottom", tr("Канал (энергия)"))
         self._plot.setLabel("left", tr("Время, с"))
         self._plot.invertY(True)                 # время сверху вниз
@@ -131,6 +155,15 @@ class HeatmapPanel(QtWidgets.QWidget):
         for _it in (self._v_line, self._h_line, self._hud):
             self._plot.addItem(_it); _it.setVisible(False)
         self._plot.scene().sigMouseMoved.connect(self._on_mouse_moved)
+        # Задача #UI-239: кривая температуры поверх карты — белая с чёрной обводкой,
+        # видима на любой палитре; по умолчанию выключена
+        self._temp_overlay_on = False
+        self._temp_curve_item = pg.PlotCurveItem(
+            pen=pg.mkPen((255, 255, 255, 230), width=2),
+            shadowPen=pg.mkPen((0, 0, 0, 200), width=4))
+        self._temp_curve_item.setZValue(30)
+        self._plot.addItem(self._temp_curve_item)
+        self._temp_curve_item.setVisible(False)
 
     def retranslate(self) -> None:
         """Задача #169: подписи осей 2D-карты на текущем языке."""
@@ -145,6 +178,36 @@ class HeatmapPanel(QtWidgets.QWidget):
         self._plot.setLabel("left", tr(_lbl))
         if self._sg is not None:
             self._time_axis.set_data(self._sg.time_offsets_s, self._t_scale, unit)
+
+    def set_temp_overlay(self, on: bool) -> None:
+        """Задача #UI-239: вкл/выкл оверлей температуры детектора (кривая вдоль оси времени)."""
+        self._temp_overlay_on = bool(on)
+        self._apply_temp_overlay()
+
+    def _apply_temp_overlay(self) -> None:
+        """#UI-239: гейт оверлея — прячет кривую/шкалу без данных, иначе отрисовка."""
+        temp = getattr(self._sg, "temperature_c", None) if self._sg is not None else None
+        ok = self._temp_overlay_on and temp is not None and bool(np.isfinite(temp).any())
+        self._temp_curve_item.setVisible(ok)
+        if not ok:
+            self._plot.hideAxis("top")
+            return
+        self._draw_temp_overlay(np.asarray(temp, dtype=np.float64))
+
+    def _draw_temp_overlay(self, temp: np.ndarray) -> None:
+        """#UI-239: T -> X-полоса [pad..1-pad] ширины карты, Y = срез/t_scale; NaN рвёт линию."""
+        pad = 0.05
+        t_min = float(np.nanmin(temp)); t_max = float(np.nanmax(temp))
+        span = t_max - t_min
+        if span <= 0.0:
+            x = np.full(temp.size, 0.5 * self._disp_cols)   # константа -> центр карты
+        else:
+            x = (pad + (temp - t_min) / span * (1.0 - 2.0 * pad)) * self._disp_cols
+        y = (np.arange(temp.size, dtype=np.float64) + 0.5) / max(1e-12, self._t_scale)
+        self._temp_curve_item.setData(x, y, connect="finite")
+        self._temp_axis.set_range(t_min, t_max, self._disp_cols, pad)
+        self._plot.showAxis("top")
+        self._temp_axis.setLabel(tr("Температура, °C"))
 
     def set_spectrogram(self, sg) -> None:
         """Построить карту. Для огромных матриц (> DISPLAY_CELL_CAP ячеек) показываем
@@ -175,6 +238,7 @@ class HeatmapPanel(QtWidgets.QWidget):
         self._apply_highlight()  # перерисовать маркеры подсветки под новую геометрию (Задача 18)
         self._apply_contours()   # пересчитать изолинии под новые данные (Задача 20)
         self._clear_section_items()  # сбросить маркеры сечений старого файла (Задача #39)
+        self._apply_temp_overlay()   # оверлей температуры под новую геометрию (Задача #UI-239)
 
     def _lock_view_to_data(self) -> None:
         """Задача #87: «привязать минимальный зум к окну» — ограничить ViewBox прямоугольником
