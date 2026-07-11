@@ -199,7 +199,14 @@ def load_aswf(path, *, max_slices: int | None = None) -> Spectrogram:
             dose_rate_usv_h = (np.ascontiguousarray(raw_rows[:, off:off+4])
                                .view("<f4").ravel().astype(np.float64))
 
-        # Задача #DATA-1a: проверка целостности per-row CRC32 (только v4 — поле crc32 в шапке).
+        # temperature (v5, #DATA-2): температура детектора °C; NaN = прибор ещё не отдал
+        temperature_c = None
+        if use_fields and "temperature" in all_fields:
+            fd = all_fields["temperature"]; off = int(fd["offset"])
+            temperature_c = (np.ascontiguousarray(raw_rows[:, off:off+4])
+                             .view("<f4").ravel().astype(np.float64))
+
+        # Задача #DATA-1a: проверка целостности per-row CRC32 (v4/v5 — offset/covers из row_fields).
         if use_fields and "crc32" in all_fields:
             cfd = all_fields["crc32"]
             covers = int(cfd.get("covers", cfd.get("offset", 0)))
@@ -243,6 +250,9 @@ def load_aswf(path, *, max_slices: int | None = None) -> Spectrogram:
 
         dose_list = field_vals.get("dose_rate_usv_h") or field_vals.get("dose_rate")
         dose_rate_usv_h = np.array(dose_list, dtype=np.float64) if dose_list else None
+
+        temp_list = field_vals.get("temperature")
+        temperature_c = np.array(temp_list, dtype=np.float64) if temp_list else None
 
         # Задача #DATA-1a: CRC покрывает сырую (несжатую) раскладку строки; в RLE-режиме
         # исходные байты не восстанавливаем — помечаем контроль как пропущенный.
@@ -294,5 +304,6 @@ def load_aswf(path, *, max_slices: int | None = None) -> Spectrogram:
         baseline=baseline_arr,
         dose_rate_usv_h=dose_rate_usv_h,
         gps_track=gps_track,
+        temperature_c=temperature_c,
         integrity_report=integrity_report,
     )

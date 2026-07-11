@@ -66,3 +66,9 @@ scripts/diag/
 scripts/ollama/_*
 # #REL-9: одноразовый Ollama-генератор v4-теста (dev-only, как _spec) — не в публичный репо
 scripts/ollama/gen_test_aswf_v4.py
+# #DATA-2/#DATA-3/#UI-236: одноразовые Ollama-генераторы 2026-07-11 (dev-only)
+scripts/ollama/gen_test_aswf_v5.py
+scripts/ollama/gen_device_data_panel.py
+scripts/ollama/gen_test_device_data_panel.py
+scripts/ollama/gen_integrity_dialog.py
+scripts/ollama/gen_test_integrity_dialog.py
