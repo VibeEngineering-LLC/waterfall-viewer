@@ -151,6 +151,16 @@ QSpinBox, QDoubleSpinBox, QLineEdit {
     background: #34373c; color: #e0e2e6;
     border: 1px solid #1c1e21; border-radius: 3px; padding: 1px 4px;
 }
+
+/* Задача #UI-240: многострочные текстовые поля (отчёт целостности #UI-236 — QPlainTextEdit).
+   Без правила viewport рисовался дефолтным белым фоном Qt и выбивался из тёмного диалога.
+   Цвет поля — как «поля данных» (деревья/таблицы: #26282b), текст и selection — акцент темы.
+   QTextBrowser (справка #182) НЕ включён: его HTML-контент со своим оформлением. */
+QPlainTextEdit, QTextEdit {
+    background: #26282b; color: #d0d2d6;
+    border: 1px solid #1c1e21; border-radius: 3px;
+    selection-background-color: #3d6b3d; selection-color: #ffffff;
+}
 /* Задача #97: кнопки-стрелки спинбоксов — тёмные под тему. Поле было стилизовано,
    а дефолтные ::up/down-button рисовались светлыми/системными и выбивались из
    тёмного диалога «Выбор фона». Стрелки — CSS-треугольники светлого цвета. */

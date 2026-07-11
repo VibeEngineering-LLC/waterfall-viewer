@@ -325,6 +325,13 @@ def test_peaks_table_dark_theme_in_qss():
     assert "gridline-color" in APP_QSS                 # тёмная сетка ячеек
 
 
+def test_plaintextedit_dark_theme_in_qss():
+    """Задача #UI-240: поле отчёта целостности (#UI-236 — QPlainTextEdit) рисовалось дефолтным
+    белым фоном — в APP_QSS не было правила QPlainTextEdit/QTextEdit. Проверяем покрытие темой."""
+    from awf.ui.style import APP_QSS
+    assert "QPlainTextEdit" in APP_QSS and "QTextEdit" in APP_QSS
+
+
 def test_app_level_qss_for_pyqtgraph_popups(app):
     """Задача #117: контекстные меню pyqtgraph (ViewBoxMenu) — popup БЕЗ QWidget-родителя,
     поэтому stylesheet окна до них не каскадирует (рисовались системной светлой темой).
