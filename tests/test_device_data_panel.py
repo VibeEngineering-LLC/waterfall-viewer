@@ -6,6 +6,7 @@ from PySide6 import QtWidgets
 
 from awf.model.spectrogram import Calibration, Spectrogram
 from awf.ui.device_data_panel import DeviceDataPanel, build_device_csv
+from awf.ui.panels import HeatmapPanel
 
 
 @pytest.fixture(scope="module")
@@ -96,3 +97,42 @@ def test_panel_no_gps_dash(qapp):
     p.set_spectrogram(sg)
     status_text = p._status.text()
     assert "GPS: —" in status_text
+
+
+def test_panel_time_axis_from_zero(qapp):
+    """Задача #UI-237: ось X от 0 до конца записи, даже на пустом графике дозы."""
+    p = DeviceDataPanel()
+    p.set_spectrogram(_make_sg(n=4, with_dose=False))
+    for plot in (p._dose_plot, p._temp_plot):
+        x_lo, x_hi = plot.getViewBox().viewRange()[0]
+        assert x_lo == pytest.approx(0.0)
+        assert x_hi == pytest.approx(180.0)
+
+
+def test_panel_time_unit_switch(qapp):
+    """Задача #UI-238: set_time_unit('ч') масштабирует ось времени в часы."""
+    p = DeviceDataPanel()
+    p.set_spectrogram(_make_sg(n=4))
+    p.set_time_unit("ч")
+    x = p._temp_curve.getData()[0]
+    assert float(np.max(x)) == pytest.approx(180.0 / 3600.0)
+
+
+def test_heatmap_temp_overlay_toggle(qapp):
+    """Задача #UI-239: оверлей температуры на 2D-карте включается/выключается."""
+    hm = HeatmapPanel()
+    hm.set_spectrogram(_make_sg(n=4))
+    assert not hm._temp_curve_item.isVisible()
+    hm.set_temp_overlay(True)
+    assert hm._temp_curve_item.isVisible()
+    assert len(hm._temp_curve_item.getData()[0]) == 4
+    hm.set_temp_overlay(False)
+    assert not hm._temp_curve_item.isVisible()
+
+
+def test_heatmap_temp_overlay_no_data(qapp):
+    """Задача #UI-239: без температуры в файле оверлей не включается."""
+    hm = HeatmapPanel()
+    hm.set_spectrogram(_make_sg(n=4, with_temp=False))
+    hm.set_temp_overlay(True)
+    assert not hm._temp_curve_item.isVisible()

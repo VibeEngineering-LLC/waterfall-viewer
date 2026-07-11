@@ -37,10 +37,16 @@ def build_device_csv(sg) -> str:
     return "\n".join(rows)
 
 
+# масштаб единиц времени (Задача #UI-238): подпись оси -> делитель секунд
+_TUNIT_DIV = {"с": 1.0, "мин": 60.0, "ч": 3600.0}
+_TUNIT_LBL = {"с": "Время, с", "мин": "Время, мин", "ч": "Время, ч"}
+
+
 class DeviceDataPanel(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
         self._sg = None
+        self._tunit = "с"   # единицы оси времени (Задача #UI-238), синхронизируется с тулбаром
 
         layout = QtWidgets.QVBoxLayout(self)
 
@@ -92,7 +98,8 @@ class DeviceDataPanel(QtWidgets.QWidget):
             self._status.setText(tr("Нет данных прибора."))
             return
 
-        t = np.asarray(sg.time_offsets_s, dtype=np.float64)
+        div = _TUNIT_DIV.get(self._tunit, 1.0)   # Задача #UI-238: с/мин/ч
+        t = np.asarray(sg.time_offsets_s, dtype=np.float64) / div
 
         # Доза
         dose_data = getattr(sg, "dose_rate_usv_h", None)
@@ -111,6 +118,13 @@ class DeviceDataPanel(QtWidgets.QWidget):
         else:
             self._temp_curve.setData([], [])
             has_temp = False
+
+        # Задача #UI-237: ось времени всегда от нуля до конца записи (autorange на
+        # пустых данных рисовал бессмысленные 0.1..0.9)
+        t_max = float(t.max()) if t.size and float(t.max()) > 0.0 else 1.0
+        for _p in (self._dose_plot, self._temp_plot):
+            _p.getViewBox().setLimits(xMin=0.0, xMax=t_max, maxXRange=t_max)
+            _p.setXRange(0.0, t_max, padding=0)
 
         # GPS
         gps_data = getattr(sg, "gps_track", None)
@@ -153,6 +167,17 @@ class DeviceDataPanel(QtWidgets.QWidget):
         self._status.setText(" · ".join(status_parts))
         self._export_btn.setEnabled(True)
 
+    def set_time_unit(self, unit: str) -> None:
+        """Задача #UI-238: единицы оси времени с/мин/ч — синхронно с кнопкой «Время:» тулбара."""
+        if unit not in _TUNIT_DIV:
+            return
+        self._tunit = unit
+        lbl = tr(_TUNIT_LBL[unit])
+        self._dose_plot.setLabel("bottom", lbl)
+        self._temp_plot.setLabel("bottom", lbl)
+        if self._sg is not None:
+            self.set_spectrogram(self._sg)   # перерисовка дёшева: ряды короткие
+
     def _export_csv(self) -> None:
         if self._sg is None:
             return
@@ -169,9 +194,10 @@ class DeviceDataPanel(QtWidgets.QWidget):
     def retranslate(self) -> None:
         self._status.setText(tr("Нет данных прибора.") if self._sg is None else self._status.text())
         self._export_btn.setText(tr("Экспорт CSV…"))
-        self._dose_plot.setLabel("bottom", tr("Время, с"))
+        _tlbl = tr(_TUNIT_LBL.get(self._tunit, "Время, с"))   # Задача #UI-238
+        self._dose_plot.setLabel("bottom", _tlbl)
         self._dose_plot.setLabel("left", tr("Мощность дозы, мкЗв/ч"))
-        self._temp_plot.setLabel("bottom", tr("Время, с"))
+        self._temp_plot.setLabel("bottom", _tlbl)
         self._temp_plot.setLabel("left", tr("Температура, °C"))
         self._gps_plot.setLabel("bottom", tr("Долгота"))
         self._gps_plot.setLabel("left", tr("Широта"))

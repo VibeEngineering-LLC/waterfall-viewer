@@ -583,6 +583,15 @@ class MainWindow(QtWidgets.QMainWindow):
                             "Показать/скрыть подложку (плоское дно рельефа)")
         self._floor_check.toggled.connect(self._on_floor_toggled)
         tb.addWidget(self._floor_check)
+        # Задача #UI-239: оверлей температуры детектора на 2D-карте (вертикальная кривая)
+        self._temp2d_check = QtWidgets.QCheckBox(tr("Темп. (2D)"))
+        self._temp2d_check.setChecked(False)
+        self._register_i18n(self._temp2d_check.setText, "Темп. (2D)")
+        self._register_i18n(self._temp2d_check.setToolTip,
+                            "Наложить кривую температуры детектора на 2D-карту")
+        self._temp2d_check.toggled.connect(
+            lambda on: self._heatmap.set_temp_overlay(bool(on)))
+        tb.addWidget(self._temp2d_check)
         # Задача #143: тумблер «Простыня образца» — основной 3D-рельеф спектрограммы.
         self._surface_check = QtWidgets.QCheckBox("Простыня образца")
         self._surface_check.setChecked(True)
@@ -701,6 +710,7 @@ class MainWindow(QtWidgets.QMainWindow):
         unit = self._tunit_combo.currentData() or "с"
         self._view3d.set_time_unit(unit)
         self._heatmap.set_time_unit(unit)
+        self._device_data.set_time_unit(unit)   # Задача #UI-238: вкладка «Прибор» синхронно
 
     @QtCore.Slot(int)
     def _on_unit_changed(self, _idx: int) -> None:
