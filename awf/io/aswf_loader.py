@@ -277,10 +277,17 @@ def load_aswf(path, *, max_slices: int | None = None) -> Spectrogram:
         time_offsets_s[1:] = np.cumsum(real_time_s_adj[:-1])
 
     # override with per-row absolute timestamps where valid (v3)
+    # Задача #DATA-5: раньше принимался ЛЮБОЙ timestamp>0. Строка с несинхронизированным/сброшенным
+    # NTP-временем (0<ts<<started_at, напр. аптайм ~3 c) давала offset ≈ -started_at (~-1.78e9),
+    # растягивая ось времени графика сечений в ×1e9 и рисуя фейковую диагональ «суммарный cps».
+    # Принимаем timestamp, только если он — правдоподобная абсолютная эпоха возле started_at.
     if timestamps is not None:
         started_at = float(hdr.get("started_at") or 0.0)
         if started_at > 0:
-            valid = (timestamps > 0) & np.isfinite(timestamps)
+            _one_year = 366.0 * 24 * 3600
+            valid = (np.isfinite(timestamps)
+                     & (timestamps >= started_at - 60.0)
+                     & (timestamps <= started_at + _one_year))
             if valid.any():
                 time_offsets_s[valid] = timestamps[valid] - started_at
 
