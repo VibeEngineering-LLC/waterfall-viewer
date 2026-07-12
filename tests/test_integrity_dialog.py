@@ -119,3 +119,20 @@ def test_dialog_smoke(qapp):
     assert dlg._text_edit.toPlainText()
     assert "===" in dlg._text_edit.toPlainText()
     assert dlg.windowTitle()
+
+
+def test_text_time_gaps_shown():
+    """Задача #DATA-6: пропуски во времени (потерянные сегменты) показываются в отчёте."""
+    sg = _make_sg(None)
+    sg.time_gaps = [{"after_slice": 4, "gap_s": 306.0, "missing_rows": 5}]
+    text = build_integrity_text(sg)
+    assert "Пропуски во времени" in text
+    assert "после среза 4" in text
+    assert "~5" in text
+
+
+def test_text_no_gaps_no_section():
+    """Задача #DATA-6: без разрывов секции пропусков в отчёте нет."""
+    sg = _make_sg(None)
+    assert sg.time_gaps is None
+    assert "Пропуски во времени" not in build_integrity_text(sg)

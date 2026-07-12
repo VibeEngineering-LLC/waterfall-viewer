@@ -373,6 +373,36 @@ def test_v3_unsynced_timestamp_row_not_poisoned(tmp_path):
     assert np.all(np.diff(t) >= 0), t
 
 
+def test_v3_time_gap_detected(tmp_path):
+    """Задача #DATA-6: разрыв во времени -> sg.time_gaps (сохраняется при trimmed_channels)."""
+    n = 4; t0 = 1700000000
+    header = {
+        "format": "atomspectra-waterfall", "version": 3, "channels": n,
+        "interval_sec": 60, "calibration": [0.0, 1.0], "started_at": t0, "saved_rows": 4,
+        "row_stride": n * 2 + 2 + 4,
+        "row_fields": [
+            {"name": "spectrum",  "dtype": "uint16", "offset": 0, "count": n},
+            {"name": "duration",  "dtype": "uint16", "offset": n * 2},
+            {"name": "timestamp", "dtype": "uint32", "offset": n * 2 + 2}]}
+    rows = [
+        {"spectrum": [1, 0, 0, 0], "duration": 60, "timestamp": t0},
+        {"spectrum": [2, 0, 0, 0], "duration": 60, "timestamp": t0 + 60},
+        {"spectrum": [3, 0, 0, 0], "duration": 60, "timestamp": t0 + 420},
+        {"spectrum": [4, 0, 0, 0], "duration": 60, "timestamp": t0 + 480}]
+    sg = load_aswf(_build_aswf_v3(tmp_path, header, rows))
+    assert sg.time_gaps and len(sg.time_gaps) == 1
+    assert sg.time_gaps[0]["after_slice"] == 1 and sg.time_gaps[0]["missing_rows"] == 5
+    assert sg.trimmed_channels(1).time_gaps == sg.time_gaps
+
+
+def test_v3_no_false_gap_uniform(tmp_path):
+    """Задача #DATA-6: равномерная запись без пропусков -> time_gaps is None."""
+    header = _header_v3()
+    rows = [{"spectrum": [1, 2, 3, 4], "duration": 10}] * 3
+    sg = load_aswf(_build_aswf_v3(tmp_path, header, rows))
+    assert sg.time_gaps is None
+
+
 def test_v3_compressed_rle(tmp_path):
     n = 4
     header = {

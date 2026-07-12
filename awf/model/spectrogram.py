@@ -74,7 +74,8 @@ class Spectrogram:
                  dose_rate_usv_h: np.ndarray | None = None,
                  gps_track: np.ndarray | None = None,
                  temperature_c: np.ndarray | None = None,
-                 integrity_report: dict | None = None):
+                 integrity_report: dict | None = None,
+                 time_gaps: list | None = None):
         if counts.ndim != 2:
             raise ValueError("counts должен быть двумерным массивом")
         n_slices, n_channels = counts.shape
@@ -105,6 +106,7 @@ class Spectrogram:
         self.gps_track = gps_track            # ASWF v3: (n_rows, 2) lat/lon float64 (NaN=нет)
         self.temperature_c = temperature_c    # ASWF v5 (#DATA-2): температура детектора °C (float64, NaN=нет)
         self.integrity_report = integrity_report  # ASWF v4 (#DATA-1): отчёт CRC32/целостности или None
+        self.time_gaps = time_gaps            # #DATA-6: разрывы во времени (потерянные сегменты) или None
 
     @property
     def n_slices(self) -> int:
@@ -205,6 +207,7 @@ class Spectrogram:
             gps_track=self.gps_track,
             temperature_c=self.temperature_c,
             integrity_report=self.integrity_report,
+            time_gaps=self.time_gaps,          # #DATA-6: сохранить разрывы в обрезанной копии
         )
 
     def roi_sum(self, t_lo: int, t_hi: int, ch_lo: int, ch_hi: int) -> int:

@@ -293,6 +293,19 @@ def load_aswf(path, *, max_slices: int | None = None) -> Spectrogram:
 
     live_time_s = real_time_s_adj.copy()
 
+    # Задача #DATA-6: разрывы во времени = вероятные потерянные/пропущенные сегменты (прибор держит
+    # кольцевой буфер, старые сегменты авто-удаляются). Разрыв — шаг между соседними строками
+    # заметно больше ожидаемой длительности строки. Показывается в отчёте целостности.
+    time_gaps = None
+    if n_rows > 1 and interval > 0:
+        _dt = np.diff(time_offsets_s)
+        _exp = np.where(real_time_s_adj[:-1] > 0.0, real_time_s_adj[:-1], interval)
+        _extra = _dt - _exp
+        _gi = np.where(_extra > interval * 0.5)[0]
+        if _gi.size:
+            time_gaps = [{"after_slice": int(i), "gap_s": float(_extra[i]),
+                          "missing_rows": int(round(float(_extra[i]) / interval))} for i in _gi]
+
     # ====================== CALIBRATION / t0 =======================
     # Задача #DATA-1b/1c: межсегментные контроли (seg_seq/total_at_open) в сшитом файле вьюера
     # проверить нельзя (одна шапка) — прикладываем как информацию к отчёту, если есть.
@@ -323,4 +336,5 @@ def load_aswf(path, *, max_slices: int | None = None) -> Spectrogram:
         gps_track=gps_track,
         temperature_c=temperature_c,
         integrity_report=integrity_report,
+        time_gaps=time_gaps,
     )
