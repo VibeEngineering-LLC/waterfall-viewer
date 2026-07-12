@@ -350,6 +350,29 @@ def test_v3_per_row_timestamp(tmp_path):
     np.testing.assert_allclose(sg.time_offsets_s, [0.0, 100.0, 250.0])
 
 
+def test_v3_unsynced_timestamp_row_not_poisoned(tmp_path):
+    """Задача #DATA-5: строка с несинхронизированным NTP timestamp (0<ts<<started_at) не даёт
+    offset≈-started_at и не травит ось времени / зелёную «суммарный cps»."""
+    n = 4; t0 = 1700000000
+    header = {
+        "format": "atomspectra-waterfall", "version": 3, "channels": n,
+        "interval_sec": 60, "calibration": [0.0, 1.0], "started_at": t0, "saved_rows": 4,
+        "row_stride": n * 2 + 2 + 4,
+        "row_fields": [
+            {"name": "spectrum",  "dtype": "uint16", "offset": 0, "count": n},
+            {"name": "duration",  "dtype": "uint16", "offset": n * 2},
+            {"name": "timestamp", "dtype": "uint32", "offset": n * 2 + 2}]}
+    rows = [
+        {"spectrum": [1, 0, 0, 0], "duration": 60, "timestamp": t0},
+        {"spectrum": [2, 0, 0, 0], "duration": 60, "timestamp": t0 + 60},
+        {"spectrum": [3, 0, 0, 0], "duration": 0,  "timestamp": 3},
+        {"spectrum": [4, 0, 0, 0], "duration": 60, "timestamp": t0 + 180}]
+    sg = load_aswf(_build_aswf_v3(tmp_path, header, rows))
+    t = np.asarray(sg.time_offsets_s, float)
+    assert (t >= 0).all() and t.max() < 1e6, t
+    assert np.all(np.diff(t) >= 0), t
+
+
 def test_v3_compressed_rle(tmp_path):
     n = 4
     header = {
