@@ -19,7 +19,7 @@
 | **PySide6 (Qt)** | 6.11.1 | Ставится как `cp310-abi3` wheel — валидно и на 3.14 (stable ABI). |
 | **pyqtgraph** | 0.14.0 | 3D через `GLViewWidget` + `GLSurfacePlotItem`, 2D через `ImageItem` + `RectROI`. |
 | **PyOpenGL** | 3.1.10 | Бэкенд OpenGL для 3D-вкладки. |
-| **pytest** | 9.1.1 | 798 тестов, все зелёные (v0.1.10 + #DATA-5). |
+| **pytest** | 9.1.1 | 802 теста, все зелёные (v0.1.11 + #DATA-6). |
 
 ### ⚠ Требование к видео
 

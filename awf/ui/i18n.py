@@ -271,6 +271,13 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Номера строк": "Row numbers",
         "CRC32: пропущен (сжатый файл)": "CRC32: skipped (compressed file)",
         "Версия формата ASWF": "ASWF format version",
+        # Пропуски во времени (Задача #DATA-6)
+        "Пропуски во времени (возможна потеря сегментов)":
+            "Time gaps (possible lost segments)",
+        "всего": "total",
+        "после среза": "after slice",
+        "пропуск": "gap",
+        "строк": "rows",
         "Сформирован": "Generated",
         "Сохранить отчёт…": "Save report…",
         # Оверлей температуры на 2D-карте (Задача #UI-239)

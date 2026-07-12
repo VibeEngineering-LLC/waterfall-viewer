@@ -66,7 +66,19 @@ def build_integrity_text(sg) -> str:
             lines.append(f"seg_seq: {rep['seg_seq']}")
         if 'total_at_open' in rep:
             lines.append(f"total_at_open: {rep['total_at_open']}")
-    
+
+    # Задача #DATA-6: пропуски во времени — вероятные потерянные сегменты (кольцевой буфер прибора)
+    gaps = getattr(sg, "time_gaps", None)
+    if gaps:
+        lines.append("")
+        gtot = sum(g["gap_s"] for g in gaps)
+        miss = sum(g["missing_rows"] for g in gaps)
+        lines.append(f"⚠ {tr('Пропуски во времени (возможна потеря сегментов)')}: {len(gaps)}, "
+                     f"{tr('всего')} {gtot:.0f} {tr('с')} (~{miss} {tr('строк')})")
+        for g in gaps:
+            lines.append(f"  {tr('после среза')} {g['after_slice']}: "
+                         f"{tr('пропуск')} {g['gap_s']:.0f} {tr('с')} (~{g['missing_rows']} {tr('строк')})")
+
     # Пустая строка
     lines.append("")
     
