@@ -17,7 +17,9 @@ EN = TRANSLATIONS["en"]
 
 def tr_keys(path):
     """Все литеральные аргументы tr(...) в файле: (строка, номер строки)."""
-    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+    # utf-8-sig: часть файлов проекта записана с BOM (aswf_loader.py, help_dialogs.py),
+    # "utf-8" роняет ast.parse на U+FEFF.
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8-sig"))):
         is_tr = (isinstance(node, ast.Call)
                  and ((isinstance(node.func, ast.Name) and node.func.id == "tr")
                       or (isinstance(node.func, ast.Attribute) and node.func.attr == "tr")))

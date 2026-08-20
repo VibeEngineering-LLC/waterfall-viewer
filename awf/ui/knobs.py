@@ -337,6 +337,9 @@ class AdjustPanel(QtWidgets.QWidget):
         """Задача #169: перерисовать подписи панели и всех рядов на текущем языке."""
         self._reset_all.setText(tr("Сброс всех"))
         self._tsmooth_by_seg_cb.setText(tr("по сегм."))
+        # #I18N-1: подсказка ставилась только в __init__ и на EN оставалась русской
+        self._tsmooth_by_seg_cb.setToolTip(tr(
+            "Сглаживать по оси времени внутри каждого временного сегмента независимо"))
         for r in self.rows.values():
             r.retranslate()
 

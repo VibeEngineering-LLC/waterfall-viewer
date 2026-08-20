@@ -540,6 +540,9 @@ class SlicePanel(QtWidgets.QWidget):
         self._dose_unit = "mSv/h" # единицы дозы (Задача #104): 'mSv/h' | 'uSv/h'
         self._dose_visible = True # флаг показа оверлея дозы (Задача #104)
         self._view_mode = ("integral",)  # текущий вид (Задача #161): integral|slice|roi, для update_spectrogram
+        # #I18N-1: статистика последней ROI-выборки — чтобы пересобрать заголовок
+        # при смене языка без пересчёта данных (t_lo,t_hi,ch_lo,ch_hi,total,cps,e_lo,e_hi).
+        self._roi_stats = None
         layout = QtWidgets.QVBoxLayout(self)
         self._header = QtWidgets.QLabel(tr("Файл не загружен"))
         self._header.setWordWrap(True)
@@ -643,9 +646,8 @@ class SlicePanel(QtWidgets.QWidget):
         band = np.asarray(sg.band_time_series(0, sg.n_channels), dtype=np.float64)
         self._set_series(self._times, band)
         self._set_total(self._times, band)  # Задача #UI-235: суммарный cps = вся полоса каналов
-        self._header.setText(
-            f"{tr('Загружено: срезов')} {sg.n_slices}, {tr('каналов')} {sg.n_channels}. "
-            f"{tr('Интегральный спектр и полная полоса.')}")
+        self._roi_stats = None                              # #I18N-1: новый файл — статистика ROI неактуальна
+        self._header.setText(self._current_header_text())   # #I18N-1: единый источник формата
         # энергоокно (Задача 19): диапазон спинбоксов ограничен 3000 кэВ (#194), дефолт — первое окно
         emin = float(self._energies.min()); emax = min(float(self._energies.max()), 3000.0)
         for sb in (self._ewin_lo, self._ewin_hi):
@@ -970,10 +972,30 @@ class SlicePanel(QtWidgets.QWidget):
             self._spectrum_plot.setLabel("left", tr("Отсчёты"))
             self._series_plot.setLabel("left", tr("Отсчёты в полосе"))
 
+    def _current_header_text(self) -> str:
+        """#I18N-1: текст заголовка по текущему виду — ЕДИНЫЙ источник формата для
+        show_roi()/show_time_slice()/set_spectrogram() и retranslate(). Раньше строка
+        собиралась только в show_*, поэтому при смене языка оставалась на прежнем
+        (заголовок «Выборка: срезы …» жил по-русски на EN-интерфейсе)."""
+        if self._sg is None:
+            return tr("Файл не загружен")
+        mode = self._view_mode
+        if mode[0] == "roi" and self._roi_stats is not None:
+            t_lo, t_hi, ch_lo, ch_hi, total, cps, e_lo, e_hi = self._roi_stats
+            return (f"{tr('Выборка: срезы')} [{t_lo}:{t_hi}], {tr('каналы')} [{ch_lo}:{ch_hi}] "
+                    f"({e_lo:.0f}–{e_hi:.0f} {tr('кэВ')}). {tr('Сумма отсчётов')} = {total}. "
+                    f"{tr('Итого')} {cps:.1f} {tr('отсч/с')}.")
+        if mode[0] == "slice":
+            i = int(mode[1])
+            t = float(self._times[i]) if self._times is not None and self._times.size > i else 0.0
+            return f"{tr('Срез времени')} #{i} (t = {t:.1f} {tr('с')})"
+        return (f"{tr('Загружено: срезов')} {self._sg.n_slices}, "
+                f"{tr('каналов')} {self._sg.n_channels}. "
+                f"{tr('Интегральный спектр и полная полоса.')}")
+
     def retranslate(self) -> None:
         """Задача #169: подписи панели срезов на текущем языке."""
-        if self._sg is None:
-            self._header.setText(tr("Файл не загружен"))
+        self._header.setText(self._current_header_text())   # #I18N-1: и с загруженным файлом
         self._ewin_label.setText(tr("Энергоокно:"))
         self._ewin_preset.setItemText(0, tr("— откл —"))
         self._ewin_preset.setItemText(1, tr("— вручную —"))
@@ -1097,8 +1119,8 @@ class SlicePanel(QtWidgets.QWidget):
         spec = np.asarray(self._sg.energy_spectrum(i), dtype=np.float64)
         self._plot_spectrum(self._energies, spec, self._sg.live_time_total(i, i + 1))
         t = float(self._times[i]) if self._times is not None and self._times.size > i else 0.0
-        self._header.setText(f"{tr('Срез времени')} #{i} (t = {t:.1f} {tr('с')})")
         self._view_mode = ("slice", i)   # Задача #161: запомнить вид для update_spectrogram
+        self._header.setText(self._current_header_text())   # #I18N-1: единый источник формата
 
     @QtCore.Slot(int, int, int, int)
     def show_roi(self, t_lo: int, t_hi: int, ch_lo: int, ch_hi: int) -> None:
@@ -1115,11 +1137,10 @@ class SlicePanel(QtWidgets.QWidget):
         cps = total / lt if lt > 0.0 else 0.0   # Задача #218: суммарный CPS выборки
         e_lo = float(self._energies[ch_lo]) if self._energies is not None else 0.0
         e_hi = float(self._energies[min(ch_hi, self._sg.n_channels) - 1]) if self._energies is not None else 0.0
-        self._header.setText(
-            f"{tr('Выборка: срезы')} [{t_lo}:{t_hi}], {tr('каналы')} [{ch_lo}:{ch_hi}] "
-            f"({e_lo:.0f}–{e_hi:.0f} {tr('кэВ')}). {tr('Сумма отсчётов')} = {total}. "
-            f"{tr('Итого')} {cps:.1f} {tr('отсч/с')}.")
         self._view_mode = ("roi", t_lo, t_hi, ch_lo, ch_hi)   # Задача #161: для update_spectrogram
+        # #I18N-1: сохранить статистику и собрать заголовок единым методом
+        self._roi_stats = (t_lo, t_hi, ch_lo, ch_hi, total, cps, e_lo, e_hi)
+        self._header.setText(self._current_header_text())
 
     def show_energy_window(self, e_lo, e_hi) -> None:
         """Временной профиль интенсивности в энергоокне [e_lo,e_hi] — жёлтая кривая нижнего

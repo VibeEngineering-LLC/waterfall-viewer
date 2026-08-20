@@ -307,6 +307,18 @@ class MainWindow(QtWidgets.QMainWindow):
                 panel.retranslate()
             except (AttributeError, RuntimeError):
                 pass
+        # #I18N-1: подписи, которые собираются из ДАННЫХ, а не из статичных ключей.
+        # retranslate() панелей их не трогает, поэтому на EN оставались русскими:
+        # значения секущих плоскостей («0.0 кэВ», «0.0 с», «0.0 отсч/с (≈)») и имя
+        # кривой ε(E) в статусбаре. Пересобираем штатными механизмами.
+        try:
+            self._sections.emit_all()      # переиспустить planeChanged -> подписи через tr(unit)
+        except (AttributeError, RuntimeError):
+            pass
+        try:
+            self._update_eff_info()        # «Кривая: …» в статусбаре
+        except (AttributeError, RuntimeError):
+            pass
 
     def _build_menu(self) -> None:
         menu = self.menuBar().addMenu("Файл")
@@ -838,7 +850,10 @@ class MainWindow(QtWidgets.QMainWindow):
             lbl = QtWidgets.QLabel(self)
             self.statusBar().addPermanentWidget(lbl)
             self._eff_info_label = lbl
-        lbl.setText(tr("Кривая:") + f" {self._eff_curve.name}")
+        # #I18N-1: имя штатной кривой тоже через tr() — у неё есть паспортное EN-имя
+        # (Gamma-1S-NB1, см. awf/analysis/efficiency.py). Имя кривой, загруженной
+        # оператором из файла, перевода не имеет и вернётся как есть (fallback).
+        lbl.setText(tr("Кривая:") + f" {tr(self._eff_curve.name)}")
 
     @QtCore.Slot(bool)
     def _on_dose_toggled(self, on: bool) -> None:
