@@ -19,6 +19,15 @@ from awf.ui import i18n
 from awf.ui.i18n import tr
 
 
+# #UI-241: цвета текста в HTML-контенте диалогов. Фон тёмной темы — #2b2d31 (QDialog)
+# и #26282b (документ QTextBrowser); оба цвета ниже проверяются гейтом
+# tests/test_ui_contrast.py на контраст >= 4.5:1 по WCAG AA. Дефолтный Qt-синий для
+# ссылок (#0000ff) давал 1.72:1 — оглавление справки было нечитаемым.
+LINK_COLOR = "#7ab8ff"      # 7.13:1 на #26282b, 6.65:1 на #2b2d31
+MUTED_COLOR = "#9a9ca0"     # 5.02:1 на #2b2d31 (было #888888 — 3.89:1, ниже порога)
+HELP_CSS = (f"a {{ color: {LINK_COLOR}; text-decoration: none; }}"
+            f"a:hover {{ text-decoration: underline; }}")
+
 REPO_URL = "https://github.com/VibeEngineering-LLC/waterfall-viewer"
 _RELEASES_API = "https://api.github.com/repos/VibeEngineering-LLC/waterfall-viewer/releases/latest"
 
@@ -48,7 +57,7 @@ def _stack_line() -> str:
 
 _ABOUT_RU = (
     "<h2 style='margin:0'>Waterfall Viewer</h2>"
-    "<p style='color:#888;margin:2px 0 10px 0'>Версия {ver}</p>"
+    f"<p style='color:{MUTED_COLOR};margin:2px 0 10px 0'>Версия {{ver}}</p>"
     "<p>Просмотр и анализ waterfall-спектрограмм гамма-спектрометров "
     "AtomSpectra, RadiaCode и файлов ANSI/IEEE N42.42.</p>"
     "<p><b>Возможности:</b> 3D-водопад «энергия × время × счёт», 2D-карта, "
@@ -59,12 +68,12 @@ _ABOUT_RU = (
     "кластер-анализ, градиент по времени).</p>"
     "<p><b>Стек:</b> {stack}</p>"
     "<p><b>Лицензия:</b> см. файл LICENSE в поставке.</p>"
-    "<p><b>Репозиторий:</b> <a href='{url}'>{url}</a></p>"
+    f"<p><b>Репозиторий:</b> <a href='{{url}}' style='color:{LINK_COLOR}'>{{url}}</a></p>"
 )
 
 _ABOUT_EN = (
     "<h2 style='margin:0'>Waterfall Viewer</h2>"
-    "<p style='color:#888;margin:2px 0 10px 0'>Version {ver}</p>"
+    f"<p style='color:{MUTED_COLOR};margin:2px 0 10px 0'>Version {{ver}}</p>"
     "<p>Viewer and analyzer for waterfall spectrograms from AtomSpectra and "
     "RadiaCode gamma spectrometers, plus ANSI/IEEE N42.42 files.</p>"
     "<p><b>Features:</b> 3D waterfall (energy × time × counts), 2D map, "
@@ -75,7 +84,7 @@ _ABOUT_EN = (
     "clustering, time-gradient analysis).</p>"
     "<p><b>Stack:</b> {stack}</p>"
     "<p><b>License:</b> see the LICENSE file in the distribution.</p>"
-    "<p><b>Repository:</b> <a href='{url}'>{url}</a></p>"
+    f"<p><b>Repository:</b> <a href='{{url}}' style='color:{LINK_COLOR}'>{{url}}</a></p>"
 )
 
 
@@ -685,6 +694,11 @@ def show_help(parent: QtWidgets.QWidget | None = None) -> None:
     browser = QtWidgets.QTextBrowser(dlg)
     browser.setOpenLinks(True)
     browser.setOpenExternalLinks(True)
+    # #UI-241: ссылки рисовались дефолтным Qt-синим #0000ff — на тёмном фоне документа
+    # (#26282b) контраст 1.72:1 при пороге WCAG AA 4.5:1, оглавление было нечитаемым.
+    # QSS цвет ссылок ВНУТРИ QTextDocument не задаёт (см. style.py) — нужен CSS документа,
+    # и он должен быть установлен ДО setHtml(). #7ab8ff даёт 7.13:1 (AAA).
+    browser.document().setDefaultStyleSheet(HELP_CSS)
     lang = i18n.current_language()
     sections = _HELP_SECTIONS_EN if lang == i18n.LANG_EN else _HELP_SECTIONS_RU
     browser.setHtml(_help_toc_html(lang) + sections)
