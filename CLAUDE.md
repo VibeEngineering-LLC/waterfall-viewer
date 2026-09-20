@@ -25,7 +25,10 @@
 - **Зоны агентов (§12):** это моя зона (скилл `atomspectra-waterfall-viewer-dev`). Чужие зоны
   (ESP32, SpectraVibe `gamma-spectrum-analysis` и т.п.) — read-only / писать промпт владельцу.
 - **Тесты:** `pytest` под headless-Qt — `QT_QPA_PLATFORM=offscreen`, `PYTHONIOENCODING=utf-8`.
-  Полный прогон на момент #DATA-6 (post-v0.1.11) — 802 passed (локально, со scipy + sample-файлом).
+  Полный прогон на момент #DATA-7 (v0.1.14) при свежем `git clone` — 833 collected:
+  830 passed, 3 skipped (`requires_sample` без `sample_data/waterfall_sample.n42`, `.gitignore`).
+  +6 passed (839 итого) только с local-only `sample_data/waterfall_sample.n42` +
+  `scripts/proto_peaks3d.py`/`tests/test_proto_peaks3d.py` (не в репо, хардкодят PII).
 - **Зависимости:** `scipy` — жёсткая production-зависимость (`awf/analysis/peaks.py` `curve_fit`,
   `awf/analysis/deconvolve.py` `lsq_linear`), прописана в `requirements.txt` и `pyproject.toml`.
 - **Общение с оператором — только на русском** (глобальный §5).
