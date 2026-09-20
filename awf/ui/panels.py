@@ -6,6 +6,7 @@ from awf.ui.zscale import (apply_z_scale, DEFAULT_GAIN, DEFAULT_GAMMA, DEFAULT_C
                            smooth_by_mode)
 from awf.ui.colormaps import get_colormap
 from awf.ui.i18n import tr                 # Задача #169: локализация панелей
+from awf.ui.timefmt import clock_label, date_label, parse_t0   # Задача #UI-243: время на шкалах
 from awf.analysis.peakmap import DEFAULT_WINDOWS
 from awf.model.dose import dose_rate_series  # Задача #104: мощность дозы (RadiaCode)
 from awf.model.background import background_window_like  # Задача #139: сырой фон, «лохматый как образец»
@@ -49,6 +50,12 @@ class _TimeAxisItem(pg.AxisItem):
     def __init__(self):
         super().__init__("left")
         self._offsets = None; self._t_scale = 1.0; self._div = 1.0; self._unit = "с"
+        self._t0 = None; self._abs = False      # Задача #UI-243: абсолютное время
+
+    def set_absolute(self, t0, on):
+        """Задача #UI-243: t0 = datetime начала записи (None — метки в файле нет), on — режим."""
+        self._t0 = t0; self._abs = bool(on) and t0 is not None
+        self.picture = None; self.update()
 
     def set_data(self, offs, t_scale, unit):
         self._offsets = np.asarray(offs, dtype=np.float64) if offs is not None else None
@@ -60,9 +67,11 @@ class _TimeAxisItem(pg.AxisItem):
         if self._offsets is None or not self._offsets.size:
             return [str(int(round(v))) for v in values]
         n = int(self._offsets.size)
+        idx = [max(0, min(n - 1, int(round(float(v) * self._t_scale)))) for v in values]
+        if self._abs:   # Задача #UI-243: фактическое время момента, дата — в подписи оси
+            return [clock_label(self._t0, self._offsets[i]) for i in idx]
         fmt = {"ч": "{:.2f}", "мин": "{:.1f}"}.get(self._unit, "{:.0f}")
-        return [fmt.format(self._offsets[max(0, min(n-1, int(round(float(v)*self._t_scale))))] / self._div)
-                for v in values]
+        return [fmt.format(self._offsets[i] / self._div) for i in idx]
 
 
 class _TempAxisItem(pg.AxisItem):
@@ -84,6 +93,25 @@ class _TempAxisItem(pg.AxisItem):
             frac = (float(v) / self._cols - self._pad) / max(1e-12, 1.0 - 2.0 * self._pad)
             out.append("{:.1f}".format(self._t_min + max(0.0, min(1.0, frac)) * span))
         return out
+
+
+class _SeriesTimeAxisItem(pg.AxisItem):
+    """X-ось нижнего графика (Задача #UI-243). Значения оси — смещения в секундах от начала
+    записи; в абсолютном режиме печатаются как фактическое время ЧЧ:ММ:СС (дата — в подписи оси)."""
+    def __init__(self):
+        super().__init__("bottom")
+        self._t0 = None; self._abs = False
+
+    def set_absolute(self, t0, on):
+        """t0 = datetime начала записи (None — метки в файле нет), on — включён ли режим."""
+        self._t0 = t0; self._abs = bool(on) and t0 is not None
+        self.picture = None; self.update()
+
+    def tickStrings(self, values, scale, spacing):
+        if not self._abs:
+            return super().tickStrings(values, scale, spacing)
+        sub = float(spacing) < 1.0          # шаг мельче секунды → показать миллисекунды
+        return [clock_label(self._t0, v, sub) for v in values]
 
 
 class HeatmapPanel(QtWidgets.QWidget):
@@ -126,6 +154,8 @@ class HeatmapPanel(QtWidgets.QWidget):
         # Энергия -> вертикальная (ось X); цвета совпадают с осями 3D (бирюза/пурпур)
         self._section_items = []
         self._floor_visible = True   # Задача #222: подложка 2D (нижний диапазон LUT)
+        self._t0 = None              # Задача #UI-243: datetime начала записи (из sg.t0_iso)
+        self._abs_time = False       # Задача #UI-243: режим шкалы — относительный/абсолютный
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self._glw = pg.GraphicsLayoutWidget()
@@ -168,16 +198,29 @@ class HeatmapPanel(QtWidgets.QWidget):
     def retranslate(self) -> None:
         """Задача #169: подписи осей 2D-карты на текущем языке."""
         self._plot.setLabel("bottom", tr("Канал (энергия)"))
-        _lbl = {"с": "Время, с", "мин": "Время, мин", "ч": "Время, ч"}.get(self._tunit, "Время, с")
-        self._plot.setLabel("left", tr(_lbl))
+        self._apply_time_label()   # Задача #UI-243: подпись зависит ещё и от режима времени
 
     def set_time_unit(self, unit: str) -> None:
         """Единицы Y-оси 2D-карты: с/мин/ч (Задача #207). Синхронизировать с 3D-кнопкой."""
         self._tunit = unit
-        _lbl = {"с": "Время, с", "мин": "Время, мин", "ч": "Время, ч"}.get(unit, "Время, с")
-        self._plot.setLabel("left", tr(_lbl))
+        self._apply_time_label()
         if self._sg is not None:
             self._time_axis.set_data(self._sg.time_offsets_s, self._t_scale, unit)
+
+    def set_absolute_time(self, on: bool) -> None:
+        """Задача #UI-243: шкала времени — фактические дата/время вместо смещения от начала.
+        Без метки t0 в файле режим не включается (шкала остаётся относительной)."""
+        self._abs_time = bool(on)
+        self._time_axis.set_absolute(self._t0, self._abs_time)
+        self._apply_time_label()
+
+    def _apply_time_label(self) -> None:
+        """Подпись Y-оси: в абсолютном режиме несёт дату записи, тики — только ЧЧ:ММ:СС."""
+        if self._abs_time and self._t0 is not None:
+            self._plot.setLabel("left", "{}, {}".format(tr("Время"), date_label(self._t0)))
+            return
+        _lbl = {"с": "Время, с", "мин": "Время, мин", "ч": "Время, ч"}.get(self._tunit, "Время, с")
+        self._plot.setLabel("left", tr(_lbl))
 
     def set_temp_overlay(self, on: bool) -> None:
         """Задача #UI-239: вкл/выкл оверлей температуры детектора (кривая вдоль оси времени)."""
@@ -213,6 +256,7 @@ class HeatmapPanel(QtWidgets.QWidget):
         """Построить карту. Для огромных матриц (> DISPLAY_CELL_CAP ячеек) показываем
         прорежённую через sg.downsample версию, но ROI пересчитываем обратно в ПОЛНЫЕ индексы."""
         self._sg = sg
+        self._t0 = parse_t0(getattr(sg, "t0_iso", None))   # Задача #UI-243: время старта записи
         ns, nc = sg.n_slices, sg.n_channels
         # Задача #44: источник — counts или по-срезовая скорость cps (counts/live_time)
         disp_counts = self._disp_from_source(sg, sg.counts_in_unit(self._unit))
@@ -221,6 +265,8 @@ class HeatmapPanel(QtWidgets.QWidget):
         self._t_scale = ns / float(self._disp_rows)
         self._ch_scale = nc / float(self._disp_cols)
         self._time_axis.set_data(sg.time_offsets_s, self._t_scale, self._tunit)  # Задача #207
+        self._time_axis.set_absolute(self._t0, self._abs_time)   # Задача #UI-243: t0 нового файла
+        self._apply_time_label()
         # Z-контраст по выбранной шкале (с усреднением спектра по энергии, IV-R4); row-major =>
         # ось0=строки=Время(Y), ось1=столбцы=Канал(X)
         self._img.setImage(self._scaled_image(), axisOrder="row-major", autoLevels=True)
@@ -586,7 +632,11 @@ class SlicePanel(QtWidgets.QWidget):
         self._spectrum_plot.showGrid(x=True, y=True, alpha=0.3)
         self._spectrum_plot.getAxis("left").enableAutoSIPrefix(False)   # Задача #218
         layout.addWidget(self._spectrum_plot)
-        self._series_plot = pg.PlotWidget(viewBox=_SeriesPanViewBox())  # Задача #199: LMB pan только X, wheel zoom
+        self._series_time_axis = _SeriesTimeAxisItem()   # Задача #UI-243
+        self._t0 = None            # Задача #UI-243: datetime начала записи (из sg.t0_iso)
+        self._abs_time = False     # Задача #UI-243: режим шкалы — относительный/абсолютный
+        self._series_plot = pg.PlotWidget(viewBox=_SeriesPanViewBox(),   # Задача #199: LMB pan только X, wheel zoom
+                                          axisItems={"bottom": self._series_time_axis})
         self._series_plot.setLabel("bottom", tr("Время, с"))
         self._series_plot.setLabel("left", tr("Отсчёты в полосе"))
         self._series_plot.showGrid(x=True, y=True, alpha=0.3)
@@ -637,7 +687,12 @@ class SlicePanel(QtWidgets.QWidget):
         self._energies = np.asarray(sg.energies(), dtype=np.float64)
         self._times = np.asarray(sg.time_offsets_s, dtype=np.float64)
         self._live = np.asarray(sg.live_time_s, dtype=np.float64)   # делитель cps (Задача #44)
+        self._t0 = parse_t0(getattr(sg, "t0_iso", None))    # Задача #UI-243: время старта записи
+        self._series_time_axis.set_absolute(self._t0, self._abs_time)
+        self._apply_series_time_label()
         self._raw_total = None   # Задача #UI-235: новый файл (др. n_slices) -> старый суммарный кэш недействителен
+        self._raw_ewin = None    # Задача #UI-242: тот же класс дефекта — кэш энергоокна прошлого
+        # файла переживал загрузку; с #UI-242 он участвует в подгонке Y и ломал её broadcast'ом
         self._clear_series_sections()   # новые данные -> снять старые маркеры сечений (Задача #42)
         self._view_mode = ("integral",)  # Задача #161: новый файл -> вид сброшен на интеграл
         # начальный вид: полный интегральный спектр и полная полоса по времени
@@ -780,20 +835,26 @@ class SlicePanel(QtWidgets.QWidget):
         arr = arr[np.isfinite(arr)]
         if not arr.size:
             return
-        peak = float(arr.max())
-        if self._raw_total is not None:   # Задача #UI-235: суммарный cps ≥ полосы ROI → он задаёт Y-верх
-            tot = np.asarray(self._series_to_unit(self._raw_total[1]), dtype=np.float64)
-            tot = tot[np.isfinite(tot)]
-            if tot.size:
-                peak = max(peak, float(tot.max()))
-        y_top = peak * 1.05
+        vals = [arr]
+        for cache in (self._raw_total, self._raw_ewin):   # #UI-235 суммарный + жёлтое энергоокно
+            if cache is not None:
+                v = np.asarray(self._series_to_unit(cache[1]), dtype=np.float64)
+                vals.append(v[np.isfinite(v)])
+        allv = np.concatenate([v for v in vals if v.size])
+        if not allv.size:
+            return
+        lo, hi = float(allv.min()), float(allv.max())
+        span = hi - lo
+        pad = max(span * 0.05, hi * 1e-3, 1e-9)
+        y_lo, y_top = max(0.0, lo - pad), hi + pad
         vb.disableAutoRange()  # гарантированно отключить autoRange перед setYRange
-        # Задача #204: setLimits ДО setYRange. Метод вызывается дважды за загрузку — сначала с
-        # полной полосой (band 0..n_ch), затем singleShot с ROI-полосой (центр, меньше). Старый
-        # minYRange от полной полосы не давал setYRange ужать диапазон, а последующий maxYRange
-        # прижимал Y к потолку y_top*4. Ставим новые лимиты первыми — они и управляют ужатием.
-        vb.setLimits(yMax=y_top * 4, maxYRange=y_top * 4, minYRange=y_top)  # Задача #203: нельзя уменьшить Y-диапазон
-        vb.setYRange(0.0, y_top, padding=0)
+        # Задача #UI-242: окно по ФАКТИЧЕСКОМУ размаху видимых кривых, а не от нуля. Вариация
+        # cps в единицы процентов от уровня (85..95 при максимуме 95) на шкале от нуля
+        # неразличима — оператор: «изменений cps не видно». Запрет ужатия minYRange из #203
+        # снят (None): он и держал окно растянутым, не давая setYRange сжать его до размаха.
+        # Порядок setLimits → setYRange сохранён по #204.
+        vb.setLimits(yMax=y_top + span * 3, maxYRange=max(span * 4, pad * 8), minYRange=None)
+        vb.setYRange(y_lo, y_top, padding=0)
 
     def _lock_views_to_data(self) -> None:
         """Задача #89: привязать X-домен графиков к экстенту данных, чтобы они не «уезжали»
@@ -822,6 +883,20 @@ class SlicePanel(QtWidgets.QWidget):
                                  maxXRange=span, minXRange=max(1.0, span / 100.0))
                     vb.setXRange(tmin, tmax, padding=0)  # Задача #201: нач. вид = весь диапазон = мин. зум
         self._expand_series_y_if_needed()  # Задача #196: Y сверху нижнего графика
+
+    def set_absolute_time(self, on: bool) -> None:
+        """Задача #UI-243: X-шкала времени — фактические дата/время вместо смещения от начала.
+        Без метки t0 в файле режим не включается (шкала остаётся относительной)."""
+        self._abs_time = bool(on)
+        self._series_time_axis.set_absolute(self._t0, self._abs_time)
+        self._apply_series_time_label()
+
+    def _apply_series_time_label(self) -> None:
+        """Подпись X-оси: в абсолютном режиме несёт дату записи, тики — только ЧЧ:ММ:СС."""
+        if self._abs_time and self._t0 is not None:
+            self._series_plot.setLabel("bottom", "{}, {}".format(tr("Время"), date_label(self._t0)))
+        else:
+            self._series_plot.setLabel("bottom", tr("Время, с"))
 
     def reset_zoom(self) -> None:
         """Задача #100: сброс зума/панорамы графиков среза и времени к полному виду данных.
@@ -1007,7 +1082,7 @@ class SlicePanel(QtWidgets.QWidget):
         self._reset_zoom_btn.setText(tr("Сброс зума"))
         self._reset_zoom_btn.setToolTip(tr("Вернуть полный вид графиков среза и времени"))
         self._spectrum_plot.setLabel("bottom", tr("Энергия, кэВ"))
-        self._series_plot.setLabel("bottom", tr("Время, с"))
+        self._apply_series_time_label()   # Задача #UI-243: подпись зависит и от режима времени
         self._apply_unit_labels()
         self._retranslate_legend()
 

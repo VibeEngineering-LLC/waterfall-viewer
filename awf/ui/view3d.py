@@ -9,6 +9,7 @@ from awf.ui.zscale import (apply_z_scale, DEFAULT_GAIN, DEFAULT_GAMMA,
                            SMOOTH_MODE_SMA, SMOOTH_MODE_WMA)
 from awf.ui.colormaps import get_colormap
 from awf.ui.i18n import tr                 # Задача #169: локализация панели сечений
+from awf.ui.timefmt import clock_label, parse_t0   # Задача #UI-243: абсолютное время осей
 from awf.model.background import background_window_like   # Задача #140: сырое фоновое окно простыни
 from awf.ui.knobs import Knob          # Задача #59: панель сечений в том же knob-стиле
 from awf.analysis.peaks import (            # Задача #110/#114/#112/#120: поиск фотопиков на 3D-водопаде
@@ -261,6 +262,8 @@ class Waterfall3DView(gl.GLViewWidget):
         self.addItem(self._grid)
         self._grid_items = []         # линии координатной сетки/рамки (Задача #63/#68)
         self._time_unit = "с"         # единицы оси времени: с | мин | ч (Задача #64)
+        self._t0 = None               # Задача #UI-243: datetime начала записи (из sg.t0_iso)
+        self._abs_time = False        # Задача #UI-243: режим шкалы времени
         self._floor_visible = False   # Задача #76: видна ли «подложка»; #150: дефолт — скрыта
         # Задача #98: «фоновая простыня» — полупрозрачная поверхность на высоте рельефа, отвечающей
         # фону bg(энергия), постоянная во времени; показывает уровень фона над/под водопадом.
@@ -357,6 +360,7 @@ class Waterfall3DView(gl.GLViewWidget):
         # сеттеры ре-рендера зовут set_spectrogram(self._sg, ...), новый файл — другой объект.
         is_new = sg is not self._sg
         self._sg = sg
+        self._t0 = parse_t0(getattr(sg, "t0_iso", None))   # Задача #UI-243: время старта записи
         # Задача #158: ре-рендеры (analysis_sg=None, sg is self._sg) сохраняют прежний
         # аналитический источник; новый объект без analysis_sg — сам sg (прямые вызовы/тесты).
         if analysis_sg is not None:
@@ -933,6 +937,12 @@ class Waterfall3DView(gl.GLViewWidget):
         self._rebuild_grid()
         self._rebuild_axis_labels()
 
+    def set_absolute_time(self, on: bool) -> None:
+        """Задача #UI-243: подписи оси времени — фактические ЧЧ:ММ:СС вместо смещения от начала.
+        Положение делений не меняется, меняется только текст; без t0 в файле режим не действует."""
+        self._abs_time = bool(on)
+        self._rebuild_axis_labels()
+
     def _rebuild_grid(self) -> None:
         """Координатная сетка (Задача #63/#68): линии на круглых делениях шкал t/E; поле
         обрамлено отступом в полклетки со всех сторон (#70), рамка поля ярче линий сетки."""
@@ -993,8 +1003,13 @@ class Waterfall3DView(gl.GLViewWidget):
         # Задача #183: единица оси через tr() для RU↔EN.
         dv, wx, unit = self._time_ticks()
         unit_lbl = tr(unit)
+        scale = _TIME_UNIT_SCALE.get(unit, 1.0)
         for tv, x in zip(dv, wx):
-            self._add_text((float(x), y_time, 0.0), f"{tv:g} {unit_lbl}", font)
+            # Задача #UI-243: в абсолютном режиме деление подписано фактическим временем
+            # (значение деления dv — в выбранной единице, обратно в секунды через scale).
+            txt = (clock_label(self._t0, float(tv) * scale)
+                   if (self._abs_time and self._t0 is not None) else f"{tv:g} {unit_lbl}")
+            self._add_text((float(x), y_time, 0.0), txt, font)
         # ось энергии (Y): значение в кэВ + единица на каждом делении (Задача #66).
         # Задача #80: вертикальные оливковые зубцы-отрезки (IV-R2/#77) убраны — только подписи.
         keV_lbl = tr("кэВ")

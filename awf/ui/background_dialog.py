@@ -44,7 +44,7 @@ class BackgroundDialog(QtWidgets.QDialog):
         self._hint = QtWidgets.QLabel("")
         root.addWidget(self._hint)
         # --- источник 2: отдельный файл ---
-        self._rb_file = QtWidgets.QRadioButton(tr("Из файла (.aswf / .rcspg / .n42)"))
+        self._rb_file = QtWidgets.QRadioButton(tr("Из файла (.aswf / .rcspg / .n42 / .txt)"))
         root.addWidget(self._rb_file)
         frow = QtWidgets.QHBoxLayout()
         self._path_lbl = QtWidgets.QLabel(tr("файл не выбран"))
@@ -90,7 +90,7 @@ class BackgroundDialog(QtWidgets.QDialog):
     def _on_browse(self) -> None:
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self, tr("Файл фона"), "",
-            tr("Спектрограммы (*.n42 *.xml *.rcspg *.aswf);;Все файлы (*)"))
+            tr("Спектрограммы (*.n42 *.xml *.rcspg *.aswf *.txt);;Все файлы (*)"))
         if path:
             self._path = path
             self._path_lbl.setText(path)

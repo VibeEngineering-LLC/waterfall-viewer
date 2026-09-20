@@ -227,6 +227,11 @@ _HELP_SECTIONS_RU = r"""
       <code>Spectrum</code>, калибровка энергии.</li>
   <li><b>.rcspg</b> — RadiaCode waterfall (табличный текст). Поддерживается оверлей
       «мощность дозы» по калибровке RC-103 (пункт меню <b>Анализ → Мощность дозы</b>).</li>
+  <li><b>.txt</b> — текстовая спектрограмма мобильного приложения AtomSpectra
+      (<code>FORMAT: 3</code>, файлы вида <code>Spectrogram-…-ДАТА_ВРЕМЯ.txt</code>).
+      Формат распознаётся по содержимому, а не по расширению. Читаются калибровка
+      (полином произвольной степени), преднакопленный до старта записи спектр,
+      координаты каждого среза и абсолютное время с часовым поясом записи.</li>
 </ul>
 <p>Последний канал (шумовой), если он присутствует в исходнике, отбрасывается
    (см. IV-R5). Отрицательные значения в спектрограмме приводятся к нулю перед
@@ -462,6 +467,11 @@ _HELP_SECTIONS_EN = r"""
       <code>Spectrum</code> and energy calibration are read.</li>
   <li><b>.rcspg</b> — RadiaCode waterfall (tabbed text). A "dose rate" overlay
       via RC-103 calibration is available (menu <b>Analysis → Dose rate</b>).</li>
+  <li><b>.txt</b> — text spectrogram exported by the AtomSpectra mobile app
+      (<code>FORMAT: 3</code>, files named <code>Spectrogram-…-DATE_TIME.txt</code>).
+      Detected by content, not by extension. Calibration (polynomial of any degree),
+      the spectrum pre-accumulated before recording started, per-slice coordinates
+      and absolute time with the recording time zone are read.</li>
 </ul>
 <p>The last (noise) channel, if present in the source, is dropped (see
    IV-R5). Negative values in the spectrogram are clamped to zero before

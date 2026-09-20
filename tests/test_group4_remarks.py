@@ -943,3 +943,24 @@ def test_slice_normalization_ve_outliers_do_not_stretch_y_bottom(app):
     # Без фикса (min): yr[0] ≈ log10(0.01) = -2, окно 3 dec, кривая в верхней трети.
     # С фиксом (percentile-10 отсекает 3 из 50 выбросов): yr[0] ≈ log10(10) = 1.
     assert yr[0] > 0.5                                   # #166: перцентиль отсёк выбросы
+
+# ---------- #UI-242: Y нижнего графика — по размаху cps, а не от нуля ----------
+def test_series_y_autoscale_to_span(app):
+    """#UI-242 (issue #1): окно cps подгоняется под ФАКТИЧЕСКИЙ размах видимых кривых.
+    Прежнее поведение (#203) растягивало Y от нуля до максимума и запрещало ужать зумом —
+    вариация в единицы процентов от уровня сливалась в плоскую линию («изменений cps не видно»)."""
+    sp = SlicePanel()
+    sg = _make_sg(ns=40, nc=50, t_step=2.0)
+    sp.set_spectrogram(sg)
+    vals = [np.asarray(c.getData()[1], dtype=np.float64)
+            for c in (sp._series_curve, sp._total_curve, sp._ewin_curve)
+            if c.getData()[1] is not None and len(c.getData()[1])]
+    data = np.concatenate(vals)
+    lo, hi = sp._series_plot.getViewBox().viewRange()[1]
+    span = float(data.max() - data.min())
+    assert lo > 0.0                                    # низ отвязан от нуля
+    assert lo <= float(data.min()) + 1e-9              # но данные не срезаны снизу
+    assert hi >= float(data.max()) - 1e-9              # и сверху
+    assert (hi - lo) <= span * 1.3 + 1e-6              # окно ≈ размах, не «0..max»
+    lim = sp._series_plot.getViewBox().state["limits"]["yRange"]
+    assert lim[0] is None                              # #203-запрет ужатия снят

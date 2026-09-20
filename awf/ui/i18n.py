@@ -171,10 +171,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # Сообщения статусбара и диалоги открытия
         "Готов. Файл → Открыть… (Ctrl+O)": "Ready. File → Open… (Ctrl+O)",
         "Открыть спектрограмму": "Open spectrogram",
-        ("Спектрограммы (*.n42 *.xml *.rcspg *.aswf);;N42 / XML (*.n42 *.xml);;"
-         "RadiaCode (*.rcspg);;AtomSpectra (*.aswf);;Все файлы (*)"):
-            ("Spectrograms (*.n42 *.xml *.rcspg *.aswf);;N42 / XML (*.n42 *.xml);;"
-             "RadiaCode (*.rcspg);;AtomSpectra (*.aswf);;All files (*)"),
+        ("Спектрограммы (*.n42 *.xml *.rcspg *.aswf *.txt);;N42 / XML (*.n42 *.xml);;"
+         "RadiaCode (*.rcspg);;AtomSpectra (*.aswf);;AtomSpectra мобильная (*.txt);;"
+         "Все файлы (*)"):
+            ("Spectrograms (*.n42 *.xml *.rcspg *.aswf *.txt);;N42 / XML (*.n42 *.xml);;"
+             "RadiaCode (*.rcspg);;AtomSpectra (*.aswf);;AtomSpectra mobile (*.txt);;"
+             "All files (*)"),
         # Задача #169: тулбар «Вид» — палитра/единицы/тумблеры/стили/сброс
         "  Палитра: ": "  Palette: ",
         "Выбрать цветовую палитру": "Choose a color palette",
@@ -244,6 +246,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "Restore the full view of the slice and time plots",
         "Отсчёты": "Counts",
         "Отсчёты/с": "Counts/s",
+        "Время": "Time",                       # #UI-243: подпись оси с датой записи
+        "Дата/время": "Date/time",             # #UI-243: переключатель абсолютного времени
+        "Фактические дата и время вместо времени от начала записи":
+            "Actual date and time instead of time since recording start",
         "Время, с": "Time, s",
         "Время, мин": "Time, min",
         "Время, ч": "Time, h",
@@ -368,15 +374,15 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Из сечений": "From section planes",
         "Диапазон между секущими плоскостями Времени (3D)":
             "The range between the Time cutting planes (3D)",
-        "Из файла (.aswf / .rcspg / .n42)": "From a file (.aswf / .rcspg / .n42)",
+        "Из файла (.aswf / .rcspg / .n42 / .txt)": "From a file (.aswf / .rcspg / .n42 / .txt)",
         "файл не выбран": "no file selected",
         "Обзор…": "Browse…",
         "Файл фона": "Background file",
         "Файл фона не выбран.": "No background file selected.",
         "Пустой диапазон срезов.": "Empty slice range.",
         "диапазон времени ≈": "time range ≈",
-        "Спектрограммы (*.n42 *.xml *.rcspg *.aswf);;Все файлы (*)":
-            "Spectrograms (*.n42 *.xml *.rcspg *.aswf);;All files (*)",
+        "Спектрограммы (*.n42 *.xml *.rcspg *.aswf *.txt);;Все файлы (*)":
+            "Spectrograms (*.n42 *.xml *.rcspg *.aswf *.txt);;All files (*)",
         # Задача #169: окно «Цветовая палитра» — заголовок и описания палитр
         "Цветовая палитра": "Color palette",
         "фирменная: синяя база → чёрный → оранжевый":

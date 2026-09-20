@@ -6,6 +6,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from awf.io.n42_loader import load_n42
 from awf.io.rcspg_loader import load_rcspg
 from awf.io.aswf_loader import load_aswf
+from awf.io.asspg_loader import load_asspg, looks_like_asspg
 from awf.io.nuclide_lib import default_library
 from awf.ui.view3d import Waterfall3DView, SectionControls
 from awf.ui.panels import HeatmapPanel, SlicePanel
@@ -40,12 +41,16 @@ SETTINGS_ORG = "VibeEngineering-LLC"
 SETTINGS_APP = "AtomSpectraWaterfallViewer"
 
 def load_spectrogram(path: str, *, max_slices: int | None = None):
-    """Диспетчер загрузчиков по расширению: .aswf -> AtomSpectra, .rcspg -> RadiaCode, иначе -> N42/XML."""
+    """Диспетчер загрузчиков по расширению: .aswf -> AtomSpectra, .rcspg -> RadiaCode,
+    .txt -> текстовая спектрограмма мобильной AtomSpectra (Задача #DATA-7, распознаётся по
+    сигнатуре 'FORMAT:' внутри файла, а не по расширению), иначе -> N42/XML."""
     suffix = Path(path).suffix.lower()
     if suffix == ".aswf":
         return load_aswf(path, max_slices=max_slices)
     if suffix == ".rcspg":
         return load_rcspg(path, max_slices=max_slices)
+    if suffix == ".txt" and looks_like_asspg(path):
+        return load_asspg(path, max_slices=max_slices)
     return load_n42(path, max_slices=max_slices)
 
 class LoaderThread(QtCore.QThread):
@@ -578,6 +583,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self._tunit_combo.setCurrentIndex(0)          # дефолт — секунды
         self._tunit_combo.currentIndexChanged.connect(self._on_time_unit_changed)
         tb.addWidget(self._tunit_combo)
+        # Задача #UI-243: шкалы времени — фактические дата/время вместо смещения от начала
+        self._abstime_check = QtWidgets.QCheckBox(tr("Дата/время"))
+        self._abstime_check.setToolTip(tr("Фактические дата и время вместо времени от начала записи"))
+        self._abstime_check.toggled.connect(self._on_abs_time_toggled)
+        self._register_i18n(self._abstime_check.setText, "Дата/время")
+        self._register_i18n(self._abstime_check.setToolTip,
+                            "Фактические дата и время вместо времени от начала записи")
+        tb.addWidget(self._abstime_check)
         self._axes_check = QtWidgets.QCheckBox(tr("Оси"))  # подписи делений 3D (Задача 14)
         self._axes_check.setChecked(True)
         self._axes_check.toggled.connect(self._on_axes_toggled)
@@ -723,6 +736,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self._view3d.set_time_unit(unit)
         self._heatmap.set_time_unit(unit)
         self._device_data.set_time_unit(unit)   # Задача #UI-238: вкладка «Прибор» синхронно
+
+    @QtCore.Slot(bool)
+    def _on_abs_time_toggled(self, on: bool) -> None:
+        """Задача #UI-243: переключить ВСЕ шкалы времени между смещением от начала записи и
+        фактическими датой/временем (2D-карта, нижний график срезов, оси 3D)."""
+        self._view3d.set_absolute_time(on)
+        self._heatmap.set_absolute_time(on)
+        self._slices.set_absolute_time(on)
 
     @QtCore.Slot(int)
     def _on_unit_changed(self, _idx: int) -> None:
@@ -1191,8 +1212,9 @@ class MainWindow(QtWidgets.QMainWindow):
     def _open_dialog(self) -> None:
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self, tr("Открыть спектрограмму"), "",
-            tr("Спектрограммы (*.n42 *.xml *.rcspg *.aswf);;N42 / XML (*.n42 *.xml);;"
-               "RadiaCode (*.rcspg);;AtomSpectra (*.aswf);;Все файлы (*)"))
+            tr("Спектрограммы (*.n42 *.xml *.rcspg *.aswf *.txt);;N42 / XML (*.n42 *.xml);;"
+               "RadiaCode (*.rcspg);;AtomSpectra (*.aswf);;AtomSpectra мобильная (*.txt);;"
+               "Все файлы (*)"))
         if path:
             self.open_file(path)
 
