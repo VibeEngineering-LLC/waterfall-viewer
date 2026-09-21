@@ -6,7 +6,7 @@ from OpenGL.GL import GL_DEPTH_TEST, GL_BLEND, GL_ALPHA_TEST, GL_CULL_FACE
 from PySide6 import QtCore, QtGui, QtWidgets
 from awf.ui.zscale import (apply_z_scale, DEFAULT_GAIN, DEFAULT_GAMMA,
                            DEFAULT_CLIP, desaturate_rgba, smooth_by_mode,
-                           SMOOTH_MODE_SMA, SMOOTH_MODE_WMA)
+                           SMOOTH_MODE_SMA, SMOOTH_MODE_WMA, is_sparse_counts)
 from awf.ui.colormaps import get_colormap
 from awf.ui.i18n import tr                 # Задача #169: локализация панели сечений
 from awf.ui.timefmt import clock_label, parse_t0   # Задача #UI-243: абсолютное время осей
@@ -63,6 +63,12 @@ def _surface_shading(z_surface, intensity):
     lam = np.clip((-dz_t * lx - dz_c * ly + lz) * inv, 0.0, 1.0)
     shade = _SHADE_AMBIENT + (1.0 - _SHADE_AMBIENT) * lam
     return ((1.0 - intensity) + intensity * shade).astype(np.float32)
+
+
+# Задача #UI-245: 3D переходит на свёртку средним и отключает подавители игл только когда не менее
+# половины ненулевых ячеек — одиночные отсчёты (2D хватает 0,25). Независимый разбор показал: при 0,25
+# спектр с плотным ядром и разреженным хвостом (27,6% одиночных) терял форму пика (максимум 13,5 → 7,6).
+_SPARSE_SHARE_3D = 0.5
 
 
 def _floor_shift_linear(z_disp):
@@ -283,7 +289,8 @@ class Waterfall3DView(gl.GLViewWidget):
         self._x_user = 1.0
         self._zmax_sample = 0.0       # zmax образца до floor-сдвига (Задача P-3, reuse в _add_bg_sheet)
         self._z_surface = None        # (nt, nc) высоты рельефа (дисплейные)
-        self._z_counts = None         # (nt, nc) исходные counts бинов (max-LOD, для оси счёта/рельефа)
+        self._sparse = False          # Задача #UI-245: бедная статистика (≥25% ненулевых ячеек = 1 отсчёт)
+        self._z_counts = None         # (nt, nc) исходные counts бинов (max-LOD; mean-LOD при бедной статистике)
         self._z_counts_sum = None     # (nt, nc) sum-LOD: интеграл counts в бине (Задача #52 — спектр окна)
         self._z_counts_int = None     # (nt, nc) sum-LOD СЫРЫХ counts (Задача #152 — пуассонова маска гребней)
         self._colors_full = None      # (nt, nc, 4) полный RGBA рельефа (до обрезки, IV-R3)
@@ -348,9 +355,17 @@ class Waterfall3DView(gl.GLViewWidget):
                     "mesh": mesh, "border": border, "line": line,
                     "frac": 0.5, "visible": False}
 
+    def _lod_method(self) -> str:
+        """Задача #UI-245: метод LOD рельефа: 'mean' при бедной статистике (максимум давал 40,5% суммы
+        отсчётов на файле оператора), иначе прежний 'max'."""
+        return "mean" if self._sparse else "max"
+
     def set_spectrogram(self, sg, max_time: int | None = None,
-                        max_chan: int | None = None, analysis_sg=None) -> None:
+                        max_chan: int | None = None, analysis_sg=None, raw=None) -> None:
         """Прорядить через sg.downsample(method='max') и построить цветную поверхность.
+        Задача #UI-245: при бедной статистике (признак — по СЫРЫМ отсчётам raw, sg может быть после
+        вычета фона/нормировки ε(E)) свёртка идёт средним по ячейкам блока, а не максимумом, подавители
+        игл #192/#193 и линейный floor-сдвиг #168 отключены, лог-порог держит одиночные отсчёты.
         Геометрия в индексном пространстве (X=индекс времени, Y=индекс канала), высота Z и цвет —
         по counts. Реальные единицы (с / кэВ) подписываем делениями осей (Задача 14).
         Задача #158: analysis_sg — аналитический источник (вычет фона БЕЗ ε-нормализации #156,
@@ -367,6 +382,12 @@ class Waterfall3DView(gl.GLViewWidget):
             self._sg_analysis = analysis_sg
         elif is_new or self._sg_analysis is None:
             self._sg_analysis = sg
+        # Задача #UI-245: признак бедной статистики — при новом файле (или явном raw); ре-рендеры
+        # рукоятками (sg is self._sg, raw=None) сохраняют прежнее значение.
+        if raw is not None:
+            self._sparse = is_sparse_counts(raw.counts, _SPARSE_SHARE_3D)
+        elif is_new:
+            self._sparse = is_sparse_counts(sg.counts, _SPARSE_SHARE_3D)
         # Задача #56: None -> сохранить текущие max_time/max_chan (ширина выборки по времени из
         # рукоятки переживает загрузку файла, как _gain/_smooth/_light); число -> установить новое.
         if max_time is not None:
@@ -377,7 +398,8 @@ class Waterfall3DView(gl.GLViewWidget):
         # 1) LOD-прорежка; t_centers/ch_centers — реальные с/кэВ для центров бинов. В режиме cps
         #    (Задача #44) прорежаем матрицу скорости (counts/live_time по срезу), а не сами отсчёты.
         src = sg.counts_in_unit(self._unit)
-        z_counts, t_centers, ch_centers = sg.downsample(max_time, max_chan, method="max", data=src)
+        z_counts, t_centers, ch_centers = sg.downsample(max_time, max_chan, data=src,
+                                                        method=self._lod_method())
         z_counts = np.asarray(z_counts, dtype=np.float32)
         # Задача #52: профиль на плоскости = спектр верхнего-правого окна (sum по окну, НЕ max).
         # Отдельная sum-LOD на ТЕХ ЖЕ бинах: интеграл counts в каждом (бин времени × бин канала).
@@ -409,7 +431,9 @@ class Waterfall3DView(gl.GLViewWidget):
         # (prev, self, next) → замена медианой. Два смежных ненулевых бина = настоящий
         # источник, median = высокое → не подавляется. Граничные строки (строка 0: prev=self,
         # строка nt-1: next=self) при равенстве median==self → никогда не подавляются.
-        if z_counts.shape[0] >= 3:
+        # Задача #UI-245: при бедной статистике соседи изолированной ячейки нулевые, медиана = 0, и
+        # подавитель стирал реальные отсчёты (на файле оператора −41,9% ненулевых блоков) — отключён.
+        if not self._sparse and z_counts.shape[0] >= 3:
             _pr = np.concatenate([z_counts[:1], z_counts[:-1]], axis=0)
             _nx = np.concatenate([z_counts[1:], z_counts[-1:]], axis=0)
             _med3 = np.median(np.stack([_pr, z_counts, _nx], axis=0), axis=0)
@@ -420,7 +444,7 @@ class Waterfall3DView(gl.GLViewWidget):
         # но по оси E (axis=1). Порог 10× консервативнее 6× по t: реальные фотопики NaI
         # span ≥6 LOD-бинов по E → median высокий → не давится. Одиночный граничный канал
         # с аномальным счётом → median(left, spike, 0) = left → подавляется.
-        if z_counts.shape[1] >= 3:
+        if not self._sparse and z_counts.shape[1] >= 3:
             _epr = np.concatenate([z_counts[:, :1], z_counts[:, :-1]], axis=1)
             _enx = np.concatenate([z_counts[:, 1:], z_counts[:, -1:]], axis=1)
             _emed3 = np.median(np.stack([_epr, z_counts, _enx], axis=0), axis=0)
@@ -441,7 +465,8 @@ class Waterfall3DView(gl.GLViewWidget):
         nt, nc = z_counts.shape
         # 2) Z-шкала контраста, затем нормировка для высоты и цвета (защита от нулевого максимума)
         z_disp = apply_z_scale(z_counts, self._z_mode, gain=self._gain,
-                               gamma=self._gamma, clip=self._clip)
+                               gamma=self._gamma, clip=self._clip, keep_quantum=self._sparse,
+                               keep_all=self._sparse)
         # Задача P-3: запомнить zmax образца ДО floor-сдвига — тот же расчёт, что делал
         # _add_bg_sheet повторным вызовом apply_z_scale(self._z_counts, ...) только ради max().
         self._zmax_sample = float(z_disp.max()) if z_disp.size else 0.0
@@ -449,7 +474,7 @@ class Waterfall3DView(gl.GLViewWidget):
         # пики» (провалы 0-count бинов на фоне поднятой ε-нормировкой #156 простыни). floor_col =
         # локальный уровень «1 отсчёт» колонки (с потолком по «дырявым» колонкам); 0 и 1 отсчёт
         # садятся ровно на Z=0 на любой энергии, пики поднимаются. Симметрично #167 log-floor.
-        if self._z_mode == "linear":
+        if self._z_mode == "linear" and not self._sparse:   # #UI-245: при бедной статистике сажал бы «1 отсчёт» на 0
             z_disp = _floor_shift_linear(z_disp)
         zmax = float(z_disp.max()) if z_disp.size else 0.0
         zn = z_disp / zmax if zmax > 0 else z_disp
@@ -688,7 +713,7 @@ class Waterfall3DView(gl.GLViewWidget):
         if bg_field is None:
             return
         z_bg, _t, ch_bg = self._sg.downsample(self._max_time, self._max_chan,
-                                              method="max", data=bg_field)
+                                              method=self._lod_method(), data=bg_field)   # #UI-245: как у образца
         z_bg = np.asarray(z_bg, dtype=np.float64)
         keep = int(np.count_nonzero(np.asarray(ch_bg, dtype=np.float64) <= _MAX_ENERGY_KEV))
         if 0 < keep < z_bg.shape[1]:
@@ -723,7 +748,8 @@ class Waterfall3DView(gl.GLViewWidget):
         Высоты нормируются на zmax ОБРАЗЦА (одна высотная система с рельефом), при фон=образец
         простыня ложится точно поверх рельефа."""
         z_disp = apply_z_scale(np.asarray(z_bg, dtype=np.float64), self._z_mode,
-                               gain=self._gain, gamma=self._gamma, clip=self._clip)
+                               gain=self._gain, gamma=self._gamma, clip=self._clip,
+                               keep_quantum=self._sparse, keep_all=self._sparse)   # #UI-245: то же условие, что у образца (порог — по полю простыни)
         # Задача P-3: zmax образца уже посчитан в set_spectrogram (self._zmax_sample) —
         # не гонять apply_z_scale по self._z_counts ещё раз только ради .max().
         zmax = self._zmax_sample
@@ -1406,6 +1432,8 @@ class Waterfall3DView(gl.GLViewWidget):
         if self._z_surface is not None and self._z_surface.size and self._height_scale > 0:
             # высота нормирована: frac высоты == frac пикового дисплейного уровня
             peak = float(self._sg.counts_in_unit(self._unit).max()) if self._sg is not None else 0.0
+            if self._sparse and self._z_counts is not None and self._z_counts.size:
+                peak = float(self._z_counts.max())   # #UI-245: рельеф — среднее по блоку, верх ≠ сырой максимум
         unit = "отсч/с (≈)" if self._unit == "cps" else "отсч. (≈)"
         return (frac * peak, unit)
 

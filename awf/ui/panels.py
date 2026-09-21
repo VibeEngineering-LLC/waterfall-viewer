@@ -3,7 +3,7 @@ import numpy as np
 import pyqtgraph as pg
 from PySide6 import QtCore, QtWidgets
 from awf.ui.zscale import (apply_z_scale, DEFAULT_GAIN, DEFAULT_GAMMA, DEFAULT_CLIP,
-                           smooth_by_mode)
+                           smooth_by_mode, is_sparse_counts)
 from awf.ui.colormaps import get_colormap
 from awf.ui.i18n import tr                 # Задача #169: локализация панелей
 from awf.ui.timefmt import clock_label, date_label, parse_t0   # Задача #UI-243: время на шкалах
@@ -268,12 +268,8 @@ class HeatmapPanel(QtWidgets.QWidget):
         # дробное, и ROI/подписи оси/HUD уплывали бы до bt-1 срезов и bc-1 каналов к концу записи.
         self._t_scale = float(self._bt)
         self._ch_scale = float(self._bc)
-        rc = (raw if raw is not None else sg).counts
-        pos = rc[rc > 0]
-        # бедная статистика: ≥25% ненулевых ячеек = 1 отсчёт. Признак считается по СЫРЫМ отсчётам, а не
-        # по cps и не по нормированной матрице: в cps одиночный отсчёт = 1/live_time, после ε-нормировки
-        # он умножен на ε_ref/ε(E) — в обоих случаях порог «≤ 1» перестаёт означать «один отсчёт».
-        self._sparse = bool(pos.size) and float(np.percentile(pos, 25.0)) <= 1.0
+        # бедная статистика — по СЫРЫМ отсчётам (см. zscale.is_sparse_counts), единый признак с 3D
+        self._sparse = is_sparse_counts((raw if raw is not None else sg).counts)
         self._time_axis.set_data(sg.time_offsets_s, self._t_scale, self._tunit)  # Задача #207
         self._time_axis.set_absolute(self._t0, self._abs_time)   # Задача #UI-243: t0 нового файла
         self._apply_time_label()
@@ -676,6 +672,11 @@ class SlicePanel(QtWidgets.QWidget):
         # Задача #96: кривая фона поверх спектра среза (оранжевый пунктир), в текущих единицах
         self._bg_curve = self._spectrum_plot.plot(
             [], [], pen=pg.mkPen((255, 165, 0), width=1, style=QtCore.Qt.DashLine))
+        # Задача #UI-251: на лог-оси нулевые каналы — разрывы линии, а канал с соседями-нулями линия
+        # не соединяет ни с чем: на разреженном срезе (44 ненулевых канала, 4 соседних пары) график
+        # выглядел пустым. Такие изолированные каналы дорисовываем точками.
+        self._spectrum_pts = self._spectrum_plot.plot(
+            [], [], pen=None, symbol="o", symbolSize=4, symbolBrush=(51, 217, 242), symbolPen=None)
         self._legend = self._series_plot.addLegend(offset=(-10, 10))
         self._series_curve = self._series_plot.plot([], [], pen=pg.mkPen("m", width=1),
                                                     name=tr("полоса ROI"))
@@ -827,6 +828,12 @@ class SlicePanel(QtWidgets.QWidget):
         Y-зум разъезжается: кривая либо уходит за верх окна, либо «висит» над низом
         далеко от оси X (лог-шкала — самый заметный случай, нижний край окна остаётся
         на pre-нормировочном log10(min)). X-зум пользователя не трогаем."""
+        self._fit_spectrum_y()
+        self._expand_series_y_if_needed()
+
+    def _fit_spectrum_y(self) -> None:
+        """Подогнать Y-диапазон графика спектра под сам спектр (вынесено из _expand_y_if_needed,
+        Задача #UI-251: тем же вызывается «Сброс зума»)."""
         vb = self._spectrum_plot.getViewBox()
         if vb is not None and self._raw_spec is not None:
             _, s, lt_total = self._raw_spec
@@ -840,12 +847,18 @@ class SlicePanel(QtWidgets.QWidget):
                         # ε-нормировка ×10.76 в ВЭ-хвосте помножает 1-count каналы, min
                         # уползает до ~0.005 cps → окно растянуто вниз на ~1 декаду ниже
                         # плотной части кривой (оператор: «спектр в окне срезы взлетает»).
-                        floor = float(np.percentile(pos, 10.0))
-                        vb.setYRange(float(np.log10(floor)) - 0.1,
+                        vb.setYRange(self._spec_log_floor(pos) - 0.1,
                                      float(np.log10(pos.max())) + 0.1, padding=0)
                 else:
                     vb.setYRange(0.0, float(disp.max()) * 1.05, padding=0)
-        self._expand_series_y_if_needed()
+
+    @staticmethod
+    def _spec_log_floor(pos) -> float:
+        """Нижний край лог-окна спектра (log10): 10-й перцентиль; если он совпал с минимумом (бедный
+        спектр, значения сидят на дне), опускаем на 0,3 декады, чтобы точки не резались краем."""
+        floor = float(np.percentile(pos, 10.0))
+        lo = float(np.log10(floor))
+        return lo - 0.3 if floor <= float(pos.min()) * 1.0001 else lo
 
     def _expand_series_y_if_needed(self) -> None:
         """Задача #164: полностью переподогнать Y-верх нижнего графика (полоса ROI + энергоокно)
@@ -934,6 +947,10 @@ class SlicePanel(QtWidgets.QWidget):
             vb = plot.getViewBox()
             if vb is not None:
                 vb.autoRange()
+        # Задача #UI-251: autoRange охватывает и кривую фона (на 2–3 порядка ниже спектра), упирается в
+        # лимит maxYRange (он привязан к спектру) и остаётся у нижнего края — спектр уходил из окна и
+        # «Сброс зума» не помогал. Y спектра подгоняем по нему самому, как после нормировки.
+        self._fit_spectrum_y()
 
     def _on_plot_double_click(self, ev) -> None:
         """Задача #125: двойной клик по графику среза/времени → сброс зума и смещения.
@@ -956,7 +973,12 @@ class SlicePanel(QtWidgets.QWidget):
             return
         e, s, lt_total = self._raw_spec
         disp = self._spec_to_unit(s, lt_total)
-        self._spectrum_curve.setData(e, smooth_by_mode(disp, self._smooth, axis=-1))
+        ys = np.asarray(smooth_by_mode(disp, self._smooth, axis=-1), dtype=np.float64)
+        self._spectrum_curve.setData(e, ys)
+        pos = ys > 0.0                          # Задача #UI-251: изолированные каналы (оба соседа нулевые)
+        iso = (pos & ~np.concatenate(([False], pos[:-1])) & ~np.concatenate((pos[1:], [False]))
+               if self._spec_log else np.zeros(ys.shape, dtype=bool))   # в лин. режиме линия идёт через ноль
+        self._spectrum_pts.setData(e[iso], ys[iso])
         self._render_background(e, lt_total)   # Задача #96: кривая фона в тех же единицах
         self._lock_spectrum_y()                # Задача #101: зафиксировать нижнюю границу Y
 
@@ -979,11 +1001,11 @@ class SlicePanel(QtWidgets.QWidget):
         pos = disp[disp > 0.0]
         # Задача #166: пол в лог-режиме — 10-й перцентиль pos (не min): ВЭ-выбросы после
         # ε-нормировки тянут абсолютный min на ~1 декаду ниже плотной части кривой.
-        floor = float(np.percentile(pos, 10.0)) if pos.size else 1e-3
-        vb.setLimits(yMin=float(np.log10(floor)))
+        lo = self._spec_log_floor(pos) if pos.size else -3.0
+        vb.setLimits(yMin=lo)
         if pos.size:  # Задача #196: лимит Y сверху (лог)
             y_top = float(np.log10(float(pos.max()))) + 1.0
-            vb.setLimits(yMax=y_top, maxYRange=y_top - float(np.log10(floor)) + 1.0)
+            vb.setLimits(yMax=y_top, maxYRange=y_top - lo + 1.0)
 
     def set_smoothing(self, mode: int) -> None:
         """Режим сглаживания спектра по энергии (Задача #163): 0/SMA/WMA; перерисовать кривую."""

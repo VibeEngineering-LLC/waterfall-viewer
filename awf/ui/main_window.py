@@ -1089,7 +1089,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         # Задача #158: view3d получает и аналитический источник (без ε-нормализации) —
         # для _found_peaks (пики/ID) и пуассоновой маски гребней (#152 _z_counts_int).
-        self._view3d.set_spectrogram(sg, analysis_sg=self._analysis_spectrogram())
+        self._view3d.set_spectrogram(sg, analysis_sg=self._analysis_spectrogram(), raw=self._sg)   # #UI-245
         if reset:
             self._slices.set_spectrogram(sg)
         else:

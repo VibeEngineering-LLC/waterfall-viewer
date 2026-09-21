@@ -1021,3 +1021,97 @@ def test_heatmap_sparse_flag_uses_raw_counts_when_normalized(app):
     hp = HeatmapPanel(); hp.set_spectrogram(sc)
     assert not hp._sparse                                        # без подсказки масштаб ×3,7 ломает признак
     hp.set_spectrogram(sc, raw=sg); assert hp._sparse
+
+
+# ---------- #UI-245: 3D не должен стирать ячейки на бедной статистике ----------
+def test_downsample_mean_is_uniform_over_uneven_blocks():
+    """#UI-245: метод 'mean' — среднее по ячейкам блока; блоки по linspace бывают 3 и 4 среза, голая
+    сумма рисовала бы полосы, а максимум терял ~60% отсчётов на бедной статистике."""
+    sg = _make_sg(ns=10, nc=7); sg.counts[:] = 6
+    assert np.allclose(sg.downsample(4, 3, method="mean")[0], 6.0)         # постоянное поле остаётся постоянным
+    sg.counts[:] = 0; sg.counts[1, 1] = 5
+    cells = sg.downsample(4, 3, method="sum", data=np.ones(sg.counts.shape))[0]
+    mean, ssum = sg.downsample(4, 3, method="mean")[0], sg.downsample(4, 3, method="sum")[0]
+    assert np.allclose(mean, ssum / cells) and float(ssum.sum()) == 5.0
+
+
+def test_view3d_sparse_uses_mean_lod_and_keeps_isolated_cells(app):
+    """#UI-245: подавители игл #192/#193 при нулевых соседях стирали изолированные ячейки (−41,9% на файле
+    оператора); свёртка максимумом давала 40,5% суммы отсчётов."""
+    sg = _make_sg(ns=200, nc=300); sg.counts[:] = 0; sg.counts.ravel()[::37] = 1
+    v = Waterfall3DView(); v.set_spectrogram(sg, 200, 300)                 # LOD 1:1 — видны только подавители
+    assert v._sparse and int((v._z_counts > 0).sum()) == int((sg.counts > 0).sum())
+    v.set_spectrogram(sg, 20, 30)                                          # блоки 10x10, live_time 2 с
+    assert abs(float((v._z_counts * 100).sum()) * 2.0 - float(sg.counts.sum())) < 1e-3   # среднее сохраняет сумму
+    assert not Waterfall3DView()._sparse                                   # плотные данные — прежний путь
+
+
+def test_view3d_sparse_flag_from_raw_and_log_scale_keeps_cells(app):
+    """#UI-245: после вычета фона/нормировки ε(E) в 3D приходит масштабированная матрица — признак по сырым."""
+    from awf.ui.zscale import apply_z_scale
+    sg = _make_sg(ns=200, nc=300); sg.counts[:] = 0; sg.counts.ravel()[::9] = 1
+    sc = Spectrogram(counts=sg.counts * 3.7, calibration=sg.calibration, time_offsets_s=sg.time_offsets_s,
+                     real_time_s=sg.real_time_s, live_time_s=sg.live_time_s)
+    v = Waterfall3DView(); v.set_spectrogram(sc, 200, 300); assert not v._sparse
+    v.set_spectrogram(sc, 200, 300, raw=sg); assert v._sparse
+    v.set_z_scale("log")                                        # высота берётся из того, что построил сам view3d
+    assert (v._z_surface[v._z_counts > 0] > 0).all()            # все ненулевые ячейки видны
+
+
+def test_view3d_sparse_log_no_zero_height_blocks_after_mean_lod(app):
+    """#UI-245 (стерильный проход): после свёртки средним блоки с малым числом отсчётов лежали ниже порога
+    p10/2 и получали нулевую высоту (3% ненулевых блоков при плотности 5%)."""
+    sg = _make_sg(ns=200, nc=500); sg.counts[:] = (np.random.RandomState(7).rand(200, 500) < 0.05)
+    v = Waterfall3DView(); v.set_spectrogram(sg, 20, 50); assert v._sparse
+    v.set_z_scale("log")
+    assert int(((v._z_counts > 0) & (v._z_surface <= 0)).sum()) == 0
+
+
+def test_view3d_dense_core_sparse_tail_keeps_old_path(app):
+    """#UI-245: спектр с плотным ядром и разреженным хвостом (≈28% одиночных) для 3D — прежний путь:
+    иначе форма пика терялась (максимум 13,5 → 7,6). 2D-карте достаточно 25% одиночных."""
+    from awf.ui.zscale import is_sparse_counts
+    lam = 12 * np.exp(-np.arange(600) / 120.0)[None, :] * np.ones((300, 1))
+    sg = _make_sg(ns=300, nc=600); sg.counts[:] = np.random.RandomState(4).poisson(lam)
+    assert is_sparse_counts(sg.counts) and not is_sparse_counts(sg.counts, 0.5)
+    v = Waterfall3DView(); v.set_spectrogram(sg, 100, 200); assert not v._sparse
+
+
+def test_view3d_plane_value_uses_relief_peak_when_sparse(app):
+    """#UI-245: рельеф бедного режима — среднее по блоку; подпись плоскости «Отсчёты» брала сырой максимум."""
+    sg = _make_sg(ns=300, nc=600); sg.counts[:] = 0; sg.counts.ravel()[::37] = 1; sg.counts[0, 0] = 3
+    v = Waterfall3DView(); v.set_spectrogram(sg, 30, 60)
+    val, _ = v.plane_value("counts", 1.0)
+    assert v._sparse and abs(val - float(v._z_counts.max())) < 1e-9
+    assert val < float(sg.counts_in_unit(v._unit).max())        # а не сырой максимум ячейки
+
+
+# ---------- #UI-251: график спектра среза на бедной статистике: точки и «Сброс зума» ----------
+def _sparse_slice_panel():
+    sg = _make_sg(ns=30, nc=50); sg.counts[:] = 0; sg.counts[:, [3, 10, 11, 25, 40]] = 1   # 3 одиночных канала + пара соседних
+    sp = SlicePanel(); sp.set_spectrogram(sg); sp.set_background(np.full(50, 1e-8))   # фон на порядки ниже
+    return sp
+
+
+def test_slice_spectrum_isolated_channels_get_points(app):
+    """#UI-251: на лог-оси изолированный канал (оба соседа нулевые) линия не соединяет — точка нужна."""
+    sp = _sparse_slice_panel(); ys = np.asarray(sp._spec_to_unit(sp._raw_spec[1], sp._raw_spec[2]), dtype=float)
+    pos = ys > 0; iso = pos & ~np.r_[False, pos[:-1]] & ~np.r_[pos[1:], False]
+    assert int(iso.sum()) > 0 and len(sp._spectrum_pts.getData()[0]) == int(iso.sum())
+
+
+def test_slice_spectrum_no_points_in_linear_mode(app):
+    """#UI-251: в линейном режиме линия идёт через ноль — дополнительные точки не нужны."""
+    sp = _sparse_slice_panel(); sp.set_spectrum_log(False)
+    xs = sp._spectrum_pts.getData()[0]; assert xs is None or len(xs) == 0
+
+
+def test_slice_reset_zoom_returns_to_spectrum_after_zoom_away(app):
+    """#UI-251: после ухода зумом от спектра «Сброс зума» возвращает окно к самому спектру с запасом
+    под точками (не к кривой фона на порядки ниже и не растянутым до неё)."""
+    sp = _sparse_slice_panel(); vb = sp._spectrum_plot.getViewBox()
+    vb.setYRange(-7.0, -5.0, padding=0); sp.reset_zoom()
+    ys = np.asarray(sp._spec_to_unit(sp._raw_spec[1], sp._raw_spec[2]), dtype=float); ys = ys[ys > 0]
+    lo, hi = vb.viewRange()[1]
+    assert lo < np.log10(ys.min()) - 0.05 and hi > np.log10(ys.max())   # точки целиком, не на краю
+    assert hi - lo < 1.0                                                # не растянуто до фона (1e-8)

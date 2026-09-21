@@ -244,13 +244,18 @@ class Spectrogram:
 
         if method == "max":
             red = np.maximum
-        elif method == "sum":
+        elif method in ("sum", "mean"):
             red = np.add
         else:
-            raise ValueError("Метод должен быть 'max' или 'sum'")
+            raise ValueError("Метод должен быть 'max', 'sum' или 'mean'")
 
         step1 = red.reduceat(data, t_starts, axis=0)
         counts_ds = red.reduceat(step1, ch_starts, axis=1)
+        if method == "mean":
+            # Задача #UI-245: среднее по ячейкам блока. Границы блоков идут по linspace — блоки в 3 и 4
+            # среза, в 15 и 16 каналов; голая сумма рисовала бы полосы от разного размера блока, а
+            # максимум терял ~60% отсчётов на бедной статистике (3D-рельеф оператора: 40,5% от суммы).
+            counts_ds = counts_ds / (np.diff(t_edges)[:, None] * np.diff(ch_edges)[None, :])
 
         t_off = self.time_offsets_s
         en = self.energies()
