@@ -48,6 +48,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Сначала откройте файл спектрограммы.": "Open a spectrogram file first.",
         "Экспорт спектра…": "Export Spectrum…",
         "Экспорт спектра": "Export Spectrum",
+        "Экспортировать выделенный участок": "Export selected interval",
         "Экспорт: ": "Exported: ",
         "Ошибка экспорта: ": "Export error: ",
         "Изотопы": "Isotopes",

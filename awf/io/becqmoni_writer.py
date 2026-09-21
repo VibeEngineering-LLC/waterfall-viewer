@@ -23,7 +23,8 @@ FORMAT_VERSION = "120920"
 
 def write_becqmoni_xml(path, counts, *, live_time_s: float, real_time_s: float,
                       calibration=None, mea_time: Optional[datetime] = None,
-                      sample_name: str = "waterfall-viewer export") -> Path:
+                      sample_name: str = "waterfall-viewer export",
+                      end_time: Optional[datetime] = None) -> Path:
     path = Path(path)
     arr = np.asarray(counts)
     if arr.ndim != 1:
@@ -44,7 +45,7 @@ def write_becqmoni_xml(path, counts, *, live_time_s: float, real_time_s: float,
     if mea_time.tzinfo is None:
         mea_time = mea_time.astimezone()
     mea_time_str = mea_time.isoformat(timespec="seconds")
-    end_dt = mea_time + timedelta(seconds=float(real_time_s))
+    end_dt = end_time if end_time is not None else mea_time + timedelta(seconds=float(real_time_s))
     end_dt_str = end_dt.isoformat(timespec="seconds")
 
     root = ET.Element("ResultDataFile")

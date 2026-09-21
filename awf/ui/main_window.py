@@ -1,5 +1,6 @@
 from __future__ import annotations
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import numpy as np
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -345,6 +346,11 @@ class MainWindow(QtWidgets.QMainWindow):
         act_export.triggered.connect(self._export_spectrum)
         self._register_i18n(act_export.setText, "Экспорт спектра…")
         menu.addAction(act_export)
+        self._act_export_sel = QtGui.QAction("Экспортировать выделенный участок", self)   # Задача #UI-253
+        self._act_export_sel.setCheckable(True)
+        self._act_export_sel.setChecked(True)
+        self._register_i18n(self._act_export_sel.setText, "Экспортировать выделенный участок")
+        menu.addAction(self._act_export_sel)
         # Задача #UI-236: повторный показ отчёта целостности текущего файла
         act_integrity = QtGui.QAction("Отчёт целостности…", self)
         act_integrity.triggered.connect(self._show_integrity_report)
@@ -995,34 +1001,80 @@ class MainWindow(QtWidgets.QMainWindow):
             return "spe"
         return "n42"
 
+    def _export_time_range(self):
+        """Задача #UI-253: промежуток срезов [t_lo, t_hi) для экспорта = то, что показано в окне срезов:
+        выборка (roi) или один срез; без сечений (интегральный вид) — None, то есть вся запись."""
+        if not self._act_export_sel.isChecked():
+            return None
+        mode = getattr(self._slices, "_view_mode", ("integral",))
+        n = self._sg.n_slices
+        if mode[0] == "roi":
+            lo, hi = max(0, int(mode[1])), min(n, int(mode[2]))
+        elif mode[0] == "slice":
+            lo, hi = int(mode[1]), int(mode[1]) + 1
+        else:
+            return None
+        return (lo, hi) if 0 <= lo < hi <= n else None
+
     def _do_export_spectrum(self, path: str, fmt: str) -> None:
-        """Задача #217: агрегировать спектрограмму → 1D-спектр, вызвать writer."""
+        """Задача #217: агрегировать спектрограмму → 1D-спектр, вызвать writer.
+        Задача #UI-253: экспортируется выделенный участок (по срезам), без сечений — вся запись."""
         sg = self._sg
         assert sg is not None
-        spec = np.asarray(sg.total_spectrum()).astype(np.int64)
-        lt = float(np.asarray(sg.live_time_s, dtype=np.float64).sum())
-        rt = float(np.asarray(sg.real_time_s, dtype=np.float64).sum()) if sg.real_time_s is not None else lt
+        rng = self._export_time_range()
+        lo, hi = rng if rng is not None else (0, sg.n_slices)
+        spec = np.asarray(sg.sum_spectrum(lo, hi)).astype(np.int64)
+        lt = float(np.asarray(sg.live_time_s, dtype=np.float64)[lo:hi].sum())
+        rt = float(np.asarray(sg.real_time_s, dtype=np.float64)[lo:hi].sum()) if sg.real_time_s is not None else lt
         cal = list(sg.calibration.coeffs) if sg.calibration is not None else None
+        off = np.asarray(sg.time_offsets_s, dtype=np.float64)
+        t_a = float(off[lo])   # интервал участка (с от начала записи) — в свойства файла, по реальным границам срезов
+        t_b = float(off[hi]) if hi < sg.n_slices else float(off[-1]) + (
+            float(np.asarray(sg.real_time_s, dtype=np.float64)[-1]) if sg.real_time_s is not None else 0.0)
+        mea, name = self._export_interval_props(sg, lo, hi, t_a, t_b)
+        end = mea + timedelta(seconds=t_b - t_a) if mea is not None else None
         try:
-            self._write_spectrum(path, fmt, spec, lt, rt, cal)
+            self._write_spectrum(path, fmt, spec, lt, rt, cal, mea_time=mea, name=name, end_time=end)
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, tr("Экспорт спектра"),
                                            tr("Ошибка экспорта: ") + str(e))
             return
-        self.statusBar().showMessage(tr("Экспорт: ") + path, 5000)
+        part = f" [{lo}:{hi}]" if rng is not None else ""
+        self.statusBar().showMessage(tr("Экспорт: ") + path + part, 5000)
+
+    def _export_interval_props(self, sg, lo, hi, t_a, t_b):
+        """Задача #UI-253: свойства файла экспорта — начало участка в абсолютном времени (если у записи есть t0)
+        и название с интервалом срезов и секунд от начала записи."""
+        mea = None
+        if getattr(sg, "t0_iso", None):
+            try:
+                t0 = datetime.fromisoformat(str(sg.t0_iso).replace("Z", "+00:00"))
+                if t0.tzinfo is None:
+                    t0 = t0.replace(tzinfo=timezone.utc)   # без зоны — UTC, как в загрузчиках
+                mea = t0 + timedelta(seconds=t_a)
+            except ValueError:
+                mea = None
+        stem = Path(str(getattr(self, "_path", "") or "")).stem or "waterfall-viewer export"
+        whole = lo == 0 and hi == sg.n_slices
+        part = "" if whole else f" [slices {lo}:{hi}, t={t_a:.1f}..{t_b:.1f} s]"
+        return mea, stem + part
 
     @staticmethod
-    def _write_spectrum(path, fmt, spec, lt, rt, cal):
+    def _write_spectrum(path, fmt, spec, lt, rt, cal, mea_time=None, name=None, end_time=None):
         """Задача #226: диспетчер записи в xml (BecqMoni) / spe (LSRM бинарный) / n42."""
         if fmt == "xml":
             from awf.io.becqmoni_writer import write_becqmoni_xml
-            write_becqmoni_xml(path, spec, live_time_s=lt, real_time_s=rt, calibration=cal)
+            kw = {"sample_name": name} if name else {}
+            write_becqmoni_xml(path, spec, live_time_s=lt, real_time_s=rt, calibration=cal, mea_time=mea_time,
+                               end_time=end_time, **kw)
         elif fmt == "spe":
             from awf.io.spe_writer import write_spe
-            write_spe(path, spec, live_time_s=lt, real_time_s=rt, calibration=cal)
+            if mea_time is not None and mea_time.tzinfo is not None:
+                mea_time = mea_time.astimezone(timezone.utc)   # SPE без зоны: пишем UTC, как по умолчанию
+            write_spe(path, spec, live_time_s=lt, real_time_s=rt, calibration=cal, mea_time=mea_time)
         else:
             from awf.io.n42_writer import write_n42
-            write_n42(path, spec, live_time_s=lt, real_time_s=rt, calibration=cal)
+            write_n42(path, spec, live_time_s=lt, real_time_s=rt, calibration=cal, mea_time=mea_time)
 
     @QtCore.Slot(float)
     def _on_segment_recompute(self, pen_factor: float = 2.0) -> None:

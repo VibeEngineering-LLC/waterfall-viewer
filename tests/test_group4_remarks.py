@@ -1115,3 +1115,51 @@ def test_slice_reset_zoom_returns_to_spectrum_after_zoom_away(app):
     lo, hi = vb.viewRange()[1]
     assert lo < np.log10(ys.min()) - 0.05 and hi > np.log10(ys.max())   # точки целиком, не на краю
     assert hi - lo < 1.0                                                # не растянуто до фона (1e-8)
+
+
+# ---------- #UI-253: экспорт спектра — выделенный участок, без сечений вся запись ----------
+def _export_xml(win, tmp_path):
+    from xml.etree import ElementTree as ET
+    from awf.io.becqmoni_loader import load_becqmoni
+    out = tmp_path / "e.xml"; win._do_export_spectrum(str(out), "xml")
+    e = load_becqmoni(out); r = ET.parse(out).getroot()
+    return e.counts[0], float(e.live_time_s[0]), r.find(".//SampleInfo/Name").text, r.find(".//StartTime").text
+
+
+def test_export_spectrum_follows_selection_and_writes_interval(app, tmp_path):
+    from awf.ui.main_window import MainWindow
+    sg = _make_sg(ns=30, nc=50, t_step=2.0); sg.t0_iso = "2026-09-20T13:18:19+07:00"
+    win = MainWindow(); win._on_loaded(sg); c = win._sg.counts
+    win._slices.show_roi(0, 30, 0, 50)                                     # сечения отключены — ROI на всю запись
+    spec, lt, name, start = _export_xml(win, tmp_path)
+    assert (spec == c.sum(axis=0)).all() and abs(lt - 60.0) < 1e-6 and "slices" not in name
+    win._slices.show_roi(5, 12, 0, 10)                                     # выборка срезов [5:12)
+    spec, lt, name, start = _export_xml(win, tmp_path)
+    assert (spec == c[5:12].sum(axis=0)).all() and abs(lt - 14.0) < 1e-6   # весь спектр, но только за эти срезы
+    assert "slices 5:12" in name and "t=10.0..24.0 s" in name              # интервал — в свойствах
+    assert start == "2026-09-20T13:18:29+07:00"                            # начало участка = t0 + 10 с
+    win._slices.show_time_slice(3)                                         # один срез
+    spec, lt, name, _ = _export_xml(win, tmp_path)
+    assert (spec == c[3]).all() and abs(lt - 2.0) < 1e-6 and "slices 3:4" in name
+    win._act_export_sel.setChecked(False)                                  # галочка снята — вся запись
+    spec, lt, name, _ = _export_xml(win, tmp_path)
+    assert (spec == c.sum(axis=0)).all() and "slices" not in name
+
+
+def test_export_interval_uses_real_slice_bounds_and_spe_writes_utc(app, tmp_path):
+    """#UI-253 (стерильный проход): конец участка — по границам срезов (шаг 3 с > экспозиции 2 с), а не
+    «начало + экспозиции»; SPE без зоны пишет UTC, запись без зоны в t0 читается как UTC."""
+    from xml.etree import ElementTree as ET
+    from awf.ui.main_window import MainWindow
+    sg = _make_sg(ns=30, nc=50, t_step=3.0); sg.real_time_s = np.full(30, 2.0); sg.t0_iso = "2026-09-20T13:18:19+07:00"
+    win = MainWindow(); win._on_loaded(sg); win._slices.show_roi(5, 12, 0, 10)
+    xml = tmp_path / "a.xml"; win._do_export_spectrum(str(xml), "xml"); r = ET.parse(xml).getroot()
+    assert r.find(".//StartTime").text == "2026-09-20T13:18:34+07:00"        # 13:18:19 + 15 с
+    assert r.find(".//EndTime").text == "2026-09-20T13:18:55+07:00"          # граница среза 12 = 36 с, а не 15 + 14
+    assert "t=15.0..36.0 s" in r.find(".//SampleInfo/Name").text
+    spe = tmp_path / "a.spe"; win._do_export_spectrum(str(spe), "spe")
+    assert b"20-09-26 06:18:34" in spe.read_bytes()                          # +07:00 приведено к UTC
+    win._sg.t0_iso = "2026-09-20T13:18:19"                                   # без зоны — как UTC
+    win._do_export_spectrum(str(spe), "spe"); assert b"20-09-26 13:18:34" in spe.read_bytes()
+    win._do_export_spectrum(str(xml), "xml")
+    assert ET.parse(xml).getroot().find(".//StartTime").text == "2026-09-20T13:18:34+00:00"   # не зона машины
