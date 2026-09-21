@@ -964,3 +964,60 @@ def test_series_y_autoscale_to_span(app):
     assert (hi - lo) <= span * 1.3 + 1e-6              # окно ≈ размах, не «0..max»
     lim = sp._series_plot.getViewBox().state["limits"]["yRange"]
     assert lim[0] is None                              # #203-запрет ужатия снят
+
+
+# ---------- #UI-244: карта не должна прятать и терять отсчёты на бедной статистике ----------
+def test_log_scale_keeps_single_counts_visible():
+    """#UI-244: в файле оператора 95% ненулевых ячеек = 1 отсчёт; floor лог-шкалы совпадал с ним,
+    и одиночный отсчёт рисовался чёрным, как пустота (видимыми оставались 4,5% ячеек)."""
+    from awf.ui.zscale import apply_z_scale
+    a = np.zeros((40, 40)); a.ravel()[::7] = 1; a[3, 3] = 5
+    assert (apply_z_scale(a, "log")[a == 1] == 0).all()          # дефолт (3D/срезы) не тронут
+    z = apply_z_scale(a, "log", keep_quantum=True)
+    assert (z[a == 1] > 0).all() and (z[a == 0] == 0).all() and z[3, 3] > z[a == 1].max()
+    cps = np.zeros(1600); cps[::7] = 0.2 * (1 + 0.1 * np.random.RandomState(2).rand(cps[::7].size))
+    cps = cps.reshape(40, 40)                                    # разброс живого времени ±10%: «равных» значений нет
+    assert (apply_z_scale(cps, "log", keep_quantum=True)[cps > 0] > 0).all()
+
+
+def test_heatmap_display_sums_blocks_not_max(app):
+    """#UI-244: свёртка карты суммой целых блоков; максимум терял ~8% отсчётов на реальном файле."""
+    R, C = HeatmapPanel.DISPLAY_MAX_ROWS, HeatmapPanel.DISPLAY_MAX_COLS
+    ns, nc = 2 * R + 2, 2 * C + 2                               # > DISPLAY_MAX -> блоки 3x3, края неполные
+    sg = _make_sg(ns=ns, nc=nc)
+    sg.counts[:] = 0; sg.counts[0:3, 0:3] = 1; sg.counts[-1, -1] = 7
+    hp = HeatmapPanel(); hp.set_spectrogram(sg); hp.set_unit_mode("counts")
+    d = hp._disp_counts
+    assert d.shape == (-(-ns // 3), -(-nc // 3))
+    assert float(d.sum()) == float(sg.counts.sum()) == 16.0     # отсчёты сохранены полностью
+    assert d[0, 0] == 9.0 and d[-1, -1] == 7.0                  # сумма блока 3x3, а не max=1
+
+
+def test_heatmap_cps_scales_and_edge_blocks(app):
+    """#UI-244: масштаб ROI = размер блока (не ns/rows: уплывал до bt-1 срезов); cps не занижается
+    на неполном крайнем блоке (усреднение по дополненным нулям давало 1/3 скорости)."""
+    R, C = HeatmapPanel.DISPLAY_MAX_ROWS, HeatmapPanel.DISPLAY_MAX_COLS
+    sg = _make_sg(ns=2 * R + 2, nc=2 * C + 2); sg.counts[:] = 10   # 10 отсчётов за 2 с = 5 отсч/с в КАЖДОЙ ячейке
+    hp = HeatmapPanel(); hp.set_spectrogram(sg)                  # блоки 3x3, крайние неполные; единица — cps
+    assert hp._t_scale == 3.0 and hp._ch_scale == 3.0            # а не (2R+2)/(ceil((2R+2)/3)) < 3
+    assert np.allclose(hp._disp_counts, 5.0)                     # включая последнюю строку и колонку
+
+
+def test_heatmap_sparse_flag_from_counts_not_cps(app):
+    """#UI-244: признак бедной статистики считается по отсчётам — разброс live_time его не ломает."""
+    sg = _make_sg(ns=1500, nc=3000); sg.counts[:] = 0; sg.counts.ravel()[::9] = 1
+    sg.live_time_s[:] = 2.0 * (1 + 0.05 * np.random.RandomState(3).rand(1500))
+    hp = HeatmapPanel(); hp.set_spectrogram(sg)
+    d, z = hp._disp_counts, hp._scaled_image()
+    assert hp._sparse and (z[d > 0] > 0).all()                   # cps с разбросом live_time: все ненулевые видны
+    dense = HeatmapPanel(); dense.set_spectrogram(_make_sg()); assert not dense._sparse
+
+
+def test_heatmap_sparse_flag_uses_raw_counts_when_normalized(app):
+    """#UI-244: после ε-нормировки/вычета фона матрица масштабирована — признак берётся по сырым отсчётам."""
+    sg = _make_sg(ns=600, nc=800); sg.counts[:] = 0; sg.counts.ravel()[::9] = 1
+    sc = Spectrogram(counts=sg.counts * 3.7, calibration=sg.calibration, time_offsets_s=sg.time_offsets_s,
+                     real_time_s=sg.real_time_s, live_time_s=sg.live_time_s)
+    hp = HeatmapPanel(); hp.set_spectrogram(sc)
+    assert not hp._sparse                                        # без подсказки масштаб ×3,7 ломает признак
+    hp.set_spectrogram(sc, raw=sg); assert hp._sparse

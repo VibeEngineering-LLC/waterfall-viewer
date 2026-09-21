@@ -122,9 +122,6 @@ class HeatmapPanel(QtWidgets.QWidget):
     # сигнал несёт ПОЛНЫЕ индексы (не дисплейные): t_lo, t_hi, ch_lo, ch_hi
     roiChanged = QtCore.Signal(int, int, int, int)
 
-    # выше этого числа ячеек карту прорежаем для отображения (защита суточных записей)
-    DISPLAY_CELL_CAP = 4_000_000
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self._sg = None
@@ -137,8 +134,10 @@ class HeatmapPanel(QtWidgets.QWidget):
         self._cmap_name = "insight"  # палитра карты (Задача 17)
         self._smooth = 0             # режим сглаживания спектра по энергии (Задача #163): 0/SMA/WMA
         self._tunit = "с"        # единицы времени Y-оси 2D-карты (Задача #207): с/мин/ч
-        self._t_scale = 1.0      # n_slices / disp_rows  (полный индекс = дисплейный * scale)
-        self._ch_scale = 1.0     # n_channels / disp_cols
+        self._t_scale = 1.0      # срезов в одной дисплейной строке (полный индекс = дисплейный * scale)
+        self._ch_scale = 1.0     # каналов в одной дисплейной колонке
+        self._bt = self._bc = 1  # Задача #UI-244: размер блока свёртки (заполняет _disp_from_source)
+        self._sparse = False     # Задача #UI-244: бедная статистика -> одиночные отсчёты не прятать
         self._disp_rows = 0
         self._disp_cols = 0
         # подсветка выбранных пиков (Задача 18): карта приглушается, столбцы энергий — ярко
@@ -252,9 +251,12 @@ class HeatmapPanel(QtWidgets.QWidget):
         self._plot.showAxis("top")
         self._temp_axis.setLabel(tr("Температура, °C"))
 
-    def set_spectrogram(self, sg) -> None:
-        """Построить карту. Для огромных матриц (> DISPLAY_CELL_CAP ячеек) показываем
-        прорежённую через sg.downsample версию, но ROI пересчитываем обратно в ПОЛНЫЕ индексы."""
+    def set_spectrogram(self, sg, raw=None) -> None:
+        """Построить карту. Матрицу шире/выше DISPLAY_MAX_* сворачиваем целыми блоками (см.
+        _disp_from_source), ROI пересчитываем обратно в ПОЛНЫЕ индексы по размеру блока.
+        raw — исходная (загруженная) спектрограмма: sg может прийти после вычета фона или
+        нормировки по ε(E) (знаковая/масштабированная), а признак «бедная статистика» надо
+        считать по сырым отсчётам (Задача #UI-244)."""
         self._sg = sg
         self._t0 = parse_t0(getattr(sg, "t0_iso", None))   # Задача #UI-243: время старта записи
         ns, nc = sg.n_slices, sg.n_channels
@@ -262,8 +264,16 @@ class HeatmapPanel(QtWidgets.QWidget):
         disp_counts = self._disp_from_source(sg, sg.counts_in_unit(self._unit))
         self._disp_counts = disp_counts
         self._disp_rows, self._disp_cols = disp_counts.shape
-        self._t_scale = ns / float(self._disp_rows)
-        self._ch_scale = nc / float(self._disp_cols)
+        # Задача #UI-244: масштаб = размер блока, а не ns/disp_rows: при дополнении нулями частное
+        # дробное, и ROI/подписи оси/HUD уплывали бы до bt-1 срезов и bc-1 каналов к концу записи.
+        self._t_scale = float(self._bt)
+        self._ch_scale = float(self._bc)
+        rc = (raw if raw is not None else sg).counts
+        pos = rc[rc > 0]
+        # бедная статистика: ≥25% ненулевых ячеек = 1 отсчёт. Признак считается по СЫРЫМ отсчётам, а не
+        # по cps и не по нормированной матрице: в cps одиночный отсчёт = 1/live_time, после ε-нормировки
+        # он умножен на ε_ref/ε(E) — в обоих случаях порог «≤ 1» перестаёт означать «один отсчёт».
+        self._sparse = bool(pos.size) and float(np.percentile(pos, 25.0)) <= 1.0
         self._time_axis.set_data(sg.time_offsets_s, self._t_scale, self._tunit)  # Задача #207
         self._time_axis.set_absolute(self._t0, self._abs_time)   # Задача #UI-243: t0 нового файла
         self._apply_time_label()
@@ -296,18 +306,36 @@ class HeatmapPanel(QtWidgets.QWidget):
         vb.setLimits(xMin=0, xMax=self._disp_cols, yMin=0, yMax=self._disp_rows,
                      maxXRange=self._disp_cols, maxYRange=self._disp_rows)
 
+    # Задача #UI-244: предел дисплейной матрицы ≈ размеру области карты (~1000 пикселей). Шире Qt рисует
+    # ближайшего соседа и молча пропускает колонки: на 2048 колонок в ~1030 px терялась половина
+    # изолированных ячеек (независимый разбор, снимок виджета). Каждая колонка — сумма 8 каналов
+    # при 8192 каналах (≈ 2,9 кэВ на этом приборе), пики шириной в десятки кэВ разрешены.
+    DISPLAY_MAX_ROWS = 1024
+    DISPLAY_MAX_COLS = 1024
+
     def _disp_from_source(self, sg, src):
-        """Дисплейная матрица из источника src (counts или cps): прорежаем method='max', если
-        ячеек больше cap, иначе берём как есть (Задача #44 — единицы задаёт вызывающий)."""
+        """Дисплейная матрица из источника src (counts или cps), единицы задаёт вызывающий (#44).
+        Задача #UI-244: свёртка ЦЕЛЫМИ блоками bt×bc СУММОЙ, а не максимумом. Максимум терял ~8%
+        отсчётов на бедной статистике и занижал плотность; целые коэффициенты (не linspace) дают
+        блоки одного размера — иначе сумма рисовала бы полосы от блоков в 1 и 2 среза. Для cps —
+        среднее по РЕАЛЬНЫМ ячейкам блока (скорость на канал; крайний неполный блок не занижается
+        дополненными нулями, и значение не зависит от размера блока)."""
+        import math
         ns, nc = sg.n_slices, sg.n_channels
-        if ns * nc > self.DISPLAY_CELL_CAP:
-            import math
-            factor = math.sqrt(self.DISPLAY_CELL_CAP / float(ns * nc))
-            disp_t = max(1, min(ns, int(ns * factor)))
-            disp_c = max(1, min(nc, int(nc * factor)))
-            dc, _, _ = sg.downsample(disp_t, disp_c, method="max", data=src)
-            return np.asarray(dc, dtype=np.float32)
-        return np.asarray(src, dtype=np.float32)
+        bt = max(1, math.ceil(ns / self.DISPLAY_MAX_ROWS))
+        bc = max(1, math.ceil(nc / self.DISPLAY_MAX_COLS))
+        self._bt, self._bc = bt, bc          # размер блока -> масштабы ROI/оси/HUD (set_spectrogram)
+        if bt == 1 and bc == 1:
+            return np.asarray(src, dtype=np.float32)
+        a, pr, pc = np.asarray(src), -ns % bt, -nc % bc
+        if pr or pc:                          # дополняем нулями только при ненулевом остатке (копия матрицы)
+            a = np.pad(a, ((0, pr), (0, pc)))
+        out = a.reshape(a.shape[0] // bt, bt, a.shape[1] // bc, bc).sum(axis=(1, 3), dtype=np.float32)
+        if self._unit == "cps":
+            rows = np.minimum(bt, ns - np.arange(out.shape[0]) * bt)     # срезов в блоке
+            cols = np.minimum(bc, nc - np.arange(out.shape[1]) * bc)     # каналов в блоке
+            out = out / (rows[:, None] * cols[None, :]).astype(np.float32)
+        return out
 
     def set_unit_mode(self, mode: str) -> None:
         """Единицы карты: 'counts' | 'cps' (Задача #44). Пересчитать дисплейную матрицу из нового
@@ -387,7 +415,7 @@ class HeatmapPanel(QtWidgets.QWidget):
         """Дисплейная матрица -> усреднение по энергии (IV-R4) -> Z-шкала контраста."""
         base = smooth_by_mode(self._disp_counts, self._smooth, axis=1)
         return apply_z_scale(base, self._z_mode, gain=self._gain,
-                             gamma=self._gamma, clip=self._clip)
+                             gamma=self._gamma, clip=self._clip, keep_quantum=self._sparse)   # #UI-244
 
     def set_smoothing(self, mode: int) -> None:
         """Режим сглаживания спектра по энергии (Задача #163): 0/SMA/WMA; перерисовать карту."""

@@ -1094,7 +1094,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._slices.set_spectrogram(sg)
         else:
             self._slices.update_spectrogram(sg)
-        self._heatmap.set_spectrogram(sg)
+        self._heatmap.set_spectrogram(sg, raw=self._sg)   # #UI-244: признак бедной статистики — по сырым отсчётам
         self._sections.emit_all()
         self._refresh_peaks_panel()   # Задача #111: обновить панель пиков после ре-рендера
 

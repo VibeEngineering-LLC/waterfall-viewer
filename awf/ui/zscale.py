@@ -11,7 +11,7 @@ DEFAULT_GAMMA = 1.0
 DEFAULT_CLIP = (0.0, 100.0)   # перцентили (нижний, верхний)
 
 
-def _base_transform(a: np.ndarray, mode: str) -> np.ndarray:
+def _base_transform(a: np.ndarray, mode: str, keep_quantum: bool = False) -> np.ndarray:
     """Базовая Z-шкала контраста: linear -> как есть; sqrt -> √(max(x,0));
     log -> истинный log10(max(x,floor)/floor) с авто-порогом по данным (Задача #54).
     Любой неизвестный режим трактуется как linear."""
@@ -38,17 +38,26 @@ def _base_transform(a: np.ndarray, mode: str) -> np.ndarray:
         pos = nn[nn > 0.0]
         if pos.size == 0:
             return nn
-        floor = float(np.percentile(pos, 10.0))
-        if float(np.percentile(pos, 25.0)) <= floor * 1.0001:
+        floor = p10 = float(np.percentile(pos, 10.0))
+        plateau = float(np.percentile(pos, 25.0)) <= floor * 1.0001
+        if plateau:
             floor = max(floor, float(np.percentile(pos, 50.0)) * 0.5)
         if not (floor > 0.0):
             floor = float(pos.min())
+        if keep_quantum and p10 > 0.0:
+            # Задача #UI-244: вызывающий (2D-карта) сообщил, что статистика бедная (≥25% ненулевых
+            # ячеек = 1 отсчёт; признак считается по ОТСЧЁТАМ). Тогда p10 лежит на плато одиночных
+            # отсчётов, и они получали log10(1)=0 — чёрный, как пустая ячейка (видимыми оставались 4,5%).
+            # Порог в полплато делает их видимыми. Сам признак здесь НЕ определяется: в cps одиночный
+            # отсчёт = 1/live_time, и любой разброс живого времени ломал бы равенство перцентилей.
+            # По умолчанию выключено: 3D и срезы держат порог #181 (он подавляет одиночные иглы).
+            floor = p10 / 2.0
         return np.log10(np.maximum(nn, floor) / floor)
     return nn
 
 
 def apply_z_scale(arr, mode: str, *, gain: float = DEFAULT_GAIN,
-                  gamma: float = DEFAULT_GAMMA, clip=DEFAULT_CLIP):
+                  gamma: float = DEFAULT_GAMMA, clip=DEFAULT_CLIP, keep_quantum: bool = False):
     """Преобразовать массив отсчётов для отображения. Возвращает float32.
 
     Конвейер контраста (Задача 16):
@@ -64,7 +73,7 @@ def apply_z_scale(arr, mode: str, *, gain: float = DEFAULT_GAIN,
     При gain=1, gamma=1, clip=(0,100) возвращается ровно базовая Z-шкала (short-circuit):
     нормировка/денормировка тождественна, форма не меняется — полная обратная совместимость."""
     a = np.asarray(arr, dtype=np.float32)
-    t = _base_transform(a, mode).astype(np.float32, copy=False)
+    t = _base_transform(a, mode, keep_quantum).astype(np.float32, copy=False)
 
     clip_lo, clip_hi = float(clip[0]), float(clip[1])
     is_default = (float(gain) == DEFAULT_GAIN and float(gamma) == DEFAULT_GAMMA
