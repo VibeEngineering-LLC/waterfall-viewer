@@ -582,6 +582,19 @@ class HeatmapPanel(QtWidgets.QWidget):
         self._add_section_lines(e_vals, energies, self._ch_scale, 90, (242, 89, 217))
 
 
+def _bin_edges(centers: np.ndarray) -> np.ndarray:
+    """Границы бинов (N+1) по центрам каналов (N) — для степ-гистограммы (Задача #UI-251):
+    середины между соседними центрами, крайние границы — симметричным продолжением шага."""
+    c = np.asarray(centers, dtype=np.float64)
+    if c.size == 0:
+        return np.array([0.0])   # 0 каналов -> 0 y -> ровно 1 граница (len(x)==len(y)+1)
+    if c.size == 1:
+        w = max(abs(float(c[0])) * 0.01, 1e-9)
+        return np.array([c[0] - w, c[0] + w])
+    mid = (c[:-1] + c[1:]) / 2.0
+    return np.concatenate(([c[0] - (mid[0] - c[0])], mid, [c[-1] + (c[-1] - mid[-1])]))
+
+
 class SlicePanel(QtWidgets.QWidget):
     """Два графика: верх — спектр (Энергия кэВ → Отсчёты), низ — временной ряд (Время с → Отсчёты).
     Метод show_roi() рисует спектр окна времени и временной ряд энергетической полосы, плюс
@@ -666,17 +679,16 @@ class SlicePanel(QtWidgets.QWidget):
         self._series_plot.showGrid(x=True, y=True, alpha=0.3)
         self._series_plot.getAxis("left").enableAutoSIPrefix(False)     # Задача #218
         layout.addWidget(self._series_plot)
-        # Задача #41: кривая спектра среза — бирюза рамки плоскости Времени 3D (51,217,242)
+        # Задача #41: кривая спектра среза — бирюза рамки плоскости Времени 3D (51,217,242).
+        # Задача #UI-251 (оператор, «гистограмм же должна быть»): ступенчатая гистограмма по границам
+        # каналов вместо линии по их центрам — канал с двумя соседями-нулями раньше не давал ни одного
+        # отрезка линии (на разреженном срезе график выглядел пустым, было заткнуто точками-маркерами);
+        # у степ-гистограммы каждый канал — свой горизонтальный отрезок независимо от соседей.
         self._spectrum_curve = self._spectrum_plot.plot(
-            [], [], pen=pg.mkPen((51, 217, 242), width=2))
+            [], [], pen=pg.mkPen((51, 217, 242), width=2), stepMode="center")
         # Задача #96: кривая фона поверх спектра среза (оранжевый пунктир), в текущих единицах
         self._bg_curve = self._spectrum_plot.plot(
             [], [], pen=pg.mkPen((255, 165, 0), width=1, style=QtCore.Qt.DashLine))
-        # Задача #UI-251: на лог-оси нулевые каналы — разрывы линии, а канал с соседями-нулями линия
-        # не соединяет ни с чем: на разреженном срезе (44 ненулевых канала, 4 соседних пары) график
-        # выглядел пустым. Такие изолированные каналы дорисовываем точками.
-        self._spectrum_pts = self._spectrum_plot.plot(
-            [], [], pen=None, symbol="o", symbolSize=4, symbolBrush=(51, 217, 242), symbolPen=None)
         self._legend = self._series_plot.addLegend(offset=(-10, 10))
         self._series_curve = self._series_plot.plot([], [], pen=pg.mkPen("m", width=1),
                                                     name=tr("полоса ROI"))
@@ -974,11 +986,7 @@ class SlicePanel(QtWidgets.QWidget):
         e, s, lt_total = self._raw_spec
         disp = self._spec_to_unit(s, lt_total)
         ys = np.asarray(smooth_by_mode(disp, self._smooth, axis=-1), dtype=np.float64)
-        self._spectrum_curve.setData(e, ys)
-        pos = ys > 0.0                          # Задача #UI-251: изолированные каналы (оба соседа нулевые)
-        iso = (pos & ~np.concatenate(([False], pos[:-1])) & ~np.concatenate((pos[1:], [False]))
-               if self._spec_log else np.zeros(ys.shape, dtype=bool))   # в лин. режиме линия идёт через ноль
-        self._spectrum_pts.setData(e[iso], ys[iso])
+        self._spectrum_curve.setData(_bin_edges(e), ys, stepMode="center", connect="finite")
         self._render_background(e, lt_total)   # Задача #96: кривая фона в тех же единицах
         self._lock_spectrum_y()                # Задача #101: зафиксировать нижнюю границу Y
 

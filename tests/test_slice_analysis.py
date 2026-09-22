@@ -35,9 +35,9 @@ def test_point_spectrum_matches_slice(app):
     s.set_spectrogram(sg)
     s.set_unit_mode("counts")          # Задача #53: дефолт cps — тест сверяет сырые counts
     s.show_time_slice(5)
-    x, y = s._spectrum_curve.getData()
+    x, y = s._spectrum_curve.getData()   # #UI-251: степ-гистограмма — x - границы бинов (N+1)
     assert np.allclose(y, sg.energy_spectrum(5).astype(np.float64))
-    assert np.allclose(x, sg.energies())
+    assert len(x) == len(sg.energies()) + 1
 
 
 def test_energy_window_profile_matches_band(app):

@@ -1086,24 +1086,32 @@ def test_view3d_plane_value_uses_relief_peak_when_sparse(app):
     assert val < float(sg.counts_in_unit(v._unit).max())        # а не сырой максимум ячейки
 
 
-# ---------- #UI-251: график спектра среза на бедной статистике: точки и «Сброс зума» ----------
+# ---------- #UI-251: график спектра среза на бедной статистике — гистограмма и «Сброс зума» ----------
 def _sparse_slice_panel():
     sg = _make_sg(ns=30, nc=50); sg.counts[:] = 0; sg.counts[:, [3, 10, 11, 25, 40]] = 1   # 3 одиночных канала + пара соседних
     sp = SlicePanel(); sp.set_spectrogram(sg); sp.set_background(np.full(50, 1e-8))   # фон на порядки ниже
     return sp
 
 
-def test_slice_spectrum_isolated_channels_get_points(app):
-    """#UI-251: на лог-оси изолированный канал (оба соседа нулевые) линия не соединяет — точка нужна."""
-    sp = _sparse_slice_panel(); ys = np.asarray(sp._spec_to_unit(sp._raw_spec[1], sp._raw_spec[2]), dtype=float)
-    pos = ys > 0; iso = pos & ~np.r_[False, pos[:-1]] & ~np.r_[pos[1:], False]
-    assert int(iso.sum()) > 0 and len(sp._spectrum_pts.getData()[0]) == int(iso.sum())
+def test_slice_spectrum_is_step_histogram(app):
+    """#UI-251 (оператор, «гистограмм же должна быть»): спектр — степ-гистограмма по границам каналов
+    (N+1 x на N y), не линия по центрам."""
+    sp = _sparse_slice_panel()
+    xd, yd = sp._spectrum_curve.getData()
+    assert len(xd) == len(yd) + 1
+    e = sp._raw_spec[0]
+    assert xd[0] < e[0] and xd[-1] > e[-1]                  # границы, а не центры
 
 
-def test_slice_spectrum_no_points_in_linear_mode(app):
-    """#UI-251: в линейном режиме линия идёт через ноль — дополнительные точки не нужны."""
-    sp = _sparse_slice_panel(); sp.set_spectrum_log(False)
-    xs = sp._spectrum_pts.getData()[0]; assert xs is None or len(xs) == 0
+def test_slice_spectrum_isolated_channel_gives_own_visible_segment(app):
+    """#UI-251: канал 3 (соседи 2,4 нулевые) даёт свой отрезок на высоте log10(значения), независимо от
+    соседей — степ-гистограмма не нуждается в точках-маркерах."""
+    sp = _sparse_slice_panel()
+    path = sp._spectrum_curve.curve.getPath()
+    heights = {round(path.elementAt(i).y, 6) for i in range(path.elementCount())
+               if path.elementAt(i).isLineTo()}
+    ys = np.asarray(sp._spec_to_unit(sp._raw_spec[1], sp._raw_spec[2]), dtype=float)
+    assert round(float(np.log10(ys[3])), 6) in heights
 
 
 def test_slice_reset_zoom_returns_to_spectrum_after_zoom_away(app):
@@ -1163,3 +1171,10 @@ def test_export_interval_uses_real_slice_bounds_and_spe_writes_utc(app, tmp_path
     win._do_export_spectrum(str(spe), "spe"); assert b"20-09-26 13:18:34" in spe.read_bytes()
     win._do_export_spectrum(str(xml), "xml")
     assert ET.parse(xml).getroot().find(".//StartTime").text == "2026-09-20T13:18:34+00:00"   # не зона машины
+
+
+def test_bin_edges_empty_gives_one_edge():
+    """#UI-251 (сам. проверка): 0 каналов -> 0 y -> ровно 1 граница, иначе setData(stepMode) падает."""
+    from awf.ui.panels import _bin_edges
+    e = _bin_edges(np.array([]))
+    assert len(e) == 1
