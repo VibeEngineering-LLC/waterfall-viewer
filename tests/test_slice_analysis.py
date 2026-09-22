@@ -35,9 +35,13 @@ def test_point_spectrum_matches_slice(app):
     s.set_spectrogram(sg)
     s.set_unit_mode("counts")          # Задача #53: дефолт cps — тест сверяет сырые counts
     s.show_time_slice(5)
+    # #UI-255: sigXRangeChanged верхнего графика теперь срабатывает уже на _lock_views_to_data
+    # при загрузке файла -> при nc=1500 в узком (offscreen-дефолтном) viewport #UI-254 агрегирует
+    # ОТОБРАЖАЕМУЮ кривую по замыслу (это и есть цель #UI-254) — сверяем с кэшем ДО агрегации.
     x, y = s._spectrum_curve.getData()   # #UI-251: степ-гистограмма — x - границы бинов (N+1)
-    assert np.allclose(y, sg.energy_spectrum(5).astype(np.float64))
-    assert len(x) == len(sg.energies()) + 1
+    _, raw_y, _ = s._raw_spec            # #UI-254: сырой спектр до возможной агрегации отображения
+    assert np.allclose(raw_y, sg.energy_spectrum(5).astype(np.float64))
+    assert len(x) == len(y) + 1
 
 
 def test_energy_window_profile_matches_band(app):

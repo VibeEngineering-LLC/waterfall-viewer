@@ -947,6 +947,14 @@ class SlicePanel(QtWidgets.QWidget):
             vb = self._spectrum_plot.getViewBox()
             if vb is not None and emax > emin:
                 vb.setLimits(xMin=emin, xMax=emax, maxXRange=emax - emin)
+                # #UI-255 (стерильный проход по #UI-254): setLimits НЕ переносит текущий вид на
+                # новый домен, если старый диапазон зума укладывается (полностью/частично) в
+                # новые границы -> при смене файла поверх применённого зума верхний график мог
+                # показывать чужой/обрезанный диапазон энергий, а sigXRangeChanged мог вовсе не
+                # сработать, оставляя #UI-254 (агрегацию каналов) на неактуальном виде. По
+                # аналогии со строкой ниже (нижний график, Задача #201) — явный сброс на полный
+                # домен нового файла.
+                vb.setXRange(emin, emax, padding=0)
         if self._times is not None and self._times.size:
             tmin = float(self._times.min()); tmax = float(self._times.max())
             vb = self._series_plot.getViewBox()

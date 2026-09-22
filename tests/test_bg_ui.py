@@ -184,6 +184,19 @@ def test_slice_reset_zoom_restores_full_view(app):
     assert sx1 - sx0 > 1.5 and tx1 - tx0 > 1.5              # вид шире узкого зума 1.0
 
 
+def test_new_file_over_zoom_resets_spectrum_view(app):
+    """#UI-255: зум верхнего графика на файле A, загрузка файла B (др. энергии) без «Сброс
+    зума» -> верхний график = полный домен B, не унаследованное окно A."""
+    p = SlicePanel()
+    p.set_spectrogram(_make_sg(ns=10, nc=16, t_step=2.0))
+    sp_vb = p._spectrum_plot.getViewBox()
+    sp_vb.setXRange(5.0, 6.0, padding=0)
+    p.set_spectrogram(_make_sg(ns=8, nc=8, t_step=1.0))
+    app.processEvents()
+    (sx0, sx1), _ = sp_vb.viewRange()
+    assert sx0 <= 0.5 and sx1 >= 6.5
+
+
 # ---------- #125: сброс зума/смещения по двойному клику ----------
 
 def test_slice_double_click_resets_zoom(app):
