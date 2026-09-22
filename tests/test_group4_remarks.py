@@ -1178,3 +1178,16 @@ def test_bin_edges_empty_gives_one_edge():
     from awf.ui.panels import _bin_edges
     e = _bin_edges(np.array([]))
     assert len(e) == 1
+
+
+def test_slice_spectrum_fill_level_tracks_log_floor(app):
+    """#UI-251 (оператор, «ничего не поменялось»): контур на суб-пиксельной ширине бина рендерится
+    как точка, а не линия — заливка столбика делает канал видимым независимо от толщины пера;
+    пол заливки = нижняя граница окна Y (тот же floor, что и yMin)."""
+    sp = _sparse_slice_panel()
+    assert sp._spectrum_curve.opts.get("fillBrush") is not None
+    vb = sp._spectrum_plot.getViewBox()
+    y_lo = vb.state["limits"]["yLimits"][0]
+    assert abs(sp._spectrum_curve.opts.get("fillLevel") - y_lo) < 1e-9
+    sp.set_spectrum_log(False)
+    assert abs(sp._spectrum_curve.opts.get("fillLevel") - 0.0) < 1e-9

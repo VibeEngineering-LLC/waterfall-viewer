@@ -684,8 +684,12 @@ class SlicePanel(QtWidgets.QWidget):
         # каналов вместо линии по их центрам — канал с двумя соседями-нулями раньше не давал ни одного
         # отрезка линии (на разреженном срезе график выглядел пустым, было заткнуто точками-маркерами);
         # у степ-гистограммы каждый канал — свой горизонтальный отрезок независимо от соседей.
+        # Задача #UI-251 (оператор, «ничего не поменялось»): контур степ-гистограммы на суб-пиксельной
+        # ширине бина (много каналов на пиксель) рендерится как скруглённая «точка» краем пера, а не
+        # линией — заливка столбика от пола до высоты рисует полный столбец независимо от толщины пера.
         self._spectrum_curve = self._spectrum_plot.plot(
-            [], [], pen=pg.mkPen((51, 217, 242), width=2), stepMode="center")
+            [], [], pen=pg.mkPen((51, 217, 242), width=2), stepMode="center",
+            fillBrush=pg.mkBrush(51, 217, 242, 120), fillLevel=0.0)
         # Задача #96: кривая фона поверх спектра среза (оранжевый пунктир), в текущих единицах
         self._bg_curve = self._spectrum_plot.plot(
             [], [], pen=pg.mkPen((255, 165, 0), width=1, style=QtCore.Qt.DashLine))
@@ -1001,6 +1005,7 @@ class SlicePanel(QtWidgets.QWidget):
         disp = self._spec_to_unit(s, lt_total)
         disp = np.asarray(smooth_by_mode(disp, self._smooth, axis=-1), dtype=np.float64)
         if not self._spec_log:
+            self._spectrum_curve.setFillLevel(0.0)   # Задача #UI-251: пол заливки столбиков
             vb.setLimits(yMin=0.0)
             if disp.size and float(disp.max()) > 0:
                 y_top = float(disp.max())
@@ -1010,6 +1015,7 @@ class SlicePanel(QtWidgets.QWidget):
         # Задача #166: пол в лог-режиме — 10-й перцентиль pos (не min): ВЭ-выбросы после
         # ε-нормировки тянут абсолютный min на ~1 декаду ниже плотной части кривой.
         lo = self._spec_log_floor(pos) if pos.size else -3.0
+        self._spectrum_curve.setFillLevel(lo)   # Задача #UI-251: пол заливки = нижняя граница окна
         vb.setLimits(yMin=lo)
         if pos.size:  # Задача #196: лимит Y сверху (лог)
             y_top = float(np.log10(float(pos.max()))) + 1.0
