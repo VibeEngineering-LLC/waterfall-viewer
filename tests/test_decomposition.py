@@ -89,3 +89,10 @@ def test_optional_methods_graceful(method):
     else:
         with pytest.raises(ImportError):           # пакета нет — понятная ошибка
             project(X, method, n_components=2)
+
+def test_pca_gram_path_matches_full_svd():
+    """#PERF-2: при n < m PCA идёт через матрицу Грама; компоненты и доли дисперсии совпадают с полным SVD."""
+    A = np.log1p(np.random.RandomState(1).poisson(0.3, (60, 400)).astype(float))
+    r = pca(A, 3); Ac = A - A.mean(axis=0); U, S, _ = np.linalg.svd(Ac, full_matrices=False)
+    assert np.abs(np.abs(r.coords) - np.abs(U[:, :3] * S[:3])).max() < 1e-9
+    assert np.abs(r.explained_variance - S[:3] ** 2 / (S ** 2).sum()).max() < 1e-12

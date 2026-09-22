@@ -47,6 +47,11 @@ def is_available(method: str) -> bool:
     if m == "pca":
         return True
     if m == "tsne":
+        # Задача #PERF-2 (стерильный проход): проверка одним importlib.util.find_spec("sklearn") без
+        # импорта submodule давала ложное True на битой/частичной установке (sklearn есть,
+        # sklearn.manifold не импортируется) — эта функция вне продового пути загрузки (только тесты,
+        # `grep -rn "proj_available\|is_available(" awf/` — вызовов из _recompute нет), цена реального
+        # импорта здесь не мешает интерфейсу.
         try:
             import sklearn.manifold  # noqa: F401
             return True
@@ -70,8 +75,17 @@ def pca(X: np.ndarray, n_components: int = 2) -> ProjectionResult:
     k = max(1, min(int(n_components), n, m))
     mean = A.mean(axis=0, keepdims=True)
     Ac = A - mean
-    U, S, Vt = np.linalg.svd(Ac, full_matrices=False)
-    scores = U[:, :k] * S[:k]
+    if n < m:
+        # Задача #PERF-2: строк намного меньше, чем каналов (1468 × 8191) — полный SVD занимал минуты.
+        # Собственные значения матрицы Грама n×n дают те же S² и U; scores = U·S совпадают с SVD до знака.
+        w, V = np.linalg.eigh(Ac @ Ac.T)
+        order = np.argsort(w)[::-1]
+        w = np.maximum(w[order], 0.0)
+        S = np.sqrt(w)
+        scores = V[:, order][:, :k] * S[:k]
+    else:
+        U, S, Vt = np.linalg.svd(Ac, full_matrices=False)
+        scores = U[:, :k] * S[:k]
     total = float((S ** 2).sum())
     evr = (S[:k] ** 2 / total) if total > 0 else np.zeros(k)
     return ProjectionResult(coords=scores, method="pca",

@@ -31,7 +31,7 @@ def _make_sg(ns=30, nc=64):
 def test_recompute_creates_scatter_pca_kmeans(app):
     sg = _make_sg()
     p = AnalyticsPanel()
-    p.set_spectrogram(sg)            # ns<cap -> авто-пересчёт (PCA+KMeans по умолчанию)
+    p.set_spectrogram(sg); p.wait_idle()            # ns<cap -> авто-пересчёт (PCA+KMeans по умолчанию)
     assert len(p._scatters) >= 1
     # суммарно точек == число срезов (каждый срез — одна точка проекции)
     total = sum(len(sc.points()) for sc in p._scatters)
@@ -41,7 +41,7 @@ def test_recompute_creates_scatter_pca_kmeans(app):
 def test_points_carry_slice_index(app):
     sg = _make_sg()
     p = AnalyticsPanel()
-    p.set_spectrogram(sg)
+    p.set_spectrogram(sg); p.wait_idle()
     idxs = []
     for sc in p._scatters:
         for pt in sc.points():
@@ -52,7 +52,7 @@ def test_points_carry_slice_index(app):
 def test_click_emits_slice_clicked(app):
     sg = _make_sg()
     p = AnalyticsPanel()
-    p.set_spectrogram(sg)
+    p.set_spectrogram(sg); p.wait_idle()
     captured = []
     p.sliceClicked.connect(lambda i: captured.append(i))
     sc = p._scatters[0]
@@ -67,7 +67,7 @@ def test_kmeans_k_respected(app):
     sg = _make_sg()
     p = AnalyticsPanel()
     p._k_spin.setValue(3)
-    p.set_spectrogram(sg)
+    p.set_spectrogram(sg); p.wait_idle()
     # KMeans -> ровно k непустых кластеров (на разделимых данных)
     labels = set()
     for sc in p._scatters:
@@ -81,21 +81,21 @@ def test_large_record_defers_autorun(app):
     sg = _make_sg(ns=8, nc=16)
     p = AnalyticsPanel()
     p.AUTORUN_SLICE_CAP = 4           # искусственно занизить порог
-    p.set_spectrogram(sg)
+    p.set_spectrogram(sg); p.wait_idle()
     assert p._scatters == []
-    p._recompute()                   # ручной запуск
+    p._recompute(); p.wait_idle()                   # ручной запуск
     assert len(p._scatters) >= 1
 
 
 def test_unavailable_projection_no_crash(app):
     sg = _make_sg()
     p = AnalyticsPanel()
-    p.set_spectrogram(sg)
+    p.set_spectrogram(sg); p.wait_idle()
     # выбрать t-SNE; если пакет отсутствует — статус с сообщением, без падения и без scatter
     tsne_idx = p._proj_combo.findData("tsne")
     assert tsne_idx >= 0
     p._proj_combo.setCurrentIndex(tsne_idx)
-    p._recompute()
+    p._recompute(); p.wait_idle()
     if not proj_available("tsne"):
         assert p._scatters == []
         assert "недоступен" in p._status.text().lower()
@@ -106,7 +106,32 @@ def test_unavailable_projection_no_crash(app):
 def test_set_none_clears(app):
     sg = _make_sg()
     p = AnalyticsPanel()
-    p.set_spectrogram(sg)
+    p.set_spectrogram(sg); p.wait_idle()
     assert len(p._scatters) >= 1
     p.set_spectrogram(None)
     assert p._scatters == []
+
+def test_recompute_runs_in_background_and_stale_result_is_dropped(app):
+    """#PERF-2: расчёт не блокирует вызывающий поток, а результат по заменённым данным отбрасывается."""
+    a, b = _make_sg(ns=40), _make_sg(ns=25)
+    p = AnalyticsPanel()
+    p.set_spectrogram(a)
+    assert p._busy and p._scatters == []                 # вернулись сразу, результата ещё нет
+    p.set_spectrogram(b); p.wait_idle()                  # новые данные до конца первого расчёта
+    assert not p._busy
+    assert sum(len(sc.points()) for sc in p._scatters) == 25   # нарисованы точки B, а не A
+
+
+def test_rapid_recompute_clicks_do_not_spawn_unbounded_threads(app):
+    """#PERF-2 (стерильный проход): повторный клик «Пересчитать» до конца расчёта плодил потоки без
+    ограничения (2->12 за 10 кликов) и валил процесс; теперь лишние клики копятся в один отложенный."""
+    import threading
+    sg = _make_sg(ns=300, nc=80)
+    p = AnalyticsPanel(); p.set_spectrogram(sg)
+    before = threading.active_count()
+    for _ in range(10):
+        p._recompute()
+    assert threading.active_count() - before <= 1          # максимум один живой фоновый поток
+    assert not p._run_btn.isEnabled()                       # кнопка блокирована на время расчёта
+    p.wait_idle()
+    assert p._run_btn.isEnabled() and not p._busy and not p._pending

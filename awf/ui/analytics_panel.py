@@ -5,6 +5,9 @@
 """
 from __future__ import annotations
 
+import threading
+import time
+
 import numpy as np
 import pyqtgraph as pg
 from PySide6 import QtCore, QtWidgets
@@ -31,6 +34,7 @@ class AnalyticsPanel(QtWidgets.QWidget):
     """Проекция срезов в 2D + кластерная раскраска. sliceClicked(i) — индекс среза по клику."""
 
     sliceClicked = QtCore.Signal(int)
+    _resultReady = QtCore.Signal(int, object)   # (поколение расчёта, результат) — из фонового потока в GUI
 
     # выше этого числа срезов авто-пересчёт на загрузке не делаем (ждём кнопку)
     AUTORUN_SLICE_CAP = 2000
@@ -39,6 +43,10 @@ class AnalyticsPanel(QtWidgets.QWidget):
         super().__init__(parent)
         self._sg = None
         self._scatters = []          # список ScatterPlotItem (по одному на кластер)
+        self._gen = 0                # Задача #PERF-2: номер расчёта; устаревший результат отбрасывается
+        self._busy = False
+        self._pending = False        # запрос «Пересчитать», пришедший во время активного расчёта
+        self._resultReady.connect(self._on_result)
         layout = QtWidgets.QVBoxLayout(self)
 
         ctrl = QtWidgets.QHBoxLayout()
@@ -105,20 +113,41 @@ class AnalyticsPanel(QtWidgets.QWidget):
         сообщением вместо падения."""
         if self._sg is None:
             return
+        if self._busy:
+            # Задача #PERF-2 (стерильный проход): повторный клик «Пересчитать» до конца предыдущего
+            # расчёта плодил потоки без ограничения (2→12 за 10 кликов) и валил процесс. Новый запрос
+            # запоминаем и отдаём, как только текущий поток отдаст результат (см. _on_result).
+            self._pending = True
+            return
         self._clear_scatter()
-        try:
-            X = feature_matrix(self._sg, normalize=self._norm_chk.isChecked(), log=True)
-            pmethod = self._proj_combo.currentData()
-            cmethod = self._clu_combo.currentData()
-            k = int(self._k_spin.value())
-            proj = project(X, method=pmethod, n_components=2)
-            clu = cluster(X, method=cmethod, n_clusters=k)
-        except ImportError as exc:
-            self._status.setText(f"{tr('Метод недоступен (пакет не установлен):')} {exc}")
+        self._gen += 1
+        self._busy = True
+        self._run_btn.setEnabled(False)
+        args = (self._gen, self._sg, self._norm_chk.isChecked(), self._proj_combo.currentData(),
+                self._clu_combo.currentData(), int(self._k_spin.value()))
+        self._status.setText(tr("Расчёт…"))
+        # Задача #PERF-2: PCA + k-means на матрице «срезы × каналы» шли в потоке интерфейса и на
+        # записи 1468×8191 держали окно «Не отвечает» минутами. Считаем в фоне (numpy отпускает GIL).
+        threading.Thread(target=self._work, args=args, daemon=True).start()
+
+    @QtCore.Slot(int, object)
+    def _on_result(self, gen: int, res) -> None:
+        """GUI-поток: принять результат фонового расчёта и нарисовать (устаревший — отбросить)."""
+        if gen != self._gen:
             return
-        except Exception as exc:  # вырожденные данные и пр. — показать, не падать
-            self._status.setText(f"{tr('Ошибка')}: {type(exc).__name__}: {exc}")
+        self._busy = False
+        self._run_btn.setEnabled(True)
+        if self._pending:
+            self._pending = False
+            self._recompute()   # запрос, накопленный во время расчёта — запустить сразу следующим
             return
+        if res[0] == "import":
+            self._status.setText(f"{tr('Метод недоступен (пакет не установлен):')} {res[1]}")
+            return
+        if res[0] == "error":
+            self._status.setText(f"{tr('Ошибка')}: {res[1]}")
+            return
+        _, pmethod, cmethod, proj, clu = res
         coords = np.asarray(proj.coords, dtype=np.float64)
         labels = np.asarray(clu.labels)
         self._draw(coords, labels)
@@ -129,6 +158,28 @@ class AnalyticsPanel(QtWidgets.QWidget):
             ev = proj.explained_variance
             msg += f"; {tr('дисперсия PCA')} {ev[0] * 100:.0f}% / {ev[1] * 100:.0f}%"
         self._status.setText(msg)
+
+    def _work(self, gen, sg, norm, pmethod, cmethod, k) -> None:
+        """Фоновый поток: считает проекцию и кластеры, результат отдаёт сигналом в GUI-поток."""
+        try:
+            X = feature_matrix(sg, normalize=norm, log=True)
+            res = ("ok", pmethod, cmethod, project(X, method=pmethod, n_components=2),
+                   cluster(X, method=cmethod, n_clusters=k))
+        except ImportError as exc:
+            res = ("import", str(exc))
+        except Exception as exc:  # вырожденные данные и пр. — показать, не падать
+            res = ("error", f"{type(exc).__name__}: {exc}")
+        try:
+            self._resultReady.emit(gen, res)
+        except RuntimeError:      # панель уничтожена, пока шёл расчёт
+            pass
+
+    def wait_idle(self, timeout_s: float = 300.0) -> None:
+        """Дождаться конца расчёта, обрабатывая события (для тестов и скриптов)."""
+        end = time.monotonic() + timeout_s
+        while self._busy and time.monotonic() < end:
+            QtWidgets.QApplication.processEvents()
+            time.sleep(0.005)
 
     def _draw(self, coords: np.ndarray, labels: np.ndarray) -> None:
         """По одному ScatterPlotItem на кластер (для легенды); каждая точка несёт индекс среза."""

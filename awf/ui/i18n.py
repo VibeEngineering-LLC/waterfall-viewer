@@ -360,6 +360,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Метод недоступен (пакет не установлен):":
             "Method unavailable (package not installed):",
         "Ошибка": "Error",
+        "Расчёт…": "Calculating…",
         "Метод": "Method",
         "точек": "points",
         "кластеров": "clusters",
