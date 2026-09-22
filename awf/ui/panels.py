@@ -595,6 +595,23 @@ def _bin_edges(centers: np.ndarray) -> np.ndarray:
     return np.concatenate(([c[0] - (mid[0] - c[0])], mid, [c[-1] + (c[-1] - mid[-1])]))
 
 
+def _aggregate_for_display(e: np.ndarray, ys: np.ndarray, block: int):
+    """Задача #UI-254: суммировать по блокам из `block` соседних каналов для отображения —
+    при block каналов/пиксель > 1 (полный обзор 8191 канала в ~1600 px) одиночный отсчёт занимает
+    долю пикселя и рендерится точкой независимо от техники рисования (см. #UI-251). Сумма блока
+    (не среднее) — тот же принцип, что у 2D-карты (#UI-244): одиночный отсчёт не должен тонуть."""
+    n = e.size
+    edges = _bin_edges(e)
+    n_blocks = int(np.ceil(n / block))
+    pad = n_blocks * block - n
+    if pad:
+        step = (edges[-1] - edges[-2]) if edges.size >= 2 else 1.0
+        edges = np.concatenate([edges, edges[-1] + step * np.arange(1, pad + 1)])
+        ys = np.concatenate([ys, np.zeros(pad, dtype=ys.dtype)])
+    agg = ys.reshape(n_blocks, block).sum(axis=1)
+    return edges[::block], agg
+
+
 class SlicePanel(QtWidgets.QWidget):
     """Два графика: верх — спектр (Энергия кэВ → Отсчёты), низ — временной ряд (Время с → Отсчёты).
     Метод show_roi() рисует спектр окна времени и временной ряд энергетической полосы, плюс
@@ -690,6 +707,11 @@ class SlicePanel(QtWidgets.QWidget):
         self._spectrum_curve = self._spectrum_plot.plot(
             [], [], pen=pg.mkPen((51, 217, 242), width=2), stepMode="center",
             fillBrush=pg.mkBrush(51, 217, 242, 120), fillLevel=0.0)
+        # Задача #UI-254: перерисовать (пересчитать агрегацию для отображения) при зуме/панораме и
+        # при изменении размера панели — иначе block фиксировался бы на первом показе.
+        _svb = self._spectrum_plot.getViewBox()
+        _svb.sigXRangeChanged.connect(self._on_spectrum_view_changed)
+        _svb.sigResized.connect(self._on_spectrum_view_changed)
         # Задача #96: кривая фона поверх спектра среза (оранжевый пунктир), в текущих единицах
         self._bg_curve = self._spectrum_plot.plot(
             [], [], pen=pg.mkPen((255, 165, 0), width=1, style=QtCore.Qt.DashLine))
@@ -983,6 +1005,27 @@ class SlicePanel(QtWidgets.QWidget):
         self._raw_spec = (e, s, lt_total)
         self._render_spectrum()
 
+    def _on_spectrum_view_changed(self, *_args) -> None:
+        """Задача #UI-254: зум/панорама/ресайз графика спектра -> пересчитать агрегацию отображения."""
+        self._render_spectrum()
+
+    def _spectrum_display_block(self, e: np.ndarray) -> int:
+        """Задача #UI-254: число каналов на пиксель в ТЕКУЩЕМ видимом диапазоне X (зум/панорама);
+        пересчитывается при каждой перерисовке, поэтому приближение возвращает block=1 (полная
+        детализация), а полный обзор агрегирует. Ширина 0 (виджет не показан, скрипты/тесты) —
+        без агрегации, чтобы не менять поведение существующих тестов на маленьких спектрах."""
+        vb = self._spectrum_plot.getViewBox()
+        if vb is None or e.size == 0:
+            return 1
+        w = self._spectrum_plot.viewport().width()
+        if w <= 0:
+            return 1
+        x_lo, x_hi = vb.viewRange()[0]
+        lo, hi = np.searchsorted(e, [x_lo, x_hi])
+        lo, hi = max(0, lo - 1), min(e.size, hi + 1)
+        n_visible = max(1, hi - lo)
+        return max(1, int(np.ceil(n_visible / w)))
+
     def _render_spectrum(self) -> None:
         """Перерисовать кривую спектра из кэша в текущих единицах (Задача #44) и со сглаживанием."""
         if self._raw_spec is None:
@@ -990,7 +1033,12 @@ class SlicePanel(QtWidgets.QWidget):
         e, s, lt_total = self._raw_spec
         disp = self._spec_to_unit(s, lt_total)
         ys = np.asarray(smooth_by_mode(disp, self._smooth, axis=-1), dtype=np.float64)
-        self._spectrum_curve.setData(_bin_edges(e), ys, stepMode="center", connect="finite")
+        block = self._spectrum_display_block(e)   # Задача #UI-254: каналов на пиксель при текущем зуме
+        if block <= 1:
+            edges, disp_ys = _bin_edges(e), ys
+        else:
+            edges, disp_ys = _aggregate_for_display(e, ys, block)
+        self._spectrum_curve.setData(edges, disp_ys, stepMode="center", connect="finite")
         self._render_background(e, lt_total)   # Задача #96: кривая фона в тех же единицах
         self._lock_spectrum_y()                # Задача #101: зафиксировать нижнюю границу Y
 

@@ -156,8 +156,8 @@ def test_update_spectrogram_keeps_time_slice_view(app):
                        live_time_s=sg.live_time_s)
     s.update_spectrogram(sg2)
     assert s._header.text() == "Срез времени #5 (t = 10.0 с)"
-    x, y = s._spectrum_curve.getData()
-    assert np.allclose(y, sg2.energy_spectrum(5).astype(np.float64))
+    _, raw_y, _ = s._raw_spec   # #UI-254: кэш до возможной агрегации для отображения (nc=1500 > ширины)
+    assert np.allclose(raw_y, sg2.energy_spectrum(5).astype(np.float64))
 
 
 def test_update_spectrogram_keeps_roi_view(app):

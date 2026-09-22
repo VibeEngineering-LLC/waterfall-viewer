@@ -1191,3 +1191,20 @@ def test_slice_spectrum_fill_level_tracks_log_floor(app):
     assert abs(sp._spectrum_curve.opts.get("fillLevel") - y_lo) < 1e-9
     sp.set_spectrum_log(False)
     assert abs(sp._spectrum_curve.opts.get("fillLevel") - 0.0) < 1e-9
+
+
+def test_spectrum_display_aggregates_when_channels_exceed_pixels(app):
+    """#UI-254 (оператор, «делай»): на полном обзоре (много каналов на пиксель) одиночные отсчёты
+    на реальном экране рендерились точками независимо от заливки (#UI-251) — агрегация блоками
+    (сумма, как у 2D-карты #UI-244) даёт сплошную гистограмму; при зуме — полное разрешение."""
+    sg = _make_sg(ns=5, nc=2000); sg.counts[:] = 0; sg.counts[:, ::7] = 1
+    sp = SlicePanel(); sp.resize(500, 300); sp.show()
+    sp.set_spectrum_log(False); sp.set_unit_mode("counts"); sp.set_spectrogram(sg)
+    app.processEvents()
+    e = sp._raw_spec[0]
+    block = sp._spectrum_display_block(e)
+    assert block > 1
+    xd, yd = sp._spectrum_curve.getData()
+    assert len(xd) == len(yd) + 1 and len(yd) < e.size
+    assert float(yd.sum()) == float(sp._raw_spec[1].sum())   # сумма сохраняется — ни один отсчёт не теряется
+    sp.hide()
